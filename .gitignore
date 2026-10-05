@@ -1,0 +1,12 @@
+**/target/
+target/
+**/.idea/
+.idea/
+*.iml
+**/*.iml
+.DS_Store
+**/.DS_Store
+.env
+**/docs/
+**/scripts/
+.serena

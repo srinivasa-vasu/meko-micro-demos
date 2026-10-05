@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}Does the context contain a previous KYC review of customer {{ customer }} (exactly this customer id)? If there are several, use the most recent one. What did it record? Its profile is recorded as keyed fingerprints: copy them exactly.{% endblock %}
+{% block shape %}{"found": true or false, "date": "YYYY-MM-DD or null", "riskClass": "the risk class it assigned, or null", "address": "address fingerprint or null", "ownership": "ownership fingerprint or null", "beneficiaries": ["beneficiary fingerprints"], "volumeBand": "monthly volume band, e.g. 40000-50000, or null"}{% endblock %}

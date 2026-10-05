@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: meko-console
+  ai:
+    mcp:
+      client:
+        enabled: ${MEKO_ENABLED:true}
+        name: meko-console
+        version: 0.1.0
+        type: SYNC
+        request-timeout: 30s
+        streamable-http:
+          connections:
+            mekodata:
+              url: ${MEKO_MCP_URL:https://mcp.mekodata.ai/mcp}
+  jackson:
+    serialization:
+      indent-output: true
+
+server:
+  port: ${PORT:8080}
+
+meko:
+  # Must match the connection key above, or the Authorization header is silently never sent.
+  connection-name: mekodata
+  api-key: ${MEKO_APIKEY:}
+  # Namespaces what this console writes, and seeds the conversation dedup key.
+  agent-id: ${MEKO_AGENT_ID:meko-console}
+
+logging:
+  level:
+    meko.console: INFO

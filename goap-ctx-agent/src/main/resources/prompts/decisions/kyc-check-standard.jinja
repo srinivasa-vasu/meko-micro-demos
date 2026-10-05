@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}Check KYC review {{ review }} against the review standard in the context. Was it compared against the latest review of exactly this customer (or, with none on record, fully re-verified)? Was each material change judged as the standard says? Was evidence requested for each material change and only for those? Was it sent for sign-off? Does the review comply with the standard? If the context holds no standard text, compliance cannot be verified: answer null.{% endblock %}
+{% block shape %}{"comparedAgainstLatest": true, false or null, "evidenceProportionate": true, false or null, "signedOff": true or false, "compliant": true, false or null, "findings": ["one sentence per finding"]}{% endblock %}

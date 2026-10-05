@@ -1,0 +1,694 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meko console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  /* An instrument, not a product. Every screen shows what was sent and what came back,
+     because the questions this tool exists to answer are all of that shape. */
+  :root{
+    --ground:#f7f8fa; --surface:#fff; --raised:#fff; --ink:#15191f; --muted:#5a6472;
+    --faint:#8a94a2; --line:#e2e6ec; --line-strong:#cfd6df;
+    --ok:#0e6e3f; --ok-bg:#e8f5ee; --ok-line:#b8dfc9;
+    --bad:#8a2f2f; --bad-bg:#fdecec; --bad-line:#f0c4c4;
+    --warn:#8a5100; --warn-bg:#fdf3e2; --warn-line:#ecd6ae;
+    --focus:#2b6cb0;
+    --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    color-scheme:light;
+  }
+  :root[data-theme="dark"]{
+    --ground:#0f1318; --surface:#161b22; --raised:#1b212a; --ink:#e4e9f0; --muted:#8a96a6;
+    --faint:#6b7787; --line:#262d36; --line-strong:#333c48;
+    --ok:#4fc98a; --ok-bg:#11291f; --ok-line:#1f4a35;
+    --bad:#e08585; --bad-bg:#2a1616; --bad-line:#4a2424;
+    --warn:#e0a356; --warn-bg:#2a2014; --warn-line:#4a3a1f;
+    --focus:#6ba3e0; color-scheme:dark;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+    --ground:#0f1318; --surface:#161b22; --raised:#1b212a; --ink:#e4e9f0; --muted:#8a96a6;
+    --faint:#6b7787; --line:#262d36; --line-strong:#333c48;
+    --ok:#4fc98a; --ok-bg:#11291f; --ok-line:#1f4a35;
+    --bad:#e08585; --bad-bg:#2a1616; --bad-line:#4a2424;
+    --warn:#e0a356; --warn-bg:#2a2014; --warn-line:#4a3a1f;
+    --focus:#6ba3e0; color-scheme:dark;}}
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.55 var(--sans);
+       -webkit-font-smoothing:antialiased}
+  .mono,pre,code,input,textarea,.fig{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  :focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+
+  .wrap{max-width:1280px;margin:0 auto;padding:26px 22px 70px}
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:22px}
+  h1{font-size:27px;margin:0 0 6px;letter-spacing:-.02em;font-weight:600}
+  .lede{color:var(--muted);margin:0;max-width:70ch;font-size:14.5px}
+
+  .grid{display:grid;grid-template-columns:330px 1fr;gap:18px;align-items:start}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:17px;
+        margin-bottom:14px}
+  .card h2{margin:0 0 10px;font-size:15px;font-weight:600}
+  label{display:block;font-size:12.5px;color:var(--muted);margin:12px 0 4px}
+  input,textarea,select{width:100%;padding:7px 9px;border:1px solid var(--line-strong);
+        border-radius:6px;font-size:13.5px;background:var(--raised);color:var(--ink)}
+  textarea{min-height:72px;resize:vertical;line-height:1.5}
+  button{border:1px solid transparent;border-radius:6px;padding:7px 12px;font:inherit;
+         font-size:13.5px;font-weight:500;cursor:pointer;background:none;color:var(--ink)}
+  .primary{background:var(--ink);color:var(--surface);font-weight:600}
+  .secondary{background:var(--raised);border-color:var(--line-strong)}
+  .secondary:hover{border-color:var(--muted)}
+  .danger{background:var(--bad-bg);border-color:var(--bad-line);color:var(--bad)}
+  .btnrow{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+
+  /* Groups STACK; buttons wrap within their own column.
+     .ops was left as a flex row from the flat-button layout, which made each group a flex item
+     — so Knowledge and Raw shared a line, and a wrapped button fell back under the label
+     instead of lining up with the row above it. A two-column grid per group fixes both: the
+     label owns its column, the buttons own theirs and wrap inside it. */
+  .ops{display:grid;gap:9px;margin-bottom:14px}
+  .op{border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-size:13px;
+      color:var(--muted);background:var(--raised)}
+  .op[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink);
+      font-weight:500}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--muted);font-weight:500;font-size:12px}
+  td.num{text-align:right;font-family:var(--mono)}
+  tr:last-child td{border-bottom:0}
+
+  pre{font-family:var(--mono);font-size:11.5px;line-height:1.55;white-space:pre-wrap;
+      word-break:break-word;background:var(--ground);border:1px solid var(--line);
+      border-radius:8px;padding:11px;margin:0;max-height:560px;overflow:auto}
+  .tag{display:inline-block;font-size:11.5px;font-weight:500;padding:2px 7px;border-radius:5px;
+       background:var(--ground);color:var(--muted);border:1px solid var(--line)}
+  .tag.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)}
+  .tag.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
+  .tag.warn{background:var(--warn-bg);color:var(--warn);border-color:var(--warn-line)}
+  .note{font-size:12.5px;color:var(--muted);line-height:1.5}
+  .empty{color:var(--faint);font-size:13px;margin:0}
+  .banner{border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:12px;
+          border:1px solid var(--line);background:var(--ground);color:var(--muted)}
+  .banner.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)}
+  .banner.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
+  .themer{display:flex;gap:2px;border:1px solid var(--line);border-radius:7px;padding:2px;flex:none}
+  .themer button{padding:3px 8px;font-size:12px;color:var(--muted);border-radius:5px}
+  .themer button[aria-pressed="true"]{background:var(--ground);color:var(--ink);font-weight:500}
+  /* Operations grouped by family. Fifteen flat buttons wrapping over two rows gave no clue
+     which ones belonged together, and the list only grows. */
+  .opgroup{display:grid;grid-template-columns:104px 1fr;gap:10px;align-items:start}
+  .opgrouplabel{font-size:11.5px;color:var(--faint);padding-top:7px}
+  .opbuttons{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+  @media(max-width:700px){
+    .opgroup{grid-template-columns:1fr;gap:4px}
+    .opgrouplabel{padding-top:0}
+  }
+
+  .views{display:flex;align-items:center;gap:5px;margin:4px 0 8px}
+
+  .histrow{display:flex;gap:8px;align-items:flex-start;width:100%;text-align:left;padding:7px 8px;
+           border:1px solid transparent;border-radius:6px;background:none;font:inherit;
+           font-size:13px;cursor:pointer}
+  .histrow:hover{background:var(--ground);border-color:var(--line)}
+
+  .mini{font-size:11px;padding:2px 7px;border:1px solid var(--line-strong);border-radius:5px;
+        background:var(--raised);color:var(--muted)}
+  .mini:hover{color:var(--ink);border-color:var(--muted)}
+
+  /* Payloads are long and the interesting part is often at the end. Scroll in place rather
+     than truncating at an arbitrary character count. */
+  .payload{max-height:88px;overflow:auto;white-space:pre-wrap;word-break:break-word;
+           font-size:12.5px;line-height:1.45}
+
+  kbd{font-family:var(--mono);font-size:11px;border:1px solid var(--line-strong);border-radius:4px;
+      padding:1px 4px;background:var(--raised)}
+
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:10;
+         background:var(--ink);color:var(--surface);padding:8px 14px;border-radius:7px;
+         font-size:13px;box-shadow:0 2px 12px rgba(0,0,0,.2)}
+
+  pre{max-height:none}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:980px){.grid,.split{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="toast" class="toast" style="display:none"></div>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Meko console</h1>
+      <p class="lede">Call any MCP tool and see exactly what was sent and exactly what came back.
+        The typed forms are conveniences; the raw call is the one that answers arguments.</p>
+    </div>
+    <div class="themer" role="group" aria-label="Theme">
+      <button id="th-auto" aria-pressed="true" onclick="setTheme('auto')">Auto</button>
+      <button id="th-light" aria-pressed="false" onclick="setTheme('light')">Light</button>
+      <button id="th-dark" aria-pressed="false" onclick="setTheme('dark')">Dark</button>
+    </div>
+  </header>
+
+  <div id="status" class="banner">Connecting&hellip;</div>
+
+  <div class="grid">
+    <aside>
+      <div class="card">
+        <h2>Datapack</h2>
+        <label for="datapack">Working datapack</label>
+        <select id="datapack"><option value="">Loading&hellip;</option></select>
+        <div class="btnrow">
+          <button class="secondary" onclick="loadDatapacks()">Reload</button>
+          <button class="secondary" onclick="describe()">Describe</button>
+        </div>
+        <p class="note" style="margin-top:10px">Resolved by listing datapacks, which itself needs a
+          bootstrap conversation &mdash; <code>datapack_list</code> requires
+          <code>conversation_id</code> despite its schema, and rejects <code>agent_id</code>.</p>
+      </div>
+
+      <div class="card">
+        <h2>Active conversation</h2>
+        <p class="note">Attached to every call except <code>datapack_list</code> and the raw call.
+          Created once per datapack and reused.</p>
+        <div id="activeConv" class="mono" style="font-size:11.5px;margin-top:8px;word-break:break-all">
+          &hellip;</div>
+        <div class="btnrow">
+          <button class="secondary" onclick="loadActiveConversation()">Resolve</button>
+          <button class="secondary" onclick="copyActive()">Copy id</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>History</h2>
+        <p class="note">The last 25 calls. Click one to bring it back &mdash; comparing two
+          responses is most of what this tool is for.</p>
+        <div id="history" style="margin-top:8px"><p class="empty">Nothing run yet.</p></div>
+      </div>
+
+      <div class="card">
+        <h2>Registered tools</h2>
+        <div id="tools"><p class="empty">&hellip;</p></div>
+      </div>
+    </aside>
+
+    <main>
+      <div class="card">
+        <div class="ops" id="ops"></div>
+        <div id="form"></div>
+      </div>
+
+      <div class="card">
+        <div id="result"><p class="empty">Run something.</p></div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, m =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+function setTheme(mode) {
+  if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', mode);
+  ['auto','light','dark'].forEach(m => $('th-' + m).setAttribute('aria-pressed', String(m === mode)));
+  try { localStorage.setItem('meko-console-theme', mode); } catch (e) {}
+}
+(function () {
+  let saved = 'auto';
+  try { saved = localStorage.getItem('meko-console-theme') || 'auto'; } catch (e) {}
+  document.addEventListener('DOMContentLoaded', () => setTheme(saved));
+})();
+
+const dp = () => $('datapack').value;
+
+const OPS = {
+  'memory.search': {
+    label: 'Search memory',
+    note: 'Hybrid ranking. Watch whether score differs from raw_similarity_score — equal across '
+        + 'every row is the signature of pure vector similarity. Short, specific queries retrieve '
+        + 'a record type far better than a long sentence containing it.',
+    fields: [{ id: 'q', label: 'Query', type: 'textarea', value: 'INCIDENT_RECORD checkout' },
+             { id: 'limit', label: 'Limit', type: 'number', value: 10 }],
+    run: v => post('/api/meko/memory/search', { datapackId: dp(), query: v.q, limit: +v.limit })
+  },
+  'memory.all': {
+    label: 'List memories',
+    note: 'Exact enumeration, not ranking — the right primitive for "does this row exist". '
+        + 'Accepts no page parameter; the first page is all you get over MCP.',
+    fields: [{ id: 'promoted', label: 'Collection', type: 'select',
+               options: [['false','mem0 (private)'], ['true','promoted (shared)']] }],
+    run: v => get(`/api/meko/memory/all?datapackId=${encodeURIComponent(dp())}&promoted=${v.promoted}`)
+  },
+  'memory.add': {
+    label: 'Add memory',
+    note: 'Stored verbatim — mem0 does not distil it. Writing as another agent is how cross-agent '
+        + 'recall is exercised: memory_search is scoped by datapack, not by agent.',
+    fields: [{ id: 'text', label: 'Text', type: 'textarea',
+               value: 'INCIDENT_RECORD; id=INC-0001; service=checkout; signature=example' },
+             { id: 'asAgent', label: 'Write as agent (blank = this console)', type: 'text', value: '' }],
+    run: v => post('/api/meko/memory/add', { datapackId: dp(), text: v.text, asAgent: v.asAgent })
+  },
+  'memory.update': {
+    label: 'Update memory',
+    note: 'Overwrites the row in place. Use it to keep one record per identity instead of '
+        + 'accumulating near-duplicates that crowd the retrieval window.',
+    fields: [{ id: 'memoryId', label: 'Memory id', type: 'text', value: '' },
+             { id: 'text', label: 'Replacement text', type: 'textarea', value: '' }],
+    run: v => post('/api/meko/memory/update',
+                   { datapackId: dp(), memoryId: v.memoryId, text: v.text })
+  },
+  'memory.delete': {
+    label: 'Delete memory',
+    note: 'Permanent.',
+    danger: true,
+    fields: [{ id: 'memoryId', label: 'Memory id', type: 'text', value: '' }],
+    run: v => post('/api/meko/memory/delete', { datapackId: dp(), memoryId: v.memoryId })
+  },
+  'memory.promote': {
+    label: 'Promote to shared',
+    note: 'ONE WAY. Promotion moves rows out of this agent’s private store into the datapack '
+        + 'knowledge base and evicts them from mem0. Requires owner or maintainer rights; a '
+        + 'viewer key gets a 403.',
+    danger: true,
+    fields: [{ id: 'memoryIds', label: 'Memory ids (one per line)', type: 'textarea', value: '' }],
+    run: v => post('/api/meko/memory/promote', {
+      datapackId: dp(),
+      memoryIds: v.memoryIds.split('\n').map(x => x.trim()).filter(Boolean)
+    })
+  },
+  'memory.deleteAll': {
+    label: 'Delete ALL memories',
+    note: 'Wipes every memory in this datapack. No undo, and promoted rows are a separate '
+        + 'collection so this does not touch them. You must retype the datapack id to confirm — '
+        + 'a checkbox is too easy to click past for something with no recovery.',
+    danger: true,
+    fields: [{ id: 'confirm', label: 'Retype the datapack id to confirm', type: 'text', value: '' }],
+    run: v => post('/api/meko/memory/delete-all',
+                   { datapackId: dp(), confirmDatapackId: v.confirm })
+  },
+  'conversation.list': {
+    label: 'List conversations',
+    note: 'Most recently updated first. The only tool here where conversation_id is genuinely '
+        + 'optional — omitted, the call gets its own ephemeral trace instead of being attributed '
+        + 'to an unrelated conversation.',
+    fields: [{ id: 'limit', label: 'Limit', type: 'number', value: 20 },
+             { id: 'offset', label: 'Offset', type: 'number', value: 0 }],
+    run: v => get(`/api/meko/conversations?datapackId=${encodeURIComponent(dp())}`
+                  + `&limit=${+v.limit}&offset=${+v.offset}`)
+  },
+  'conversation.create': {
+    label: 'Create conversation',
+    note: 'session_id is a dedup key and is honoured — the same seed reconnects the same '
+        + 'conversation rather than creating a duplicate. Non-hex seeds are normalised, so the '
+        + 'id you get back may differ from the one you sent.',
+    fields: [{ id: 'title', label: 'Title', type: 'text', value: 'Console conversation' },
+             { id: 'sessionId', label: 'Session id (blank = new each time)', type: 'text', value: '' }],
+    run: v => post('/api/meko/conversation/create',
+                   { datapackId: dp(), title: v.title, sessionId: v.sessionId })
+  },
+  'conversation.get': {
+    label: 'Get conversation',
+    note: 'agent_id is an OWNERSHIP FILTER here, unlike on memory_search where it only attributes '
+        + 'the trace. A conversation created by a different agent returns "not found", which '
+        + 'looks exactly like it never existed. This console acts as the agent shown in the '
+        + 'banner above.',
+    fields: [{ id: 'conversationId', label: 'Conversation id', type: 'text', value: '' },
+             { id: 'includeMessages', label: 'Messages', type: 'select',
+               options: [['true','include full history'], ['false','metadata only']] },
+             { id: 'limit', label: 'Message limit', type: 'number', value: 50 }],
+    run: v => get(`/api/meko/conversation?datapackId=${encodeURIComponent(dp())}`
+                  + `&conversationId=${encodeURIComponent(v.conversationId)}`
+                  + `&includeMessages=${v.includeMessages}&limit=${+v.limit}`)
+  },
+  'conversation.message': {
+    label: 'Add message',
+    note: 'One turn: the user input and the assistant output. Note the argument shapes differ — '
+        + 'plan is a real array (one action per line below) while metadata is a JSON string. '
+        + 'A seed makes the message id deterministic, so a hook and this console writing the '
+        + 'same turn deduplicate instead of doubling it.',
+    fields: [{ id: 'conversationId', label: 'Conversation id', type: 'text', value: '' },
+             { id: 'input', label: 'User input', type: 'textarea', value: '' },
+             { id: 'output', label: 'Assistant output', type: 'textarea', value: '' },
+             { id: 'reasoning', label: 'Reasoning (optional, 1–3 sentences)', type: 'textarea', value: '' },
+             { id: 'plan', label: 'Plan (optional, one action per line)', type: 'textarea', value: '' },
+             { id: 'seed', label: 'Seed (optional, for deterministic id)', type: 'text', value: '' }],
+    run: v => post('/api/meko/conversation/message', {
+      datapackId: dp(), conversationId: v.conversationId, input: v.input, output: v.output,
+      reasoning: v.reasoning, plan: v.plan, seed: v.seed
+    })
+  },
+  'conversation.update': {
+    label: 'Update conversation',
+    note: 'Omitted fields are kept; a field you pass replaces what was there. Ownership-filtered '
+        + 'by agent_id, so this only updates conversations this console created.',
+    fields: [{ id: 'conversationId', label: 'Conversation id', type: 'text', value: '' },
+             { id: 'title', label: 'New title (blank = keep)', type: 'text', value: '' },
+             { id: 'metadata', label: 'New metadata, JSON string (blank = keep)', type: 'textarea', value: '' }],
+    run: v => post('/api/meko/conversation/update', {
+      datapackId: dp(), conversationId: v.conversationId, title: v.title, metadata: v.metadata
+    })
+  },
+  'conversation.delete': {
+    label: 'Delete conversation',
+    note: 'Hard delete of the conversation and every trace under it. No undo. Retype the id to '
+        + 'confirm — this is the second call on the surface with no recovery.',
+    danger: true,
+    fields: [{ id: 'conversationId', label: 'Conversation id', type: 'text', value: '' },
+             { id: 'confirm', label: 'Retype the conversation id to confirm', type: 'text', value: '' }],
+    run: v => post('/api/meko/conversation/delete', {
+      datapackId: dp(), conversationId: v.conversationId, confirmConversationId: v.confirm
+    })
+  },
+  'knowledge.search': {
+    label: 'Search knowledge base',
+    note: 'Uploaded documents AND promoted memories, chunked. Returns match_type, rank and '
+        + 'rerank_score — genuinely hybrid, and it says so.',
+    fields: [{ id: 'q', label: 'Query', type: 'textarea',
+               value: 'checkout payment provider timeout rollback' },
+             { id: 'limit', label: 'Limit', type: 'number', value: 5 }],
+    run: v => post('/api/meko/knowledge/search', { datapackId: dp(), query: v.q, limit: +v.limit })
+  },
+  'raw': {
+    label: 'Raw tool call',
+    note: 'Arguments are sent verbatim — nothing is added, not even conversation_id. This is how '
+        + 'you find out what a tool actually accepts, which the schemas have been wrong about '
+        + 'more than once. An unknown argument is rejected, never ignored.',
+    fields: [{ id: 'tool', label: 'Tool', type: 'text', value: 'datapack_list' },
+             { id: 'args', label: 'Arguments (JSON)', type: 'textarea', value: '{\n  "conversation_id": ""\n}' }],
+    run: v => {
+      let args;
+      try { args = JSON.parse(v.args || '{}'); }
+      catch (e) { return Promise.reject(new Error('Arguments are not valid JSON: ' + e.message)); }
+      return post('/api/meko/raw', { tool: v.tool, arguments: args });
+    }
+  }
+};
+
+/* Groups are derived from the key prefix, so adding an operation needs no bookkeeping. */
+const GROUPS = [
+  ['Memory', k => k.startsWith('memory.')],
+  ['Conversations', k => k.startsWith('conversation.')],
+  ['Knowledge', k => k.startsWith('knowledge.')],
+  ['Raw', k => k === 'raw']
+];
+
+let CURRENT = 'memory.search';
+/* Field values survive switching operations. Retyping a datapack id or a long query every time
+   you flip between list and delete is the kind of friction that stops you checking things. */
+const FORM_STATE = {};
+/* Last 25 calls. Comparing two responses is the whole activity here — score against raw,
+   query A against query B, before a change against after — and without history that means
+   screenshots. */
+const HISTORY = [];
+let VIEW = 'rows';
+
+function renderOps() {
+  $('ops').innerHTML = GROUPS.map(([name, match]) => {
+    const keys = Object.keys(OPS).filter(match);
+    if (!keys.length) return '';
+    return `<div class="opgroup">
+      <span class="opgrouplabel">${esc(name)}</span>
+      <div class="opbuttons">
+        ${keys.map(k => `<button class="op" aria-pressed="${k === CURRENT}"
+          onclick="selectOp('${k}')">${esc(OPS[k].label)}</button>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectOp(key) {
+  CURRENT = key;
+  renderOps();
+  const op = OPS[key];
+  const saved = FORM_STATE[key] || {};
+  $('form').innerHTML = `
+    <p class="note" style="margin:0 0 4px">${esc(op.note)}</p>
+    ${op.fields.map(f => field(f, saved[f.id])).join('')}
+    <div class="btnrow">
+      <button class="${op.danger ? 'danger' : 'primary'}" onclick="runOp()">
+        ${op.danger ? 'Run (destructive)' : 'Run'}</button>
+      <span class="note" style="align-self:center">or press
+        <kbd>${navigator.platform.indexOf('Mac') === 0 ? '⌘' : 'Ctrl'}</kbd> +
+        <kbd>Enter</kbd></span>
+    </div>`;
+  op.fields.forEach(f => {
+    const el = $('f-' + f.id);
+    if (el) el.addEventListener('input', () => {
+      FORM_STATE[key] = FORM_STATE[key] || {};
+      FORM_STATE[key][f.id] = el.value;
+    });
+  });
+}
+
+function field(f, saved) {
+  const id = 'f-' + f.id;
+  const value = saved !== undefined ? saved : (f.value ?? '');
+  if (f.type === 'textarea')
+    return `<label for="${id}">${esc(f.label)}</label>
+            <textarea id="${id}">${esc(value)}</textarea>`;
+  if (f.type === 'select')
+    return `<label for="${id}">${esc(f.label)}</label><select id="${id}">${
+      f.options.map(([v, l]) =>
+        `<option value="${esc(v)}"${String(v) === String(value) ? ' selected' : ''}>${esc(l)}</option>`
+      ).join('')}</select>`;
+  return `<label for="${id}">${esc(f.label)}</label>
+          <input id="${id}" type="${f.type}" value="${esc(value)}">`;
+}
+
+async function runOp() {
+  const op = OPS[CURRENT];
+  if (op.danger && !confirm(op.label + ' is destructive or irreversible. Continue?')) return;
+  const values = {};
+  op.fields.forEach(f => values[f.id] = $('f-' + f.id).value);
+  $('result').innerHTML = '<p class="empty">Running&hellip;</p>';
+  try {
+    const call = await op.run(values);
+    remember(CURRENT, call);
+    render(call);
+  } catch (e) {
+    $('result').innerHTML = `<div class="banner bad">${esc(e.message)}</div>`;
+  }
+}
+
+function remember(opKey, call) {
+  HISTORY.unshift({ at: new Date(), opKey, label: OPS[opKey].label, call });
+  HISTORY.splice(25);
+  renderHistory();
+}
+
+function renderHistory() {
+  if (!HISTORY.length) {
+    $('history').innerHTML = '<p class="empty">Nothing run yet.</p>';
+    return;
+  }
+  $('history').innerHTML = HISTORY.map((h, i) => {
+    const rows = (h.call.rows || []).length;
+    return `<button class="histrow" onclick="replay(${i})">
+      <span class="tag ${h.call.ok ? 'ok' : 'bad'}" style="flex:none">${h.call.ok ? 'ok' : 'err'}</span>
+      <span style="flex:1;min-width:0">
+        <span style="display:block">${esc(h.label)}</span>
+        <span class="note" style="font-size:11px">${h.at.toLocaleTimeString()} &middot;
+          ${rows} row(s) &middot; ${h.call.millis}ms</span>
+      </span></button>`;
+  }).join('');
+}
+
+function replay(i) {
+  render(HISTORY[i].call, true);
+}
+
+/* Fill the id field of whichever operation is selected, so list -> act is one click.
+   Reading an id off a table and retyping it into the next form was the main friction. */
+function useId(id) {
+  navigator.clipboard?.writeText(id);
+  const op = OPS[CURRENT];
+  const target = op.fields.find(f => /Id$/i.test(f.id) || f.id === 'confirm');
+  if (target) {
+    const el = $('f-' + target.id);
+    if (el) {
+      el.value = id;
+      FORM_STATE[CURRENT] = FORM_STATE[CURRENT] || {};
+      FORM_STATE[CURRENT][target.id] = id;
+      el.focus();
+      return;
+    }
+  }
+  setBanner('Copied ' + id + ' to the clipboard.');
+}
+
+function setBanner(text) {
+  const el = $('toast');
+  el.textContent = text;
+  el.style.display = '';
+  clearTimeout(setBanner.t);
+  setBanner.t = setTimeout(() => el.style.display = 'none', 2600);
+}
+
+const ranked = r => typeof r.score === 'number' && r.score >= 0;
+const hasRaw = r => typeof r.rawScore === 'number' && r.rawScore >= 0;
+const hybridOn = r => ranked(r) && hasRaw(r) && r.score !== r.rawScore;
+
+/** Rows come back ordered by score. Say so when they do not — sorting by a different field is
+ *  invisible otherwise, and it changes which rows fit inside a limit. */
+function orderingNote(rows) {
+  const scored = rows.filter(ranked);
+  if (!scored.length) return '';
+  const byScore = scored.every((r, i) => i === 0 || scored[i - 1].score >= r.score);
+  const rawScored = rows.filter(hasRaw);
+  const byRaw = rawScored.every((r, i) => i === 0 || rawScored[i - 1].rawScore >= r.rawScore);
+  if (byScore && !byRaw)
+    return '<span class="tag ok">ordered by score, not by raw similarity</span>';
+  if (byScore) return '<span class="tag">ordered by score</span>';
+  return '<span class="tag bad">NOT ordered by score &mdash; ranking behaviour has changed</span>';
+}
+
+let LAST = null;
+
+function setView(v) {
+  VIEW = v;
+  if (LAST) render(LAST, true);
+}
+
+function render(call, quiet) {
+  LAST = call;
+  const rows = call.rows || [];
+  const hybrid = rows.some(hybridOn);
+
+  const body = VIEW === 'rows'
+    ? (rows.length ? rowsTable(rows) : '<p class="empty">No rows in this response. The raw view '
+        + 'shows what actually came back &mdash; an empty parse and an empty result look the same '
+        + 'from here.</p>')
+    : VIEW === 'text'
+      ? `<pre>${esc(call.text || '(none)')}</pre>`
+      : `<pre>${esc(call.raw || '(none)')}</pre>`;
+
+  $('result').innerHTML = `
+    <div class="banner ${call.ok ? 'ok' : 'bad'}">
+      ${call.ok ? 'OK' : 'Failed'} &middot; <span class="mono">${esc(call.resolvedTool || call.tool)}</span>
+      &middot; ${call.millis}ms &middot; ${rows.length} row(s)
+      ${quiet ? ' &middot; <span class="note">from history</span>' : ''}
+      ${call.error ? `<div style="margin-top:6px">${esc(call.error)}</div>` : ''}
+    </div>
+
+    <details style="margin:12px 0">
+      <summary class="note" style="cursor:pointer">Arguments sent</summary>
+      <pre style="margin-top:6px">${esc(JSON.stringify(call.arguments, null, 2))}</pre>
+    </details>
+
+    <div class="views">
+      <button class="op" aria-pressed="${VIEW === 'rows'}" onclick="setView('rows')">Rows</button>
+      <button class="op" aria-pressed="${VIEW === 'text'}" onclick="setView('text')">Text leaves</button>
+      <button class="op" aria-pressed="${VIEW === 'raw'}" onclick="setView('raw')">Raw</button>
+      <span style="flex:1"></span>
+      ${VIEW === 'rows' && rows.length ? (hybrid
+        ? '<span class="tag ok">hybrid ranking engaged</span>'
+        : rows.some(ranked) ? '<span class="tag warn">score == raw on every row</span>' : '') : ''}
+      ${VIEW === 'rows' ? orderingNote(rows) : ''}
+    </div>
+    ${body}`;
+}
+
+function rowsTable(rows) {
+  return `<table>
+    <tr><th style="width:1%"></th><th>Id</th><th>Payload</th><th>Written by</th>
+        <th class="num">score</th><th class="num">raw</th></tr>
+    ${rows.map(r => `<tr>
+      <td>${r.id ? `<button class="mini" title="Use this id in the current form"
+            onclick="useId('${esc(r.id)}')">use</button>` : ''}</td>
+      <td class="mono" style="font-size:11px;width:210px">${esc(r.id || '')}</td>
+      <td><div class="payload">${esc(r.text || '')}</div></td>
+      <td style="font-size:12px">${esc(r.writtenBy || '')}</td>
+      <td class="num"${hybridOn(r) ? ' style="font-weight:600"' : ''}>${
+        ranked(r) ? r.score.toFixed(4) : '&mdash;'}</td>
+      <td class="num" style="color:var(--muted)">${
+        hasRaw(r) ? r.rawScore.toFixed(4) : '&mdash;'}</td>
+    </tr>`).join('')}
+  </table>`;
+}
+
+async function get(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+async function loadStatus() {
+  try {
+    const s = await get('/api/meko/status');
+    $('status').className = 'banner ' + (s.connected ? 'ok' : 'bad');
+    $('status').innerHTML = s.connected
+      ? `Connected. ${s.toolCount} tools registered, acting as
+         <span class="mono">${esc(s.agentId)}</span> &mdash; which on conversation_get, _update and
+         _delete is an <strong>ownership filter</strong>, not just trace attribution.`
+      : 'Not connected. Check MEKO_APIKEY and the MCP url &mdash; no tools are registered.';
+    $('tools').innerHTML = s.tools.length
+      ? s.tools.map(t => `<div class="mono" style="font-size:11.5px;padding:2px 0">${esc(t)}</div>`).join('')
+      : '<p class="empty">None.</p>';
+  } catch (e) {
+    $('status').className = 'banner bad';
+    $('status').textContent = e.message;
+  }
+}
+
+async function loadDatapacks() {
+  try {
+    const call = await get('/api/meko/datapacks');
+    const rows = call.rows || [];
+    $('datapack').innerHTML = rows.length
+      ? rows.map(r => `<option value="${esc(r.id)}">${esc(r.text || r.id)}</option>`).join('')
+      : '<option value="">none found</option>';
+  } catch (e) {
+    $('datapack').innerHTML = '<option value="">failed to load</option>';
+  }
+}
+
+async function loadActiveConversation() {
+  if (!dp()) return;
+  try {
+    const x = await get('/api/meko/conversation/active?datapackId=' + encodeURIComponent(dp()));
+    $('activeConv').textContent = x.conversationId;
+    $('activeConv').dataset.id = x.conversationId;
+  } catch (e) {
+    $('activeConv').textContent = 'could not resolve: ' + e.message;
+  }
+}
+
+function copyActive() {
+  const id = $('activeConv').dataset.id;
+  if (id) { navigator.clipboard?.writeText(id); setBanner('Copied ' + id); }
+}
+
+async function describe() {
+  if (!dp()) return;
+  const call = await get('/api/meko/datapack?datapackId=' + encodeURIComponent(dp()));
+  remember(CURRENT, call);
+  render(call);
+}
+
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); runOp(); }
+});
+
+window.addEventListener('DOMContentLoaded', async () => {
+  renderOps();
+  selectOp(CURRENT);
+  renderHistory();
+  await Promise.all([loadStatus(), loadDatapacks()]);
+  await loadActiveConversation();
+  $('datapack').addEventListener('change', loadActiveConversation);
+});
+</script>
+</body>
+</html>

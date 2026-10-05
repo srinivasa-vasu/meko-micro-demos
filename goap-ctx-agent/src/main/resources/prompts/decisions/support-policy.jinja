@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}Which policy governs this situation: the authorization succeeded, the merchant capture timed out, no capture settled, and the customer contacted us (no chargeback with their issuer)? Answer with the policy id, or null if none applies.{% endblock %}
+{% block shape %}{"policy": "policy id, e.g. CARD-DISPUTE-07, or null", "reason": "one sentence"}{% endblock %}

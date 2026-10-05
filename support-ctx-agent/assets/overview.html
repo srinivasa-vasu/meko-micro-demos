@@ -1,0 +1,771 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>
+  :root{color-scheme:light}
+  body{margin:0;font:14px system-ui,-apple-system,"Segoe UI",sans-serif;background:#fff}
+  img{max-width:100%}
+  [hidden]{display:none!important}
+</style>
+<title>The Data Infrastructure Tax</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+
+<style>
+  /* A 16:9 deck. Each slide is laid out on a fixed 1600x900 stage and scaled to fit the
+     screen, so a projector, a laptop and a shared Zoom window all show the same composition
+     instead of a 900px column with the rest of the screen empty. On a phone or a portrait
+     window the same slides fall back to a scrolling document, because a scaled 16:9 stage
+     at 390px wide is unreadable. */
+  :root {
+    --paper:   #ECEFF1;
+    --surface: #FFFFFF;
+    --sunk:    #E2E7EA;
+    --ink:     #11181D;
+    --muted:   #5A6B76;
+    --rule:    #CFD8DD;
+    --cost:    #A8392C;   /* what you pay — the tax */
+    --cost-dim:#F7E6E3;
+    --keep:    #0E6B52;   /* what Meko absorbs */
+    --keep-dim:#DCEDE7;
+
+    --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --body:    "Source Serif 4", Georgia, "Times New Roman", serif;
+    --mono:    "JetBrains Mono", ui-monospace, Menlo, monospace;
+
+    /* Type scale for the 1600x900 stage. The document fallback overrides these. */
+    --t-h1: 112px;
+    --t-h2: 54px;
+    --t-claim: 28px;
+    --t-body: 21px;
+    --t-small: 18px;
+    --t-cap: 14px;
+    --pad-x: 88px;
+    --pad-y: 60px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:   #0E1417;
+      --surface: #161F23;
+      --sunk:    #0A0F12;
+      --ink:     #E7EDF0;
+      --muted:   #93A6B0;
+      --rule:    #27353B;
+      --cost:    #E5796A;
+      --cost-dim:#331C19;
+      --keep:    #4CC0A0;
+      --keep-dim:#0D2B24;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:   #0E1417;
+    --surface: #161F23;
+    --sunk:    #0A0F12;
+    --ink:     #E7EDF0;
+    --muted:   #93A6B0;
+    --rule:    #27353B;
+    --cost:    #E5796A;
+    --cost-dim:#331C19;
+    --keep:    #4CC0A0;
+    --keep-dim:#0D2B24;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: var(--t-body);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- deck mechanics ---------- */
+  html.deck, html.deck body { height: 100%; overflow: hidden; }
+  .stage {
+    position: fixed; left: 50%; top: 50%;
+    width: 1600px; height: 900px;
+    transform: translate(-50%, -50%) scale(var(--scale, 1));
+    transform-origin: center center;
+  }
+  .slide {
+    position: absolute; inset: 0;
+    padding: var(--pad-y) var(--pad-x);
+    display: flex; flex-direction: column; gap: 34px;
+    box-sizing: border-box;
+    background: var(--paper);
+    opacity: 0; visibility: hidden;
+    transition: opacity .25s ease, visibility 0s linear .25s;
+  }
+  .slide.on { opacity: 1; visibility: visible; transition: opacity .25s ease; }
+  .slide > .body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 26px;
+                   justify-content: center; }
+
+  /* Controls sit outside the scaled stage so they stay a usable size, and fade until the
+     pointer moves — the room is looking at the slide, not the buttons. */
+  .chrome {
+    position: fixed; right: 16px; bottom: 14px; z-index: 5;
+    display: flex; align-items: center; gap: 8px;
+    font: 500 12.5px var(--mono); color: var(--muted);
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 100px;
+    padding: 4px 6px 4px 12px;
+    opacity: .35; transition: opacity .2s;
+  }
+  .chrome:hover, .chrome:focus-within, body.moving .chrome { opacity: 1; }
+  .chrome .count { min-width: 3.6em; text-align: center; font-variant-numeric: tabular-nums; }
+  .chrome .nav { display: grid; place-items: center; width: 30px; height: 28px; padding: 0;
+          border: 0; border-radius: 100px; background: none; color: var(--muted); cursor: pointer; }
+  .chrome .nav:hover { color: var(--ink); background: var(--sunk); }
+  .chrome .nav:disabled { opacity: .35; cursor: default; background: none; }
+  .chrome svg { width: 15px; height: 15px; display: block; stroke: currentColor; fill: none;
+          stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .chrome button:focus-visible { outline: 2px solid var(--keep); outline-offset: 2px; }
+  /* Theme switcher: top right, outside the scaled stage. Fades with the slide controls in the
+     deck, always visible in the document layout, where there are no slide controls. */
+  .themer { position: fixed; top: 14px; right: 16px; z-index: 5; display: flex; gap: 2px;
+            border: 1px solid var(--rule); border-radius: 100px; padding: 3px; background: var(--surface);
+            opacity: .35; transition: opacity .2s; }
+  .themer:hover, .themer:focus-within, body.moving .themer { opacity: 1; }
+  .themer button { display: grid; place-items: center; width: 30px; height: 26px; padding: 0;
+            border: 0; border-radius: 100px; background: none; color: var(--muted);
+            cursor: pointer; transition: background .12s, color .12s; }
+  .themer button:hover { color: var(--ink); }
+  .themer button svg { width: 15px; height: 15px; display: block; stroke: currentColor;
+            fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .themer button[aria-pressed="true"] { background: var(--sunk); color: var(--ink); }
+  .themer button:focus-visible { outline: 2px solid var(--keep); outline-offset: 2px; }
+  html.doc .themer { position: absolute; opacity: 1; }
+  .progress { position: fixed; left: 0; top: 0; height: 3px; z-index: 5; background: var(--keep);
+              width: 0; transition: width .25s ease; }
+
+  /* ---------- type ---------- */
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+  h1 { font-size: var(--t-h1); line-height: 1.0; font-weight: 800; letter-spacing: -0.03em; }
+  h2 { font-size: var(--t-h2); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; }
+  h3 { font-size: calc(var(--t-body) * 1.12); font-weight: 700; letter-spacing: -0.01em; line-height: 1.25; }
+  p { margin: 0; }
+  .eyebrow {
+    font-family: var(--mono); font-size: var(--t-cap); font-weight: 600;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted);
+  }
+  /* The executive line: each slide's claim, set large. Read only these and you have the argument. */
+  .claim {
+    font-family: var(--display); font-size: var(--t-claim); font-weight: 600;
+    line-height: 1.32; letter-spacing: -0.015em; max-width: 44ch; text-wrap: balance;
+  }
+  .lead { max-width: 64ch; }
+  strong { font-weight: 600; }
+
+  .sec-head { display: flex; flex-direction: column; gap: 12px; }
+  /* A head on one line, for the slide whose body needs the height. */
+  .sec-head.row-head { flex-direction: row; align-items: flex-end; justify-content: space-between;
+                       gap: 48px; }
+  .sec-head.row-head .claim { font-size: calc(var(--t-claim) * .82); max-width: 30ch; text-align: right; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+  .stack { display: flex; flex-direction: column; gap: 18px; }
+
+  /* ---------- title ---------- */
+  .title { justify-content: center; gap: 40px; }
+  .tagrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  h1 .pay { color: var(--cost); }
+  .standfirst { font-size: calc(var(--t-claim) * 1.04); line-height: 1.45; color: var(--muted); max-width: 46ch; }
+  .rule-heavy { height: 4px; background: var(--ink); width: 160px; }
+  .hint { font-family: var(--mono); font-size: var(--t-cap); color: var(--muted); }
+  .hint kbd { font: inherit; border: 1px solid var(--rule); border-radius: 4px; padding: 1px 6px;
+              background: var(--surface); }
+
+  /* ---------- scenario strip ---------- */
+  .strip {
+    background: var(--surface); border: 1px solid var(--rule); border-left: 5px solid var(--cost);
+    border-radius: 2px; padding: 28px 32px; display: flex; flex-direction: column; gap: 14px;
+  }
+  .strip .t { font-family: var(--mono); font-size: var(--t-cap); letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--cost); }
+  .strip p { font-size: calc(var(--t-body) * 1.08); }
+
+  /* ---------- split: domain vs plumbing ---------- */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; background: var(--rule);
+           border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
+  .half { background: var(--surface); padding: 26px 30px; display: flex; flex-direction: column;
+          gap: 14px; min-width: 0; }
+  .half .cap { font-family: var(--mono); font-size: var(--t-cap); letter-spacing: 0.12em; text-transform: uppercase; }
+  .half.you .cap { color: var(--keep); }
+  .half.tax { background: var(--cost-dim); }
+  .half.tax .cap { color: var(--cost); }
+  .half ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 6px; }
+  .half li { font-size: var(--t-body); line-height: 1.42; }
+  .half.tax li { color: var(--cost); }
+  .half .weight { font-family: var(--mono); font-size: var(--t-cap); color: var(--muted);
+                  padding-top: 10px; border-top: 1px solid var(--rule); margin-top: auto; }
+
+  /* ---------- the ledger ---------- */
+  .ledger { display: flex; flex-direction: column; border: 1px solid var(--rule); border-radius: 2px;
+            overflow: hidden; background: var(--surface); }
+  .ledger-head, .lrow { display: grid; grid-template-columns: 220px 1fr 1fr; gap: 2px; background: var(--rule); }
+  .lrow { border-top: 1px solid var(--rule); }
+  .ledger-head > div { padding: 10px 16px; font-family: var(--mono); font-size: 12.5px;
+                       letter-spacing: 0.12em; text-transform: uppercase; }
+  .lh-layer { background: var(--surface); color: var(--muted); }
+  .lh-cost { background: var(--cost-dim); color: var(--cost); }
+  .lh-keep { background: var(--keep-dim); color: var(--keep); }
+  .lrow > div { background: var(--surface); padding: 10px 16px; display: flex; flex-direction: column;
+                gap: 4px; min-width: 0; font-size: 16px; line-height: 1.42; }
+  .lrow .layer { font-family: var(--display); font-weight: 700; font-size: 17px; line-height: 1.3; }
+  .lrow .c-side { color: var(--muted); border-left: 3px solid var(--cost); }
+  .lrow .k-side { background: var(--keep-dim); border-left: 3px solid var(--keep); }
+  .lrow .k-side .tool { font-family: var(--mono); font-size: 13px; color: var(--keep); overflow-wrap: anywhere; }
+
+  /* ---------- definition block ---------- */
+  .define { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .def { background: var(--surface); border: 1px solid var(--rule); border-radius: 2px; padding: 28px 32px;
+         display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .def.contrast { background: var(--sunk); border-style: dashed; }
+  .def .cap { font-family: var(--mono); font-size: var(--t-cap); letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); }
+  .def.engine { border-color: var(--keep); border-width: 2px; }
+  .def.engine .cap { color: var(--keep); }
+  .def p { font-size: calc(var(--t-body) * 1.05); line-height: 1.5; }
+
+  /* ---------- why agents ---------- */
+  .whys { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .why { background: var(--surface); border: 1px solid var(--rule); border-top: 3px solid var(--ink);
+         border-radius: 2px; padding: 24px 28px; display: flex; flex-direction: column; gap: 10px; }
+  .why .k { font-family: var(--display); font-weight: 700; font-size: calc(var(--t-body) * 1.25); }
+  .why p { font-size: var(--t-small); color: var(--muted); line-height: 1.52; }
+
+  /* ---------- three runs ---------- */
+  .proof { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--rule);
+           border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
+  .pcell { background: var(--surface); padding: 28px 30px; display: flex; flex-direction: column;
+           gap: 12px; min-width: 0; }
+  .pcell .n { font-family: var(--mono); font-size: var(--t-cap); letter-spacing: 0.1em;
+              text-transform: uppercase; color: var(--muted); }
+  .pcell p { font-size: var(--t-small); line-height: 1.52; color: var(--muted); }
+  .pcell.flag { border-top: 4px solid var(--cost); background: var(--cost-dim); }
+  .pcell.flag .n { color: var(--cost); }
+
+  /* ---------- punchline ---------- */
+  .slide.dark { background: var(--ink); color: var(--paper); justify-content: center; gap: 30px; }
+  .slide.dark .eyebrow { color: var(--keep); }
+  .punch-line { font-family: var(--display); font-size: 80px; font-weight: 800; line-height: 1.05;
+                letter-spacing: -0.03em; max-width: 20ch; text-wrap: balance; }
+  .punch-line .hl { color: var(--keep); }
+  .slide.dark p { color: var(--rule); max-width: 62ch; font-size: calc(var(--t-body) * 1.08); }
+  .demo { margin-top: 26px; padding-top: 26px; border-top: 1px solid color-mix(in srgb, var(--paper) 22%, transparent);
+          display: flex; flex-direction: column; gap: 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-family: var(--mono); font-size: var(--t-cap); padding: 4px 12px; border: 1px solid var(--rule);
+          border-radius: 100px; color: var(--muted); white-space: nowrap; }
+  .chip.on { border-color: var(--keep); color: var(--keep); }
+  .slide.dark .chip { border-color: color-mix(in srgb, var(--paper) 35%, transparent); color: var(--rule); }
+  .slide.dark .chip.on { border-color: var(--keep); color: var(--keep); }
+  .slide.dark .demo p { font-size: var(--t-small); }
+
+  /* ---------- document fallback: phones, portrait windows ---------- */
+  html.doc {
+    --t-h1: clamp(2.3rem, 9vw, 4.1rem);
+    --t-h2: clamp(1.5rem, 5vw, 2.2rem);
+    --t-claim: clamp(1.1rem, 3.4vw, 1.4rem);
+    --t-body: 17px;
+    --t-small: 15.5px;
+    --t-cap: 11.5px;
+    --pad-x: 16px;
+    --pad-y: 44px;
+  }
+  html.doc .stage { position: static; width: auto; height: auto; transform: none; max-width: 980px;
+                    margin: 0 auto; }
+  html.doc .slide { position: static; opacity: 1; visibility: visible; transition: none; gap: 24px;
+                    border-bottom: 1px solid var(--rule); }
+  html.doc .slide.dark { border-bottom: 0; }
+  html.doc .chrome, html.doc .progress, html.doc .hint { display: none; }
+  html.doc .punch-line { font-size: clamp(1.7rem, 7vw, 2.6rem); }
+  html.doc .lrow > div { font-size: 15px; }
+  html.doc .sec-head.row-head { flex-direction: column; align-items: flex-start; gap: 12px; }
+  html.doc .sec-head.row-head .claim { text-align: left; }
+  @media (max-width: 760px) {
+    html.doc .two, html.doc .split, html.doc .define, html.doc .whys, html.doc .proof { grid-template-columns: 1fr; }
+    html.doc .ledger-head { display: none; }
+    html.doc .lrow { grid-template-columns: 1fr; }
+  }
+
+  /* Print or save as PDF: one slide per landscape page. */
+  @media print {
+    @page { size: 1600px 900px; margin: 0; }
+    html.deck, html.deck body { height: auto; overflow: visible; }
+    .stage { position: static; transform: none; }
+    .slide { position: relative; opacity: 1; visibility: visible; height: 900px; break-after: page; }
+    .chrome, .themer, .progress, .hint { display: none; }
+  }
+
+  @media (prefers-reduced-motion: reduce) { .slide, .progress { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<main class="stage" id="stage" aria-roledescription="slide deck">
+
+  <!-- ============ 1 · TITLE ============ -->
+  <section class="slide title" aria-label="Title">
+    <div class="tagrow"><span class="chip on">Meko · context engine</span></div>
+    <h1>Build the agent.<br>Don't <span class="pay">pay the tax</span>.</h1>
+    <div class="rule-heavy"></div>
+    <p class="standfirst">Every agentic application eventually needs memory, knowledge and
+      context. Almost none of that is your product. This is what it costs to build it yourself —
+      and what changes when you don't.</p>
+    <p class="hint"><kbd>→</kbd> or <kbd>space</kbd> to advance · <kbd>number</kbd> jumps to that slide · <kbd>F</kbd> full screen</p>
+  </section>
+
+  <!-- ============ 2 · CONTEXT ============ -->
+  <section class="slide" aria-label="The use case">
+    <div class="sec-head">
+      <span class="eyebrow">The use case</span>
+      <h2>A production incident, at two in the morning</h2>
+      <p class="claim">An agent can diagnose this. The question is what it costs on the
+        fortieth incident, not the first.</p>
+    </div>
+    <div class="body">
+      <div class="two">
+        <div class="strip">
+          <span class="t">SEV2 · checkout · 02:14</span>
+          <p>Checkout is failing. The payment provider is timing out. Something shipped forty
+            minutes ago. Twenty services are logging, three dashboards disagree, and the engineer
+            who fixed this exact regression seven months ago has left the company.</p>
+        </div>
+        <div class="stack">
+          <p>Point an agent at it and you get an answer. It reads the telemetry, forms a hypothesis,
+            proposes a fix. That part is now routine — it is the part a good model does well.</p>
+          <p>Run it a hundred more times and the economics decide whether you keep it. A stateless
+            agent reads everything, every time. It is no cheaper and no faster on the fortieth
+            incident than the first, because it has no way to know it has seen this before. Your
+            costs scale linearly with volume, forever, with no learning curve. That is not a model
+            problem. It is a <strong>context</strong> problem.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 3 · THE SPLIT ============ -->
+  <section class="slide" aria-label="What you end up building">
+    <div class="sec-head">
+      <span class="eyebrow">What you actually end up building</span>
+      <h2>The part that is yours, and the part that is a tax</h2>
+      <p class="claim">The domain logic is the small half. The plumbing underneath it is where
+        the quarters go.</p>
+    </div>
+    <div class="body">
+      <div class="split">
+        <div class="half you">
+          <span class="cap">Your domain — only you can write this</span>
+          <ul>
+            <li>What a good diagnosis looks like</li>
+            <li>Which assumptions a fix depends on</li>
+            <li>When to escalate and when to hand off to a human</li>
+            <li>What your spend policy is per severity</li>
+            <li>How much confidence is enough to act</li>
+          </ul>
+          <span class="weight">This is your product.</span>
+        </div>
+        <div class="half tax">
+          <span class="cap">Context infrastructure — the tax</span>
+          <ul>
+            <li>Vector store, embedding pipeline, chunking</li>
+            <li>Retrieval scoring, reranking, thresholds</li>
+            <li>Write-back, deduplication, update-vs-insert</li>
+            <li>Knowledge ingestion and refresh</li>
+            <li>Cross-agent sharing and namespacing</li>
+            <li>Tenant isolation, rights, auditability</li>
+            <li>Cost attribution per retrieval</li>
+          </ul>
+          <span class="weight">This is identical at every company that builds it.</span>
+        </div>
+      </div>
+      <p class="lead">Nobody plans to build the right column. It arrives one ticket at a time, each one
+        individually reasonable, and eighteen months later a team of four is maintaining a
+        retrieval platform instead of shipping the thing they were hired to ship.</p>
+    </div>
+  </section>
+
+  <!-- ============ 4 · THE LEDGER ============ -->
+  <section class="slide" aria-label="The tax, itemised">
+    <div class="sec-head row-head">
+      <div class="sec-head">
+        <span class="eyebrow">The tax, itemised</span>
+        <h2>Seven line items</h2>
+      </div>
+      <p class="claim">Each row is a real engineering programme, not a configuration flag.</p>
+    </div>
+    <div class="body">
+      <div class="ledger">
+        <div class="ledger-head">
+          <div class="lh-layer">Layer</div>
+          <div class="lh-cost">What you build and operate</div>
+          <div class="lh-keep">What Meko already handles</div>
+        </div>
+
+        <div class="lrow">
+          <div><span class="layer">Storage and embedding</span></div>
+          <div class="c-side">Pick a vector store, build the embedding pipeline, choose a chunk
+            strategy. Changing embedding model later is a migration, not a setting.</div>
+          <div class="k-side">
+            <span>Isolated workspaces with their own memory store and knowledge
+              base. You write records; the pipeline is not your concern.</span>
+            <span class="tool">datapack_create · memory_add</span>
+          </div>
+        </div>
+
+        <div class="lrow">
+          <div><span class="layer">Retrieval quality</span></div>
+          <div class="c-side">Hybrid search, reranking, score calibration. A similarity number
+            that does not mean anything consistent is worse than no number at all.</div>
+          <div class="k-side">
+            <span>Scored retrieval across conversation history, memory and the
+              knowledge base in one call, with the scores exposed.</span>
+            <span class="tool">context_search · memory_search</span>
+          </div>
+        </div>
+
+        <div class="lrow">
+          <div><span class="layer">Memory lifecycle</span></div>
+          <div class="c-side">Deciding when a new fact updates an old one rather than joining
+            it. Get this wrong and memory gets stuck on whatever it learned first.</div>
+          <div class="k-side">
+            <span>Update and delete as first-class operations, so a record can be
+              corrected or confirmed rather than only appended to.</span>
+            <span class="tool">memory_update · memory_delete_by_id</span>
+          </div>
+        </div>
+
+        <div class="lrow">
+          <div><span class="layer">Organisational knowledge</span></div>
+          <div class="c-side">Runbooks, service maps and policies live in wikis. Getting them
+            into an agent means an ingestion path and a refresh story, separate from memory.</div>
+          <div class="k-side">
+            <span>A knowledge base per workspace, searchable alongside memory and
+              kept distinct from it, because they answer different questions.</span>
+            <span class="tool">knowledgebase_search</span>
+          </div>
+        </div>
+
+        <div class="lrow">
+          <div><span class="layer">Multiple agents</span></div>
+          <div class="c-side">What one agent learns, the others need. Memory that only serves
+            the agent that wrote it is a cache, and you will build the sharing layer eventually.</div>
+          <div class="k-side">
+            <span>Namespacing per agent, cross-agent search within a workspace, and
+              a one-way promotion path from private memory into shared knowledge.</span>
+            <span class="tool">agent_id · memory_promote</span>
+          </div>
+        </div>
+
+        <div class="lrow">
+          <div><span class="layer">Isolation and governance</span></div>
+          <div class="c-side">Per-tenant separation, rights on who may publish to shared
+            knowledge, deletion on request. This is usually what blocks going to production.</div>
+          <div class="k-side">
+            <span>Workspaces are the isolation boundary. Promotion to shared
+              knowledge requires rights on the workspace rather than trust in the caller.</span>
+            <span class="tool">datapack · scoped credentials</span>
+          </div>
+        </div>
+
+        <div class="lrow">
+          <div><span class="layer">Cost and traceability</span></div>
+          <div class="c-side">Retrieval is not free — every search and every write embeds text.
+            You cannot optimise what you cannot attribute, and you cannot vouch for an unattended
+            agent whose decisions you cannot replay.</div>
+          <div class="k-side">
+            <span>Usage tracking and conversation-scoped tracing, so retrieval cost
+              lands on the run that caused it and the run can be replayed.</span>
+            <span class="tool">track_token_usage · conversation_*</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5 · CONTEXT ENGINE ============ -->
+  <section class="slide" aria-label="The category">
+    <div class="sec-head">
+      <span class="eyebrow">The category</span>
+      <h2>A context engine is not a vector database</h2>
+      <p class="claim">One returns text that resembles your query. The other decides what the
+        model should be given — and what it can skip.</p>
+    </div>
+    <div class="body">
+      <div class="define">
+        <div class="def contrast">
+          <span class="cap">A vector store answers</span>
+          <p>"Which stored chunks look like this query?" It hands back text. Everything after that
+            — whether the match is good enough, whether it is still true, whether to act on it,
+            what it cost — is yours to build.</p>
+        </div>
+        <div class="def engine">
+          <span class="cap">A context engine answers</span>
+          <p>"Given this decision, what should the model be given?" It assembles memory,
+            organisational knowledge and policy into a scored, attributed context — and it is
+            allowed to return nothing, which is the answer that makes the rest trustworthy.</p>
+        </div>
+      </div>
+      <p class="lead">The distinction matters most at the moment an agent decides <em>not</em> to do work. A
+        retrieval layer that only ever returns its best guess cannot support that decision, because
+        the best guess is always something. An engine that reports how good the match is, where it
+        came from and whether it is still current can — and that is what lets memory change the
+        plan, not just the answer.</p>
+    </div>
+  </section>
+
+  <!-- ============ 6 · WHY AGENTS ============ -->
+  <section class="slide" aria-label="Why agents">
+    <div class="sec-head">
+      <span class="eyebrow">Why this matters more for agents than for chat</span>
+      <h2>Four properties of agents that make context critical</h2>
+    </div>
+    <div class="body">
+      <div class="whys">
+        <div class="why">
+          <span class="k">They repeat</span>
+          <p>A chatbot's conversations are mostly novel. An operational agent sees the same
+            incident class over and over. Without memory, you pay full price for a question you
+            have already answered — and the repetition is exactly where the margin is.</p>
+        </div>
+        <div class="why">
+          <span class="k">They act</span>
+          <p>Acting on a stale fact is worse than returning nothing. Recall alone cannot tell you
+            whether a remembered fix still applies to a system that has moved since. That needs a
+            freshness signal the agent can check before it commits.</p>
+        </div>
+        <div class="why">
+          <span class="k">They plan</span>
+          <p>Context that arrives before the agent decides what to do changes what it does. Context
+            that arrives afterwards only dresses up the answer. To shape the work, retrieval has to be
+            cheap enough to run first — a design decision, not something you tune later.</p>
+        </div>
+        <div class="why">
+          <span class="k">They multiply</span>
+          <p>One becomes several: a deploy bot, a triage agent, an on-call assistant. What one learns,
+            the others need, under different identities and different rights. Retrofitting that sharing
+            once three agents are in production is the expensive way to do it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 7 · THREE RUNS ============ -->
+  <section class="slide" aria-label="The same incident, three ways">
+    <div class="sec-head">
+      <span class="eyebrow">What you are about to see</span>
+      <h2>The same incident, three ways</h2>
+      <p class="claim">Memory changes the plan, and the plan changes the bill. The demo exists
+        to let you check that rather than take it on trust.</p>
+    </div>
+    <div class="body">
+      <div class="proof">
+        <div class="pcell">
+          <span class="n">Run one</span>
+          <h3>We have seen this before</h3>
+          <p>A strong match, and the system has not moved since the fix was recorded. The agent
+            answers from memory without calling the model at all.</p>
+        </div>
+        <div class="pcell">
+          <span class="n">Run two</span>
+          <h3>Memory has nothing</h3>
+          <p>An incident memory has never seen. It finds no match and does the full investigation.
+            This is the baseline.</p>
+        </div>
+        <div class="pcell flag">
+          <span class="n">Run three · watch this one</span>
+          <h3>It looks familiar. The system moved.</h3>
+          <p>Same symptom, same strong match — but the service has shipped since, and the stored
+            fix assumed the old version. It declines the old fix and investigates from scratch.</p>
+        </div>
+      </div>
+      <p class="lead">Run three is the one that matters. Memory on its own is just a cache: fast, but blind to
+        change. Memory recalls what happened before; knowledge — runbooks, service maps, policies —
+        says how the system is meant to work. Together they give the agent the right context to make
+        the right call: reuse the fix when it still holds, investigate when it does not. Every run
+        shows its cost in dollars, including what the skipped work would have cost.</p>
+    </div>
+  </section>
+
+  <!-- ============ 8 · PUNCHLINE ============ -->
+  <section class="slide dark" aria-label="The point">
+    <span class="eyebrow">The point</span>
+    <span class="punch-line">Focus on the domain. <span class="hl">Meko pays the data
+      infrastructure tax.</span></span>
+    <p>Your team should be writing what a good diagnosis looks like and when to wake a human.
+      Storing, scoring, sharing, expiring and attributing the context underneath it is
+      undifferentiated work that every company building agents rebuilds identically. There is
+      no reason for it to be yours.</p>
+    <div class="demo">
+      <span class="eyebrow">The demo that follows</span>
+      <div class="chips">
+        <span class="chip on">Meko · MCP</span>
+        <span class="chip">Embabel planner</span>
+        <span class="chip">Spring Boot</span>
+        <span class="chip">Groq · gpt-oss</span>
+        <span class="chip">Java 21</span>
+      </div>
+      <p>An incident-response agent for SRE teams, built on the Embabel planner. It checks Meko for
+        relevant history before reading any telemetry, verifies that a remembered fix still applies
+        to what is deployed now, and reports every token it spent.</p>
+    </div>
+  </section>
+
+</main>
+
+<div class="themer" role="group" aria-label="Colour theme">
+  <button id="th-auto" aria-pressed="true" onclick="setTheme('auto')"
+          title="Match the system theme (T cycles)" aria-label="Theme: match system">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+  </button>
+  <button id="th-light" aria-pressed="false" onclick="setTheme('light')"
+          title="Light — for a bright room or a projector (T cycles)" aria-label="Theme: light">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"/></svg>
+  </button>
+  <button id="th-dark" aria-pressed="false" onclick="setTheme('dark')"
+          title="Dark — for a dim room or a laptop (T cycles)" aria-label="Theme: dark">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.2A8.2 8.2 0 1 1 9.8 4a6.6 6.6 0 0 0 10.2 10.2Z"/></svg>
+  </button>
+</div>
+
+<div class="chrome" role="toolbar" aria-label="Slide controls">
+  <button class="nav" id="prev" onclick="go(cur - 1)" aria-label="Previous slide">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+  </button>
+  <span class="count" id="count" aria-live="polite">1 / 8</span>
+  <button class="nav" id="next" onclick="go(cur + 1)" aria-label="Next slide">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>
+  </button>
+  <button class="nav" onclick="fullscreen()" aria-label="Full screen" title="Full screen (F)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+  </button>
+</div>
+
+<script>
+var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+var cur = 0;
+
+/* Deck when there is a landscape screen to fill; a scrolling document otherwise. */
+var deckQuery = window.matchMedia('(min-width: 900px) and (orientation: landscape)');
+function isDeck() { return deckQuery.matches && !window.matchMedia('print').matches; }
+
+function layout() {
+  var deck = isDeck();
+  document.documentElement.classList.toggle('deck', deck);
+  document.documentElement.classList.toggle('doc', !deck);
+  var s = Math.min(window.innerWidth / 1600, window.innerHeight / 900);
+  document.documentElement.style.setProperty('--scale', s);
+  slides.forEach(function (el, i) {
+    var hide = deck && i !== cur;
+    el.classList.toggle('on', !deck || i === cur);
+    if (hide) { el.setAttribute('aria-hidden', 'true'); el.inert = true; }
+    else { el.removeAttribute('aria-hidden'); el.inert = false; }
+  });
+}
+
+function go(n) {
+  n = Math.max(0, Math.min(slides.length - 1, n));
+  cur = n;
+  layout();
+  document.getElementById('count').textContent = (n + 1) + ' / ' + slides.length;
+  document.getElementById('prev').disabled = n === 0;
+  document.getElementById('next').disabled = n === slides.length - 1;
+  document.getElementById('progress').style.width = ((n + 1) / slides.length * 100) + '%';
+  if (location.hash !== '#' + (n + 1)) history.replaceState(null, '', '#' + (n + 1));
+}
+
+function fullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+}
+
+document.addEventListener('keydown', function (e) {
+  if (!isDeck() || e.metaKey || e.ctrlKey || e.altKey) return;
+  // Let a focused button take its own Space/Enter.
+  if ((e.key === ' ' || e.key === 'Enter') && e.target.closest && e.target.closest('button')) return;
+  var k = e.key;
+  if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || (k === ' ' && !e.shiftKey)) go(cur + 1);
+  else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp' || (k === ' ' && e.shiftKey)) go(cur - 1);
+  else if (/^[0-9]$/.test(k)) typeSlideNumber(k);
+  else if (k === 'Enter' && slideDigits) { clearTimeout(slideDigitTimer); jumpToTyped(); }
+  else if (k === 'Home') go(0);
+  else if (k === 'End') go(slides.length - 1);
+  else if (k === 'f' || k === 'F') fullscreen();
+  else if (k === 't' || k === 'T') cycleTheme();
+  else return;
+  e.preventDefault();
+});
+
+/* Swipe on a touch screen that is still wide enough to be a deck (a tablet in landscape). */
+/* Number keys jump to that slide. Digits typed in quick succession combine ("1" then "2" is
+   slide 12), so this keeps working if the deck grows past nine; Enter jumps without waiting. */
+var slideDigits = '', slideDigitTimer;
+function jumpToTyped() {
+  var n = parseInt(slideDigits, 10);
+  slideDigits = '';
+  if (n >= 1 && n <= slides.length) go(n - 1);
+}
+function typeSlideNumber(d) {
+  if (!slideDigits && d === '0') return;
+  slideDigits += d;
+  clearTimeout(slideDigitTimer);
+  // No longer number is possible, so there is nothing to wait for.
+  if (parseInt(slideDigits + '0', 10) > slides.length) jumpToTyped();
+  else slideDigitTimer = setTimeout(jumpToTyped, 600);
+}
+
+var touchX = null;
+document.addEventListener('touchstart', function (e) { touchX = e.touches[0].clientX; }, { passive: true });
+document.addEventListener('touchend', function (e) {
+  if (touchX === null || !isDeck()) return;
+  var dx = e.changedTouches[0].clientX - touchX;
+  if (Math.abs(dx) > 50) go(cur + (dx < 0 ? 1 : -1));
+  touchX = null;
+});
+
+/* Controls fade back after the pointer stops. */
+var idle;
+document.addEventListener('mousemove', function () {
+  document.body.classList.add('moving');
+  clearTimeout(idle);
+  idle = setTimeout(function () { document.body.classList.remove('moving'); }, 1800);
+});
+
+window.addEventListener('resize', layout);
+if (deckQuery.addEventListener) deckQuery.addEventListener('change', layout);
+window.addEventListener('hashchange', function () { go((parseInt(location.hash.slice(1), 10) || 1) - 1); });
+
+/* Three states, matching the CSS: auto removes the attribute and lets prefers-color-scheme
+   decide; light and dark set it and win over the OS either way. The room a deck opens in is
+   not always the room it was built in — a projector and a 2am laptop want opposites. */
+var THEMES = ['auto', 'light', 'dark'];
+var theme = 'auto';
+function setTheme(mode) {
+  theme = mode;
+  if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', mode);
+  THEMES.forEach(function (m) {
+    var b = document.getElementById('th-' + m);
+    if (b) b.setAttribute('aria-pressed', String(m === mode));
+  });
+  try { localStorage.setItem('meko-overview-theme', mode); } catch (e) { /* private window */ }
+}
+function cycleTheme() { setTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]); }
+(function restoreTheme() {
+  var saved = 'auto';
+  try { saved = localStorage.getItem('meko-overview-theme') || 'auto'; } catch (e) { /* ignore */ }
+  setTheme(THEMES.indexOf(saved) >= 0 ? saved : 'auto');
+})();
+
+go((parseInt(location.hash.slice(1), 10) || 1) - 1);
+</script>
+
+</body>
+</html>

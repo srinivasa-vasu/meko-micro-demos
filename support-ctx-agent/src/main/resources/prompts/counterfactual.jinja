@@ -1,0 +1,14 @@
+{#
+  The prompt the pruned plan WOULD have sent: full telemetry sweep, no narrowing.
+
+  Never sent to a model. It is rendered only so its token count can be measured, which is what
+  turns "this run used 6k tokens" into "this run avoided 187k". Because it is never sent, it
+  must stay structurally identical to the real prompt's evidence section — if the two drift,
+  the saving is measured against something the system would never have produced.
+
+  Model keys:
+    evidence   the FULL telemetry block, unnarrowed
+    memory     Meko memory block
+#}
+{{ evidence }}
+{{ memory }}

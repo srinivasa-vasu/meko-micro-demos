@@ -1,0 +1,55 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: goap-ctx-agent
+  config:
+    # Effort estimates (minutes) for every story step: illustrative assumptions, with the basis for each.
+    import: classpath:effort/estimates.yml
+  profiles:
+    # The model provider is a profile: groq (default) or openrouter. Pick one with SPRING_PROFILES_ACTIVE.
+    default: groq
+
+meko:
+  enabled: ${MEKO_ENABLED:true}
+  api-key: ${MEKO_API_KEY:}
+  datapack-id: ${MEKO_DATAPACK_ID:}
+  datapack-name: ${MEKO_DATAPACK_NAME:meko-goap}
+  mcp-url: ${MEKO_MCP_URL:https://mcp.mekodata.ai/mcp}
+  client-name: ${spring.application.name}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+embabel:
+  models:
+    # Deterministic placeholder registered in DeterministicLlmConfig; no provider key needed.
+    default-llm: ${AI_LLM_MODEL:deterministic-placeholder}
+    # Roles used by the response writer; the tier-* models are registered in model/LlmTiers.
+    llms:
+      slm: tier-slm
+      llm: tier-llm
+      frontier: tier-frontier
+
+# Model tiers for the response writer and the decision gates: any OpenAI-compatible /chat/completions endpoint.
+# The tiers themselves are defined per provider profile:
+#   application-groq.yml        (default)              GROQ_API_KEY
+#   application-openrouter.yml  SPRING_PROFILES_ACTIVE=openrouter   OPENROUTER_API_KEY
+#   application-local.yml   add to either one, e.g. SPRING_PROFILES_ACTIVE=groq,local-llm, to run the small and mid tiers on Ollama
+# Prices drive the planner's tier price and the cost panel. The mid and frontier tiers are the same model at different
+# reasoning effort: reasoning tokens are billed as output.
+# Keyed fingerprints of KYC profiles: what agents write to a shared context store instead of the profile itself.
+# Set your own secret: every agent that writes or compares fingerprints must use the same one.
+kyc:
+  fingerprint-key: ${KYC_FINGERPRINT_KEY:local-only-demo-key-change-me}
+
+goap:
+  cost:
+    # Loaded cost of an hour of the people/agent effort the stories estimate in minutes. An assumption: change it.
+    hourly-rate-usd: ${HOURLY_RATE_USD:60}
+  llm:
+    enabled: ${LLM_ENABLED:true}

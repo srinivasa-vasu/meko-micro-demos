@@ -1,0 +1,57 @@
+# Model tiers on OpenRouter: SPRING_PROFILES_ACTIVE=openrouter and export OPENROUTER_API_KEY=... (openrouter.ai/keys).
+# Same open-weight models as the Groq default, so runs are comparable across providers. OpenRouter routes each request
+# to one of several hosting providers; prices are OpenRouter's listed prices for these models (October 2026) and the
+# provider it picks can bill differently. To pin providers, add e.g. provider: {order: [groq], allow_fallbacks: false}
+# under extra-body.
+goap:
+  llm:
+    tiers:
+      slm:
+        provider: openrouter
+        base-url: ${SLM_BASE_URL:https://openrouter.ai/api/v1}
+        model: ${SLM_MODEL:openai/gpt-oss-20b}
+        api-key: ${OPENROUTER_API_KEY:}
+        requires-key: true
+        usd-per1m-input: 0.018
+        usd-per1m-output: 0.09
+        expected-output-tokens: 300
+        headers:
+          # Optional OpenRouter app attribution (shown on openrouter.ai rankings and in your activity log).
+          HTTP-Referer: ${OPENROUTER_APP_URL:https://mekodata.ai}
+          X-Title: ${OPENROUTER_APP_NAME:Meko GOAP context agent}
+        extra-body:
+          reasoning_effort: low
+          include_reasoning: false
+      llm:
+        provider: openrouter
+        base-url: ${LLM_BASE_URL:https://openrouter.ai/api/v1}
+        model: ${LLM_MODEL:openai/gpt-oss-120b}
+        api-key: ${OPENROUTER_API_KEY:}
+        requires-key: true
+        usd-per1m-input: 0.037
+        usd-per1m-output: 0.17
+        expected-output-tokens: 400
+        fallback-planner-price: 0.15
+        headers:
+          HTTP-Referer: ${OPENROUTER_APP_URL:https://mekodata.ai}
+          X-Title: ${OPENROUTER_APP_NAME:Meko GOAP context agent}
+        extra-body:
+          reasoning_effort: low
+          include_reasoning: false
+      frontier:
+        provider: openrouter
+        base-url: ${FRONTIER_BASE_URL:https://openrouter.ai/api/v1}
+        model: ${FRONTIER_MODEL:openai/gpt-oss-120b}
+        api-key: ${OPENROUTER_API_KEY:}
+        requires-key: true
+        max-tokens: 4000
+        usd-per1m-input: 0.037
+        usd-per1m-output: 0.17
+        expected-output-tokens: 1500
+        fallback-planner-price: 0.30
+        headers:
+          HTTP-Referer: ${OPENROUTER_APP_URL:https://mekodata.ai}
+          X-Title: ${OPENROUTER_APP_NAME:Meko GOAP context agent}
+        extra-body:
+          reasoning_effort: high
+          include_reasoning: false

@@ -1,0 +1,18 @@
+{# Shared wrapper for the response writer. The story-specific instructions come from writer/<story>.jinja. #}
+{{ caseTag }}
+You are the {{ persona }}. Write the {{ purpose }}.
+{{ instructions }}
+
+Facts you can rely on:
+{% for fact in facts %}
+- {{ fact }}
+{% endfor %}
+{% if gaps %}
+
+Things that are NOT known. Do not invent them; say plainly what is missing where it matters:
+{% for gap in gaps %}
+- {{ gap }}
+{% endfor %}
+{% endif %}
+
+Use only the facts listed above and do not add details that are not listed. Reply with the text only: no subject line, no greeting placeholder, no signature, no markdown headings.

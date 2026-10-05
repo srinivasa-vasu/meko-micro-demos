@@ -1,0 +1,1809 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Incident context engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;450;500;600;700&display=swap">
+<style>
+  /* ------------------------------------------------------------------
+     An instrument panel, not a landing page.
+
+     This is read by sceptical SREs during a live demo, at distance, while
+     someone argues with the numbers on it. So: figures in a mono face with
+     real tabular figures because a ledger that does not align is a ledger
+     nobody trusts; colour that means something (green = memory helped,
+     amber = reuse refused) rather than decorating; and a left rail that
+     stays quiet so the evidence on the right can be loud.
+
+     Fonts degrade to the system stack if Google Fonts is unreachable —
+     a demo machine without internet should look plain, never broken.
+     ------------------------------------------------------------------ */
+  :root{
+    --ground:#eef1f5; --surface:#ffffff; --raised:#f8fafc;
+    --ink:#11161c; --muted:#53606f; --faint:#828e9d;
+    --line:#dde3ea; --line-strong:#c4cdd8;
+    --warm:#0e6e3f; --warm-bg:#e8f5ee; --warm-line:#b8dfc9;
+    --cold:#5a6472; --cold-bg:#f4f6f9;
+    --alert:#8a5100; --alert-bg:#fdf3e2; --alert-line:#ecd6ae;
+    --focus:#2b6cb0;
+    --shadow:0 1px 2px rgba(17,22,28,.05),0 8px 24px -16px rgba(17,22,28,.18);
+    --bar:rgba(238,241,245,.82);
+    --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    color-scheme:light;
+  }
+  :root[data-theme="dark"]{
+    --ground:#0a0e13; --surface:#141a22; --raised:#1a212b;
+    --ink:#e8edf4; --muted:#93a0b1; --faint:#6e7b8c;
+    --line:#242c37; --line-strong:#3a4553;
+    --warm:#4fc98a; --warm-bg:#11291f; --warm-line:#1f4a35;
+    --cold:#8a96a6; --cold-bg:#1a1f27;
+    --alert:#e0a356; --alert-bg:#2a2014; --alert-line:#4a3a1f;
+    --focus:#6ba3e0;
+    --shadow:0 1px 0 rgba(255,255,255,.02);
+    --bar:rgba(10,14,19,.82);
+    color-scheme:dark;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --ground:#0a0e13; --surface:#141a22; --raised:#1a212b;
+      --ink:#e8edf4; --muted:#93a0b1; --faint:#6e7b8c;
+      --line:#242c37; --line-strong:#3a4553;
+      --warm:#4fc98a; --warm-bg:#11291f; --warm-line:#1f4a35;
+      --cold:#8a96a6; --cold-bg:#1a1f27;
+      --alert:#e0a356; --alert-bg:#2a2014; --alert-line:#4a3a1f;
+      --focus:#6ba3e0;
+      --shadow:0 1px 0 rgba(255,255,255,.02);
+      --bar:rgba(10,14,19,.82);
+      color-scheme:dark;
+    }
+  }
+
+  *{box-sizing:border-box}
+  html{font-family:var(--sans)}
+  body{margin:0;background:var(--ground);color:var(--ink);font-size:15px;line-height:1.55;
+       -webkit-font-smoothing:antialiased}
+  /* Every figure on this page lines up in a column. */
+  .num,td.num,th.num,.big,.pct,.fig{font-family:var(--mono);font-variant-numeric:tabular-nums;
+       font-feature-settings:"tnum" 1}
+  :focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+
+  /* Wider than a reading column on purpose. This is an instrument panel shown on a laptop
+     mirrored to a projector, and the evidence below the answer is quicker to compare side by
+     side than scrolled past one card at a time. */
+  .wrap{max-width:1560px;margin:0 auto;padding:0 24px 80px}
+
+  /* A thin persistent bar: the theme control has to stay reachable from the bottom of a long
+     results page, and the big title does not need to occupy the screen after the first scroll. */
+  .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;
+          gap:16px;padding:11px 0;margin-bottom:22px;background:var(--bar);
+          -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+          border-bottom:1px solid var(--line)}
+  .mark{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;letter-spacing:-.005em}
+  .mark .dot{width:8px;height:8px;border-radius:50%;background:var(--warm);flex:none}
+  .mark .sub2{font-weight:400;color:var(--faint);font-size:12.5px}
+
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:26px}
+  h1{font-size:clamp(28px,3vw,38px);line-height:1.08;margin:0 0 10px;letter-spacing:-.022em;font-weight:600}
+  .lede{font-size:16px;color:var(--muted);max-width:72ch;line-height:1.58;margin:0}
+
+  .grid{display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;align-items:start}
+  /* The world is the starting state every scenario acts on, so it reads first and as one line,
+     rather than as a 300px rail that took width from the results for four buttons. */
+  .stage{display:flex;align-items:center;justify-content:space-between;gap:12px 24px;flex-wrap:wrap;
+         padding:14px 20px}
+  .stage h2{margin:0}
+  .stage .world{margin:0}
+  .stage .btnrow{margin:0}
+
+  /* Below the answer and the bill, the supporting evidence pairs up on a wide screen. Five
+     stacked cards is five scrolls during the part of the demo where people ask questions. */
+  .evidence{display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:16px;
+            align-items:stretch}
+  .evidence .card{margin-bottom:0}
+  /* Hybrid: one panel at a time by default, so the evidence is a click away instead of five
+     scrolls away; "Show all" restores the side-by-side grid for when people want to compare. */
+  .evbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+         margin:4px 0 12px}
+  .evtabs{display:flex;gap:2px;flex-wrap:wrap;border:1px solid var(--line);border-radius:9px;padding:3px;
+          background:var(--surface)}
+  .evtabs button{padding:6px 12px;font-size:13px;color:var(--muted);border-radius:6px}
+  .evtabs button:hover{color:var(--ink);background:var(--cold-bg)}
+  .evtabs button[aria-selected="true"]{background:var(--raised);color:var(--ink);
+          box-shadow:inset 0 0 0 1px var(--line-strong)}
+  .evtabs[hidden]{display:none}
+  .evidence.tabbed{grid-template-columns:1fr}
+  .evidence.tabbed > .card:not(.on){display:none}
+  .evidence .card.wide{grid-column:1/-1}
+  /* The two runs are the comparison, so they read side by side rather than one under the other. */
+  #detail{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:0 28px}
+  #detail > .run{padding:16px 0;border-top:1px solid var(--line)}
+  #detail > .run td:first-child{width:32%;color:var(--muted)}
+  th{white-space:nowrap}
+  /* scrollIntoView lands under the sticky bar without this. */
+  .card,#armed,#custom,#results{scroll-margin-top:72px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;
+        margin-bottom:16px;box-shadow:var(--shadow);min-width:0}
+  .card > *{min-width:0}
+  .card h2{margin:0 0 6px;font-size:16px;font-weight:600;letter-spacing:-.008em;display:flex;
+           align-items:baseline;gap:9px}
+  .card > h2 + .note{margin-top:0}
+
+  /* The step numbers are a real sequence — choose, check the claim, run. */
+  .step{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--muted);
+        border:1px solid var(--line-strong);border-radius:5px;padding:1px 6px;flex:none}
+
+  label,.flabel{font-size:12.5px;font-weight:500;color:var(--muted);display:block;margin:14px 0 5px}
+  input,textarea,select{width:100%;padding:8px 10px;border:1px solid var(--line-strong);border-radius:7px;
+        font:inherit;font-size:14px;background:var(--raised);color:var(--ink)}
+  textarea{min-height:62px;resize:vertical;line-height:1.5}
+  input#id{font-family:var(--mono);font-size:13.5px}
+  select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),
+        linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+        background-position:calc(100% - 16px) 51%,calc(100% - 11px) 51%;
+        background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:32px}
+
+  button{border:1px solid transparent;border-radius:7px;padding:8px 13px;font:inherit;font-size:13.5px;
+         font-weight:500;cursor:pointer;background:none;color:var(--ink)}
+  .primary{background:var(--ink);color:var(--surface);font-weight:600}
+  .secondary{background:var(--raised);border-color:var(--line-strong);color:var(--ink)}
+  .secondary:hover{border-color:var(--muted)}
+  .quiet{background:none;border-color:var(--line);color:var(--muted);font-size:13px;padding:6px 10px}
+  .quiet:hover{color:var(--ink);border-color:var(--line-strong)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+  .btnrow{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+
+  .status{padding:9px 11px;border-radius:8px;background:var(--cold-bg);color:var(--muted);font-size:13px;
+          margin-top:16px;line-height:1.5;border:1px solid var(--line)}
+  .status.ok{background:var(--warm-bg);color:var(--warm);border-color:var(--warm-line)}
+  .status.busy{background:var(--alert-bg);color:var(--alert);border-color:var(--alert-line)}
+
+  /* Scenario picker: the first decision, and the one that sets up everything else. */
+  .scns{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}
+  /* Your own incident is the fourth way in, not a scripted scenario: dashed, so it reads as open. */
+  .ownform{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1.3fr);gap:0 14px;
+           margin-top:6px;align-items:end}
+  .ownform .full{grid-column:1/-1}
+  .ownform #servicenote:empty{display:none}
+  .ownform #servicenote{margin-top:6px!important}
+  .scn.own{border-style:dashed;background:none}
+  .scn{text-align:left;border:1px solid var(--line);border-radius:10px;padding:15px;background:var(--raised);
+       cursor:pointer;display:block;width:100%}
+  .scn:hover{border-color:var(--line-strong)}
+  .scn[aria-pressed="true"]{border-color:var(--warm);background:var(--warm-bg);
+       box-shadow:inset 0 0 0 1px var(--warm)}
+  .scn[aria-pressed="true"] .t{color:var(--warm)}
+  .scn .t{display:block;font-weight:600;font-size:15px;line-height:1.3;margin-bottom:6px}
+  .scn .p{display:block;font-size:13px;color:var(--muted);line-height:1.5;font-weight:400}
+
+  /* The ledger is the argument. It gets the weight. */
+  .ledger{display:grid;grid-template-columns:1fr auto 1fr;border:1px solid var(--line);border-radius:11px;
+          overflow:hidden;background:var(--raised)}
+  .side{padding:clamp(18px,1.6vw,26px);min-width:0}
+  .side.cold{background:var(--cold-bg)}
+  .side.warm{background:var(--warm-bg)}
+  .side .who{font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:12px}
+  .side.warm .who{color:var(--warm)}
+  .big{font-size:clamp(32px,3.4vw,46px);font-weight:500;letter-spacing:-.022em;line-height:1}
+  .big small{display:block;font-family:var(--sans);font-size:12.5px;font-weight:400;color:var(--muted);
+             margin-top:7px;letter-spacing:0;line-height:1.45}
+  .sub{margin-top:14px;font-size:13px;color:var(--muted);line-height:1.55}
+  .mid{display:flex;align-items:center;justify-content:center;padding:0 18px;background:var(--surface);
+       border-left:1px solid var(--line);border-right:1px solid var(--line)}
+  .mid div{text-align:center}
+  .mid .pct{font-size:clamp(24px,2.3vw,32px);font-weight:500;letter-spacing:-.012em;color:var(--warm)}
+  .mid .pctlab{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.35}
+
+  /* Cards sit in a grid now, so a wide table has to scroll inside its own card rather than
+     stretch the column and push the page sideways. */
+  #ledger,#detail,#recall,#runbook,#context{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  th{color:var(--muted);font-weight:500;font-size:12.5px}
+  td.num,th.num{text-align:right}
+  td small{color:var(--faint);font-size:11.5px;line-height:1.4}
+
+  .tag{display:inline-block;font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:5px;
+       background:var(--cold-bg);color:var(--muted);border:1px solid var(--line)}
+  .tag.good{background:var(--warm-bg);color:var(--warm);border-color:var(--warm-line)}
+  .tag.warn{background:var(--alert-bg);color:var(--alert);border-color:var(--alert-line)}
+
+  .note{font-size:13px;color:var(--muted);line-height:1.55}
+  /* Themed, not a literal amber: this banner has to be legible in both themes, because it is
+     the sentence that stops a throttled run being read as an unthrottled one. */
+  .sweepnote{margin:0 0 14px;padding:10px 12px;border-radius:8px;background:var(--alert-bg);
+       color:var(--alert);border:1px solid var(--alert-line)}
+  .empty{color:var(--faint);font-size:13.5px;line-height:1.55;margin:0}
+  pre{font-family:var(--mono);font-size:12px;line-height:1.6;white-space:pre-wrap;background:var(--cold-bg);
+      color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:14px;margin:0;overflow:auto}
+  /* Neutral, not amber: editing the form is a legitimate thing to do, and colouring it like a
+     fault trains people to ignore the colour that does mean a fault. */
+  /* The verdict. The single most important thing on the page after a run, because it is the
+     only element that can say the demo did not do what it promised. */
+  .verdict{border-radius:10px;padding:14px 16px;margin-bottom:16px;border:1px solid var(--line);
+           background:var(--cold-bg)}
+  .verdict.pass{background:var(--warm-bg);border-color:var(--warm-line)}
+  .verdict.fail{background:var(--alert-bg);border-color:var(--alert-line)}
+  .verdict .head{font-weight:600;font-size:14.5px;margin-bottom:5px}
+  .verdict.pass .head{color:var(--warm)}
+  .verdict.fail .head{color:var(--alert)}
+  .verdict .why{font-size:13px;line-height:1.6;color:var(--ink)}
+  .verdict ul{margin:8px 0 0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--muted)}
+  /* Which run produced what is on screen. Without it the results panel is unlabelled: a
+     three-column ablation under a heading that says "two real runs" is actively misleading. */
+  .runbar button[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--warm);border-color:var(--warm)}
+  .runbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:16px;padding-top:16px;
+          border-top:1px solid var(--line)}
+  .path{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 14px}
+  .path .sep{color:var(--faint);font-size:12px}
+
+  /* Live runs: one lane per run, filled from the stream while the planner works. Steps that ran
+     are solid, the one running pulses, and what the planner still intends is dashed, so a change
+     of plan (an escalation) is visible before it executes. */
+  .lanes{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+  .lane{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--raised);min-width:0}
+  .lane.warm{border-color:var(--warm-line)}
+  .lane h3{margin:0 0 10px;font-size:13.5px;font-weight:600;display:flex;justify-content:space-between;
+           gap:8px;align-items:baseline}
+  .lane h3 .clock{font:500 12px var(--mono);color:var(--faint)}
+  .lane .path{margin-bottom:10px}
+  .tag.running{background:var(--alert-bg);color:var(--alert);border-color:var(--alert-line);
+               animation:pulse 1.2s ease-in-out infinite}
+  .tag.planned{background:transparent;border-style:dashed;color:var(--faint)}
+  @keyframes pulse{50%{opacity:.55}}
+  .lane ol{list-style:none;margin:0;padding:0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+  .lane li{display:flex;gap:8px;padding:3px 0;border-top:1px solid var(--line)}
+  .lane li:first-child{border-top:0}
+  .lane li .t{font:500 11.5px var(--mono);color:var(--faint);flex:none;width:44px}
+  .lane li.key{color:var(--ink)}
+
+  /* Deployment state is what staleness is checked against, so it is data, not a control. */
+  .world{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted);margin-top:4px}
+  .world span b{font-family:var(--mono);color:var(--ink);font-weight:500}
+  /* The one version the buttons move and the seeded history is checked against. */
+  .world span.pinned{color:var(--warm)}
+  .world span.pinned b{color:var(--warm);font-weight:600}
+
+  /* Icons, not words: three labelled buttons cost more horizontal room than the control
+     deserves in a bar that has to survive a 400px window, and the glyphs are unambiguous.
+     The accessible name stays on each button, so this is a visual compression, not a loss. */
+  .themer{display:flex;gap:2px;border:1px solid var(--line);border-radius:9px;padding:3px;flex:none;
+          background:var(--surface)}
+  .themer button{display:grid;place-items:center;width:30px;height:28px;padding:0;color:var(--muted);
+          border-radius:6px;transition:background .12s,color .12s}
+  .themer button:hover{color:var(--ink);background:var(--cold-bg)}
+  .themer button svg{width:15px;height:15px;display:block;stroke:currentColor;fill:none;
+          stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .themer button[aria-pressed="true"]{background:var(--raised);color:var(--ink);
+          box-shadow:inset 0 0 0 1px var(--line-strong)}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;
+          scroll-behavior:auto!important}}
+  @media(max-width:1180px){.scns{grid-template-columns:1fr 1fr}}
+  @media(max-width:980px){.grid{grid-template-columns:1fr}
+          .ledger{grid-template-columns:1fr}
+          .mid{border:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:14px}
+          header{flex-direction:column}}
+  @media(max-width:760px){.scns{grid-template-columns:1fr}
+          .ownform{grid-template-columns:1fr}
+          .wrap{padding:0 16px 56px}
+          .evidence{grid-template-columns:1fr}
+          .mark .sub2{display:none}
+          .row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="mark">
+      <span class="dot" aria-hidden="true"></span>
+      Incident context engine
+      <span class="sub2">&middot; Meko &times; Embabel</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+    <div class="themer" role="group" aria-label="Colour theme">
+      <button id="th-auto" aria-pressed="true" onclick="setTheme('auto')"
+              title="Match the system theme" aria-label="Theme: match system">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/>
+          <path d="M8 21h8M12 17v4"/></svg>
+      </button>
+      <button id="th-light" aria-pressed="false" onclick="setTheme('light')"
+              title="Light — for a bright room or a projector" aria-label="Theme: light">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/>
+          <path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"/></svg>
+      </button>
+      <button id="th-dark" aria-pressed="false" onclick="setTheme('dark')"
+              title="Dark — for a laptop at 2am" aria-label="Theme: dark">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.2A8.2 8.2 0 1 1 9.8 4a6.6 6.6 0 0 0 10.2 10.2Z"/></svg>
+      </button>
+    </div>
+    </div>
+  </div>
+
+  <header>
+    <div>
+      <h1>What was the model given?</h1>
+      <p class="lede">The same incident, the same planner, the same telemetry. The only variable is what context
+        the agent could assemble &mdash; what it learned from past incidents, and what people wrote in runbooks.
+        Better material makes a better answer, and it turns out to need <em>less</em> of it, not more.</p>
+    </div>
+  </header>
+
+  <div class="card stage">
+    <div style="display:flex;align-items:baseline;gap:10px 18px;flex-wrap:wrap">
+      <h2 title="A scenario sets these for you. Reach for them to improvise, or to build a state the three scenarios do not cover.">Stage the world</h2>
+      <span class="flabel" style="margin:0">Deployed now</span>
+      <div class="world" id="world"><span class="note">Loading&hellip;</span></div>
+    </div>
+    <div class="btnrow">
+      <button class="quiet" onclick="seed()">Seed history</button>
+      <button class="quiet" id="btn-ship" onclick="advance()">Ship the pinned service</button>
+      <button class="quiet" id="btn-rollback" onclick="resetDeploy()">Roll back the pinned service</button>
+      <button class="quiet" onclick="prune()">Remove duplicates</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="step">1</span>Choose the scenario</h2>
+    <p class="note" style="margin-bottom:14px">Each one sets up the corpus, the deployment state and the incident
+      together, then says what should happen <em>before</em> you run it. The last two are the ones that earn trust:
+      any cache can show a hit. Or bring your own incident.</p>
+    <div id="scenarios" class="scns"><p class="empty">Loading&hellip;</p></div>
+    <div id="status" class="status">Pick a scenario to begin.</div>
+  </div>
+
+  <div>
+    <main>
+      <div id="armed" class="card" style="display:none"></div>
+
+      <div id="custom" class="card" style="display:none">
+        <h2><span class="step">2</span>Your own incident</h2>
+        <p class="note">Nothing is predicted here. The reuse gate scores whatever you give it, and the answer is
+          whatever the answer is — which is the point of being able to ask.</p>
+        <div class="ownform">
+          <div>
+            <label for="id">Incident ID</label>
+            <div style="display:flex;gap:6px">
+              <input id="id" value="" onchange="serviceNote()" style="flex:1">
+              <button type="button" class="quiet" onclick="freshIncidentId()"
+                title="A new incident: the run writes back under its own ID, and earlier incidents become history it can match">New ID</button>
+            </div>
+          </div>
+          <div>
+            <label for="service">Service</label>
+            <select id="service"></select>
+          </div>
+          <div>
+            <label for="severity">Severity</label>
+            <select id="severity">
+              <option value="SEV1">SEV1, widest budget</option>
+              <option value="SEV2" selected>SEV2, moderate budget</option>
+              <option value="SEV3">SEV3, tightest budget</option>
+            </select>
+          </div>
+          <p class="note full" id="servicenote" style="margin:0"></p>
+          <div class="full">
+            <label for="symptom">What's happening</label>
+            <!-- Filled from the selected service's fixture family on load; see symptomForService. -->
+            <textarea id="symptom" oninput="SYMPTOM_EDITED = true"></textarea>
+          </div>
+        </div>
+        <div class="runbar">
+          <button class="primary" id="run-compare" aria-pressed="false"
+            onclick="compare()">Run both and compare</button>
+          <button class="secondary" id="run-ablate" aria-pressed="false"
+            onclick="ablate()">Ablate the context</button>
+          <button class="secondary" onclick="runOne(false)">Without memory</button>
+          <button class="secondary" onclick="runOne(true)">With memory</button>
+        </div>
+      </div>
+
+      <div id="results" style="display:none">
+      <div class="card" id="liveCard" hidden>
+        <h2>The runs, as they happen</h2>
+        <p class="note">Streamed from the planner itself: each step as it starts and finishes, what
+          memory returned, what the gate decided, and every model call with its token count.
+          Dashed steps are what the planner still intends to do.</p>
+        <div id="live" class="lanes"></div>
+      </div>
+      <div class="card">
+        <p id="sweepnote" class="note sweepnote" hidden></p>
+        <h2 id="answersTitle">The answer, with context and without</h2>
+        <p class="note" id="answersNote">Two real runs of the same incident. This is the comparison the
+          demo is actually about; the bill below is the evidence that it cost less to get here, not
+          the point.</p>
+        <div id="answers"><p class="empty">Run the comparison.</p></div>
+      </div>
+
+      <div class="card">
+        <h2>Token and cost ledger</h2>
+        <div id="ledger"><p class="empty">Run the comparison to fill this in.</p></div>
+        <p id="provenance" class="note" style="margin-top:14px"></p>
+      </div>
+
+      <!-- Everything below is supporting evidence: tabbed by default, or all at once. -->
+      <div class="evbar">
+        <div class="evtabs" id="evtabs" role="tablist" aria-label="Evidence"></div>
+        <button class="quiet" id="evall" aria-pressed="false" onclick="setEvidenceAll()">Show all</button>
+      </div>
+      <div class="evidence tabbed" id="evidence">
+
+      <div class="card" role="tabpanel" data-tab="Prompt">
+        <h2>What the model was given</h2>
+        <p class="note">The prompt broken down by where each part came from. Assembling this per incident
+          is the work: live telemetry, what the system learned from past incidents, and what the team
+          wrote down &mdash; runbooks plus the policy that was promoted from one agent's memory into
+          shared knowledge.</p>
+        <div id="context"><p class="empty">Nothing assembled yet.</p></div>
+      </div>
+
+      <div class="card" role="tabpanel" data-tab="Memory">
+        <h2>What memory returned</h2>
+        <p class="note">The records the agent actually recalled, with Meko's score and the agent that
+          wrote each one. A count alone asks you to take the retrieval on faith.</p>
+        <div id="recall"><p class="empty">Nothing recalled yet.</p></div>
+      </div>
+
+      <div class="card wide" role="tabpanel" data-tab="Run trace">
+        <h2>How each run reached its answer</h2>
+        <div id="detail"><p class="empty">Nothing yet.</p></div>
+      </div>
+
+      <div class="card" role="tabpanel" data-tab="Runbook">
+        <h2>What the runbook said</h2>
+        <p class="note">Chunks retrieved from documents uploaded to the datapack's knowledge base.
+          Separate from memory: these are curated and human-written, and they are what the model reads
+          alongside the telemetry.</p>
+        <div id="runbook"><p class="empty">Nothing retrieved yet.</p></div>
+      </div>
+
+      <div class="card" role="tabpanel" data-tab="Written back">
+        <h2>Written back to Meko</h2>
+        <p class="note">Every finishing run writes an incident record and a routing outcome, including runs that
+          answered from memory. Records are keyed on incident id, so a re-run corrects its row rather than
+          leaving the corpus two differently-worded copies of the same incident.</p>
+        <pre id="learning">Nothing written yet.</pre>
+      </div>
+
+      </div><!-- /.evidence -->
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* Auto follows the machine. The explicit choices exist because a projector in a bright room
+   and a laptop at 2am want opposite things, and the presenter knows which they are in. */
+function setTheme(mode) {
+  if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', mode);
+  ['auto', 'light', 'dark'].forEach(m =>
+    $('th-' + m).setAttribute('aria-pressed', String(m === mode)));
+  try { localStorage.setItem('sre-theme', mode); } catch (e) { /* private window */ }
+}
+(function restoreTheme() {
+  let saved = 'auto';
+  try { saved = localStorage.getItem('sre-theme') || 'auto'; } catch (e) { /* ignore */ }
+  document.addEventListener('DOMContentLoaded', () => setTheme(saved));
+})();
+
+/* Deployment state is what staleness is checked against, so show it as data rather than
+   leaving it to be inferred from which button was pressed last. */
+/**
+ * Say so when the full sweep has been cut.
+ *
+ * A reduced sweep still reports measured numbers, so the arithmetic stays true — what stops
+ * being true is the IMPRESSION, if a 270-line sweep is presented as the 1,200-line one. The
+ * banner is attached to the results rather than the staging panel because that is where the
+ * saving is read, and a caveat nobody scrolls back to is not a caveat.
+ */
+async function loadSweep() {
+  try {
+    const sweep = await (await fetch('/api/v1/sweep')).json();
+    if (!sweep.reduced) return;
+    $('sweepnote').textContent = sweep.disclosure;
+    $('sweepnote').hidden = false;
+  } catch (e) { /* the demo still runs; it just cannot disclose what it could not read */ }
+}
+
+/**
+ * What the seeded history is pinned to, read from the server (GET /api/v1/pin), never restated
+ * here. Null until loaded; everything that uses it degrades to neutral wording without it.
+ */
+let PIN = null;
+
+function pinTip() {
+  if (!PIN) return '';
+  return `The seeded history (${PIN.incidentId}) is pinned to ${PIN.service} ${PIN.version}`
+    + (PIN.current ? ', which is deployed now. ' : `, but ${PIN.deployedNow} is deployed now, so it is stale. `)
+    + 'Shipping past it makes that history stale, so the reuse gate refuses it; rolling back makes it '
+    + 'reusable again.';
+}
+
+async function loadWorld() {
+  try {
+    const [state, pin] = await Promise.all([
+      fetch('/api/v1/state').then(r => r.json()),
+      fetch('/api/v1/pin').then(r => r.ok ? r.json() : null).catch(() => null)
+    ]);
+    PIN = pin;
+    const pinned = PIN && PIN.service;
+    if (pinned) {
+      $('btn-ship').textContent = `Ship ${pinned}`;
+      $('btn-rollback').textContent = `Roll back ${pinned}`;
+      $('btn-ship').title = $('btn-rollback').title = pinTip();
+    }
+    // The pinned service first and marked: it is the only one the seeded history depends on,
+    // so the only one whose change alters a result.
+    $('world').innerHTML = Object.entries(state)
+      .sort(([a], [b]) => (b === pinned) - (a === pinned))
+      .map(([svc, v]) => svc === pinned
+        ? `<span class="pinned" title="${esc(pinTip())}">${esc(svc)} <b>${esc(v)}</b></span>`
+        : `<span>${esc(svc)} <b>${esc(v)}</b></span>`).join('');
+  } catch (e) { $('world').innerHTML = '<span class="note">Deployment state unavailable.</span>'; }
+}
+window.addEventListener('DOMContentLoaded', () => {
+  Promise.all([loadScenarios(), loadServices(), loadWorld(), loadSweep()]);
+});
+const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const n = v => Number(v || 0).toLocaleString();
+const usd = v => '$' + Number(v || 0).toFixed(5);
+
+/**
+ * The incident this page will actually run. ONE source of truth, deliberately.
+ *
+ * Splitting scenario mode from custom mode left the armed panel displaying the scenario's
+ * incident while payload() still read the hidden custom form — which held the previous
+ * defaults. Arming "Memory has nothing" showed a search incident and ran the checkout one,
+ * which then short-circuited at 0.89 against checkout history and looked like the reuse gate
+ * forcing a fit. Two hours of the wrong bug.
+ *
+ * Displayed and executed now come from the same call, so they cannot drift again.
+ */
+function currentIncident() {
+  if (ARMED) {
+    const sc = ARMED.scenario;
+    return {
+      incidentId: sc.incidentId,
+      service: sc.service,
+      symptom: sc.symptom,
+      severity: sc.severity,
+      // Carried with the run so the server checks the same claims the panel displayed.
+      contextClaims: sc.contextClaims || []
+    };
+  }
+  return {
+    incidentId: $('id').value,
+    service: $('service').value,
+    symptom: $('symptom').value,
+    severity: $('severity').value
+  };
+}
+
+function payload() {
+  return currentIncident();
+}
+function setStatus(text, kind = '') { $('status').textContent = text; $('status').className = 'status ' + kind; }
+
+/** What a run read, from its own report — the same rule for both sides of the ledger. */
+function telemetryRead(r) {
+  if (r.reuseMode === 'SHORT_CIRCUIT') return 'answered from memory without reading telemetry into a model.';
+  if (r.logLinesSkipped) {
+    const scope = (r.scopedTo || []).length ? ` outside ${r.scopedTo.join(', ')}` : '';
+    return `with ${n(r.logLinesSkipped)} log lines${scope} never read.`;
+  }
+  return 'reading every log line across every service.';
+}
+
+function ledger(cold, warm, delta) {
+  // Signed, from the two runs' own totals. delta.reductionPercent is floored at zero, which
+  // printed "0.0% fewer tokens" on a run where memory found nothing and cost MORE.
+  const coldTokens = cold.inputTokens + cold.outputTokens;
+  const warmTokens = warm.inputTokens + warm.outputTokens;
+  const change = coldTokens ? ((coldTokens - warmTokens) * 100 / coldTokens) : 0;
+  const pct = Math.abs(change);
+  const direction = change >= 0 ? 'fewer tokens' : 'more tokens';
+  return `
+    <div class="ledger">
+      <div class="side cold">
+        <div class="who">Without memory</div>
+        <div class="big">${n(cold.inputTokens + cold.outputTokens)}<small>tokens across ${cold.llmCalls} model call(s)</small></div>
+        <div class="sub">${usd(cold.actualUsd)} on the ${esc(String(cold.selectedModelTier).toLowerCase())} tier,
+          ${esc(telemetryRead(cold))}</div>
+      </div>
+      <div class="mid"><div>
+        <div class="pct">${pct.toFixed(1)}%</div>
+        <div class="pctlab">${direction}</div>
+      </div></div>
+      <div class="side warm">
+        <div class="who">With memory</div>
+        <div class="big">${n(warm.inputTokens + warm.outputTokens)}<small>tokens across ${warm.llmCalls} model call(s)</small></div>
+        <div class="sub">${usd(warm.actualUsd)} on the ${esc(String(warm.selectedModelTier).toLowerCase())} tier,
+          ${esc(telemetryRead(warm))}</div>
+      </div>
+    </div>
+    ${warm.reuseMode === 'FULL' ? `<p class="note" style="margin:12px 0 0">Memory found nothing worth
+      reusing and said so, so the warm run did the same investigation plus the cost of asking. That is
+      the correct outcome here, and it is what stops the other scenarios being a coincidence &mdash; a
+      system that always finds a match is not matching, it is guessing.</p>` : ''}
+    <table>
+      <tr><th>Measure</th><th class="num">Without memory</th><th class="num">With memory</th></tr>
+      <tr><td>Input tokens</td><td class="num">${n(cold.inputTokens)}</td><td class="num">${n(warm.inputTokens)}</td></tr>
+      <tr><td>Output tokens</td><td class="num">${n(cold.outputTokens)}</td><td class="num">${n(warm.outputTokens)}</td></tr>
+      <tr><td>Model calls</td><td class="num">${cold.llmCalls}</td><td class="num">${warm.llmCalls}</td></tr>
+      <tr><td>Model cost</td><td class="num">${usd(cold.actualUsd)}</td><td class="num">${usd(warm.actualUsd)}</td></tr>
+      <tr><td>Meko retrieval<small style="display:block;color:var(--faint)">what memory itself cost</small></td>
+        <td class="num">${usd(cold.mekoRetrievalUsd)}<small style="display:block;color:var(--faint)">${cold.mekoRetrievalCalls} call(s)</small></td>
+        <td class="num">${usd(warm.mekoRetrievalUsd)}<small style="display:block;color:var(--faint)">${warm.mekoRetrievalCalls} call(s)</small></td></tr>
+      <tr><td><strong>Total cost</strong></td><td class="num"><strong>${usd(cold.totalUsd)}</strong></td><td class="num"><strong>${usd(warm.totalUsd)}</strong></td></tr>
+      <tr><td>Budget ceiling</td><td class="num">${usd(cold.budgetCeilingUsd)}</td><td class="num">${usd(warm.budgetCeilingUsd)}</td></tr>
+      ${delta ? `<tr><td>At ${n(delta.projectedIncidentsPerMonth)} incidents a month
+        <small style="display:block;color:var(--faint)">straight-line from this one incident, not a forecast</small></td>
+        <td class="num">&mdash;</td><td class="num">${'$' + Number(delta.projectedAnnualSavingUsd).toFixed(0)} a year</td></tr>` : ''}
+    </table>`;
+}
+
+function detail(r, isWarm) {
+  const reuse = {
+    SHORT_CIRCUIT: ['good', 'Answered from memory, no model call \u2014 suggestion, not auto-applied'],
+    SCOPED: ['good', 'History narrowed the telemetry'],
+    FULL: ['', 'Full investigation']
+  }[r.reuseMode] || ['', r.reuseMode];
+
+  return `
+  <div class="run">
+    <div style="margin-bottom:10px">
+      <span class="tag ${isWarm ? 'good' : ''}">${isWarm ? 'With memory' : 'Without memory'}</span>
+      <span class="tag ${reuse[0]}">${esc(reuse[1])}</span>
+      ${r.outcome === 'HANDED_OFF'
+        ? '<span class="tag warn">Handed to a human &mdash; no remediation stored</span>' : ''}
+      ${r.staleMatchRejected ? '<span class="tag warn">Stale match rejected</span>' : ''}
+      ${r.escalated ? '<span class="tag warn">Escalated</span>' : ''}
+      ${r.remediationValidated ? '' : '<span class="tag warn">Failed validation</span>'}
+    </div>
+    <div class="path">${path(r)}</div>
+    <table>
+      <tr><td>Root cause</td><td>${esc(r.rootCause)}</td></tr>
+      <tr><td>Recommended action</td><td>${esc(r.recommendedAction)}</td></tr>
+      <tr><td>Confidence</td><td>${Math.round((r.confidence || 0) * 100)}%</td></tr>
+      <tr><td>Plan</td><td>${esc(r.summary)}</td></tr>
+      ${r.scopedTo && r.scopedTo.length ? `<tr><td>Telemetry read</td><td>${r.scopedTo.map(esc).join(', ')}</td></tr>` : ''}
+      ${r.staleMatchRejected ? `<tr><td>Why reuse was refused</td><td>${esc(r.stalenessReason)}</td></tr>` : ''}
+      ${r.selfMatchesIgnored ? `<tr><td>Own write-up ignored</td><td>
+        <span class="tag">${r.selfMatchesIgnored} record(s)</span>
+        This run found its own earlier write-up of <strong>${esc(r.incidentId)}</strong> and skipped it.
+        A run matching itself scores near 1.00 and is an echo, not history.
+        <div class="note" style="margin-top:5px">To see reuse, run under a NEW incident id &mdash; that is
+        what a real recurrence would carry.</div></td></tr>` : ''}
+      ${r.failedAssumptions && r.failedAssumptions.length ? `<tr><td>Assumptions that failed</td><td>${r.failedAssumptions.map(esc).join('<br>')}</td></tr>` : ''}
+      ${r.matchedIncidentId ? `<tr><td>Why this matched</td><td>
+        <div style="font-size:12px;color:var(--faint);margin-bottom:4px">Incident being investigated</div>
+        <div style="margin-bottom:6px">&ldquo;${esc(currentIncident().symptom)}&rdquo;</div>
+        <div style="font-size:12px;color:var(--faint);margin-bottom:4px">Matched ${esc(r.matchedIncidentId)}, written by ${esc(r.matchedWrittenBy)}</div>
+        <div style="margin-bottom:8px">&ldquo;${esc(r.matchedSignature)}&rdquo;</div>
+        <div style="display:flex;gap:22px">
+          <div><strong class="fig">${Number(r.matchScore || 0).toFixed(2)}</strong>
+            <small style="display:block;color:var(--faint)">this demo's gate<br>token overlap, 0&ndash;1</small></div>
+          <div><strong class="fig">${r.rawScore >= 0 ? Number(r.rawScore).toFixed(2) : '&mdash;'}</strong>
+            <small style="display:block;color:var(--faint)">${r.rawScore >= 0
+              ? 'Meko vector similarity<br>before the blend'
+              : 'not ranked<br>listed, not searched'}</small></div>
+          <div><strong class="fig" style="color:var(--muted)">${r.semanticScore >= 0
+              ? Number(r.semanticScore).toFixed(2) : '&mdash;'}</strong>
+            <small style="display:block;color:var(--faint)">Meko blended score<br>what ranking used</small></div>
+        </div>
+        ${r.rawScore >= 0 && r.semanticScore >= 0 && r.rawScore !== r.semanticScore ? `
+          <p class="note" style="margin:8px 0 0">Meko's blend cut this record's score from
+            <strong>${Number(r.rawScore).toFixed(2)}</strong> to
+            <strong>${Number(r.semanticScore).toFixed(2)}</strong>, roughly
+            ${Math.round((r.semanticScore / r.rawScore) * 100)}% of its vector similarity. Measured
+            across this corpus the blend leaves short rows untouched and halves long structured
+            ones, which puts the records the gate needs at the BOTTOM of a window they top on raw
+            similarity. Worth knowing: the reuse decision here survives it only because the gate
+            scans every candidate rather than trusting rank order.</p>` : ''}
+        <p class="note" style="margin:8px 0 0">Three measurements, not a comparison. The left is
+          the deterministic overlap this demo's gate acts on. The middle is pure vector similarity.
+          The right is what Meko actually ranked by &mdash; hybrid, blending semantic, keyword and
+          entity signals.</p>
+        </td></tr>` : `<tr><td>Match score</td><td>${Number(r.matchScore || 0).toFixed(2)} (no stored match)</td></tr>`}
+      <tr><td>Models used</td><td>${(r.modelsUsed || []).map(esc).join(' &rarr; ')}</td></tr>
+      <tr><td>Routing rationale</td><td>${esc(r.routingRationale)}</td></tr>
+      <tr><td>Routing policy came from</td><td>${esc(r.routingPolicySource || 'not resolved')}
+        ${r.routingObservations ? `<div style="color:var(--muted);margin-top:3px">backed by ${r.routingObservations} stored outcome(s)</div>` : ''}
+        ${r.routingPolicyShared ? '<div style="margin-top:5px"><span class="tag good">graduated to shared knowledge this run</span></div>' : ''}</td></tr>
+      <tr><td>Written back</td><td>${r.learningPersisted
+        ? 'Incident record and routing outcome saved to Meko'
+        : '<span class="tag warn">Not persisted</span> — this run taught the corpus nothing'}</td></tr>
+    </table>
+  </div>`;
+}
+
+/**
+ * The path the run took, with the step where memory changed the outcome marked.
+ *
+ * Drawn from report.actionsTaken: the actions the planner actually executed, in order, as
+ * Embabel reported them. It used to be reconstructed from the reuse mode and the models used,
+ * which shows what should have happened rather than what did — an escalation, a retry or a
+ * hand-off appeared only if the reconstruction anticipated it.
+ *
+ * Only ONE step is highlighted, and deliberately. Every step in the strip ran, so colouring
+ * them all green would make the colour decorative; the useful question is not "did it run" but
+ * "where did memory actually change the plan". On a short circuit that is answering without a
+ * model; on a scoped run it is the narrowed sweep. A full investigation highlights nothing,
+ * because nothing was saved, and that is worth seeing at a glance too.
+ */
+function path(r) {
+  const taken = r.actionsTaken || [];
+  if (!taken.length) {
+    return '<span class="note">This server did not report the actions its planner ran.</span>';
+  }
+  const why = {
+    reuseStoredRemediation: 'Memory answered it. No model call at all.',
+    collectScopedEvidence: r.logLinesSkipped
+      ? `History named the services that mattered, so ${n(r.logLinesSkipped)} log lines were never read.`
+      : 'History named the services that mattered, so the sweep was narrowed.'
+  };
+  const saving = taken.find(a => why[a]);
+
+  return taken.map(a => {
+    const marked = a === saving;
+    return `<span class="tag${marked ? ' good' : ''}"${marked ? ` title="${esc(why[a])}"` : ''}>`
+      + `${esc(STEP_LABELS[a] || a)}</span>`;
+  }).join('<span class="sep">&rsaquo;</span>')
+    + (saving
+        ? `<span class="note" style="flex-basis:100%;margin-top:6px">Highlighted: where memory changed
+             the plan. ${esc(why[saving])}</span>`
+        : `<span class="note" style="flex-basis:100%;margin-top:6px">Nothing highlighted: memory changed
+             nothing about this plan.</span>`);
+}
+
+/**
+ * Derived from the record COMPONENTS, not from ContextClaim.Result's helper methods.
+ *
+ * Result is a Java record: Jackson serialises claim, inWarm and inCold, but verdict() and
+ * distinctive() are extra methods and never reach the browser. Reading c.verdict gave undefined,
+ * which rendered as an empty pill — and c.distinctive gave undefined, which is falsy, so a claim
+ * that genuinely passed was shown amber and blank. Exactly the bug already found and tested for
+ * in the console, made a second time.
+ */
+/** Mark which run produced what is displayed, and retitle the panel to match. */
+function markRun(which, title, note) {
+  ['compare', 'ablate'].forEach(k => {
+    const el = $('run-' + k);
+    if (el) el.setAttribute('aria-pressed', String(k === which));
+  });
+  if (title) $('answersTitle').textContent = title;
+  if (note) $('answersNote').textContent = note;
+}
+
+function claimVerdict(c) {
+  if (c.inWarm && !c.inCold) return { good: true, text: 'only with context' };
+  if (c.inWarm) return { good: false, text: 'both runs — not distinctive' };
+  if (c.inCold) return { good: false, text: 'only without context' };
+  return { good: false, text: 'neither run' };
+}
+
+/**
+ * The two answers, side by side, with the claims that were checked against them.
+ *
+ * A claim passes only when the fact is present WITH context and absent WITHOUT it. An absolute
+ * "the warm answer mentions 4.7.0" proves nothing — a model can produce a version number unaided
+ * — so a claim the cold run also satisfies reports as not distinctive rather than passing.
+ */
+/**
+ * How to read the claims table, by where its claims came from.
+ *
+ * Declared claims were written with the scenario, before the run. Derived ones were built after
+ * it from the stored record the run with context matched — and when that run was served from
+ * memory, its answer IS the record and passes every row by construction. Saying so is the
+ * difference between evidence and a tautology.
+ */
+function claimFraming(basis) {
+  const kind = basis && basis.kind;
+  if (kind === 'derived') {
+    return {
+      header: `What memory knew: the recorded fix for ${esc(basis.fromIncident)}`,
+      note: `No claims were written for this incident, so these were derived after the run from the
+        stored record the run with context matched. Each step of its remediation counts as present
+        when an answer takes the same action and shares most of its key words, so the same fix in
+        different words counts as the same fix.`
+        + (basis.servedFromMemory
+          ? ` <strong>The answer with context is that record</strong> &mdash; it was served from memory
+             &mdash; so its column passes by construction. Read these rows as what the run without
+             memory did and did not produce.`
+          : '')
+    };
+  }
+  return {
+    header: 'What context should have supplied',
+    note: `A claim counts only when the fact appears <strong>with</strong> context and not without it.
+      One that shows up in both is reported as not distinctive rather than passed &mdash; the model
+      could have produced it unaided.`
+  };
+}
+
+/**
+ * An answer the agent did NOT accept, said on the answer itself. A hand-off report still carries
+ * the last attempt's root cause and action — showing them unmarked presents a rejected answer
+ * as the agent's conclusion, which is the opposite of what happened.
+ */
+function outcomeNote(r) {
+  if (!r || r.outcome !== 'HANDED_OFF') return '';
+  const why = (r.failedAssumptions || []).length
+    ? ` It failed validation: ${esc(r.failedAssumptions.join(' '))}`
+    : '';
+  return `<div class="note" style="margin-top:8px"><span class="tag warn">not accepted &middot; handed to a human</span>
+      This is the last attempt, shown for the record. Confidence stayed below the bar
+      (${Math.round((r.confidence || 0) * 100)}%), so the agent stopped and handed the incident to an
+      engineer instead of finalising it, and stored no remediation.${why}</div>`;
+}
+
+/** Said on the answer itself, so a partial recall is visible on custom runs too. */
+function recallWarning(r) {
+  const lost = (r && r.recallFailures) || [];
+  return lost.length
+    ? `<div class="note" style="margin-top:8px"><span class="tag warn">partial recall</span>
+        ${lost.length} Meko read(s) failed, so this answer was made without some of what memory
+        holds: ${esc(lost.join('; '))}</div>`
+    : '';
+}
+
+function answers(cold, warm, claims, basis) {
+  const framing = claimFraming(basis);
+  const claimRows = (claims || []).map(c => {
+    const v = claimVerdict(c);
+    return `<tr>
+      <td>${esc(c.claim.label)}
+        <div class="note" style="margin-top:3px">from ${esc(c.claim.source)}</div></td>
+      <td style="width:190px"><span class="tag ${v.good ? 'good' : 'warn'}">${esc(v.text)}</span></td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="split" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px">
+      <div>
+        <div class="who" style="font-size:12.5px;font-weight:500;color:var(--muted);margin-bottom:8px">
+          Without context</div>
+        <div style="font-size:13.5px;line-height:1.6">${esc(cold.rootCause)}</div>
+        <div style="font-size:13.5px;line-height:1.6;margin-top:8px;color:var(--muted)">
+          ${esc(cold.recommendedAction)}</div>
+        ${outcomeNote(cold)}
+      </div>
+      <div>
+        <div class="who" style="font-size:12.5px;font-weight:500;color:var(--warm);margin-bottom:8px">
+          With context</div>
+        <div style="font-size:13.5px;line-height:1.6">${esc(warm.rootCause)}</div>
+        <div style="font-size:13.5px;line-height:1.6;margin-top:8px;color:var(--muted)">
+          ${esc(warm.recommendedAction)}</div>
+        ${outcomeNote(warm)}
+        ${recallWarning(warm)}
+      </div>
+    </div>
+    ${claimRows ? `<table style="margin-top:16px">
+      <tr><th>${framing.header}</th><th>Checked against both answers</th></tr>
+      ${claimRows}</table>
+      <p class="note" style="margin-top:8px">${framing.note}</p>`
+      : '<p class="note" style="margin-top:14px">Nothing to check: no claims were written for this '
+        + 'incident, and the run with context matched no stored record to derive them from.</p>'}`;
+}
+
+/** Where every part of the prompt came from, and what it cost to include. */
+function contextPanel(cold, warm) {
+  const rows = warm.contextSources || [];
+  if (!rows.length) return '<p class="empty">No breakdown available.</p>';
+  const total = rows.reduce((a, r) => a + r.tokens, 0) || 1;
+
+  return `<table>
+    <tr><th>Source</th><th>Origin</th><th class="num">Items</th><th class="num">Tokens</th>
+        <th style="width:140px">Share of prompt</th></tr>
+    ${rows.map(r => `<tr>
+      <td>${esc(r.name)}</td>
+      <td class="note">${esc(r.origin)}</td>
+      <td class="num">${n(r.items)}</td>
+      <td class="num">${n(r.tokens)}</td>
+      <td><div style="background:var(--line);border-radius:3px;height:7px;overflow:hidden">
+        <div style="width:${Math.max(1, Math.round((r.tokens / total) * 100))}%;height:100%;
+             background:${r.origin === 'live systems' ? 'var(--cold)' : 'var(--warm)'}"></div>
+      </div></td>
+    </tr>`).join('')}
+    <tr><td colspan="3"><strong>Prompt with context</strong></td>
+        <td class="num"><strong>${n(warm.promptTokens)}</strong></td><td></td></tr>
+    <tr><td colspan="3" class="note">Prompt without context</td>
+        <td class="num note">${n(cold.promptTokens)}</td><td></td></tr>
+  </table>
+  <p class="note" style="margin-top:8px">The memory and knowledge lines are what Meko added. Everything
+    the plan then skipped &mdash; ${n(warm.logLinesSkipped)} log lines on this run &mdash; is telemetry it
+    made unnecessary. Better material, and less of it.</p>`;
+}
+
+function recall(r) {
+  const rows = r.recalled || [];
+  if (!rows.length) {
+    return `<p class="empty">No records recalled${r.mode === 'WITHOUT_MEKO'
+      ? ' — this run had memory switched off, which is the point of the comparison.'
+      : '. The datapack may not be seeded, or nothing scored high enough.'}</p>`;
+  }
+  return `<table>
+    <tr><th>Record</th><th>Written by</th><th class="num">Meko score</th></tr>
+    ${rows.map(x => `<tr>
+      <td><span class="fig" style="font-weight:500">${esc(x.incidentId)}</span>
+        <div class="note" style="margin-top:3px">${esc(x.signature)}</div></td>
+      <td>${esc(x.writtenBy)}${x.writtenBy && x.writtenBy !== 'unknown'
+            && x.writtenBy.indexOf('bot') > -1
+            ? ' <span class="tag good">another agent</span>' : ''}</td>
+      <td class="num">${x.semanticScore >= 0 ? Number(x.semanticScore).toFixed(3) : '&mdash;'}</td>
+    </tr>`).join('')}
+  </table>`;
+}
+
+/**
+ * Mark the run against the scenario's declared expectation.
+ *
+ * FAILS CLOSED, and always shows its working. The first version compared each declared field
+ * and passed when it found no mismatches — which meant that if the fields arrived undefined,
+ * every comparison was skipped and it reported success having checked nothing. It cheerfully
+ * green-lit a run that made a model call under a claim of zero model calls.
+ *
+ * So: count the checks actually performed, refuse to pass on zero, and print expected beside
+ * observed either way. A verdict nobody can audit is worth less than no verdict.
+ */
+/**
+ * Whether an action names this version as where to roll back to. Sentence by sentence: a
+ * sentence that both rolls back and names the version, unless it names it as the boundary
+ * ("roll back to the release before 4.7.0"), which is the correct target, not the stale one.
+ */
+function rollsBackTo(action, version) {
+  if (!action || !version) return false;
+  const v = version.replace(/\./g, '\\.');
+  const names = new RegExp(`\\bv?${v}\\b`, 'i');
+  const boundary = new RegExp(`\\b(before|prior to|older than|earlier than|predat\\w*)\\s+(the\\s+)?v?${v}\\b`, 'i');
+  const rollback = /\b(roll(ed|ing)?[\s-]*back|rollback|revert\w*|downgrade\w*)\b/i;
+  return action.split(/(?<=[.;!?])\s+/)
+    .some(s => rollback.test(s) && names.test(s) && !boundary.test(s));
+}
+
+/**
+ * Why the reuse mode differed from the prediction. Retrieval and scoring have completely
+ * different fixes, and the ledger cannot tell them apart, so this names which link broke —
+ * and reusing MORE than expected is the more serious failure: the gate found a fit where the
+ * scenario says none exists.
+ */
+function reuseModeDiagnosis(warm, sc, rows, recalled) {
+  const order = { FULL: 0, SCOPED: 1, SHORT_CIRCUIT: 2 };
+  if (sc.expectedReuseMode && order[warm.reuseMode] > order[sc.expectedReuseMode]) {
+    return `The gate reused MORE than the scenario allows: expected ${sc.expectedReuseMode}, got `
+      + `${warm.reuseMode} at ${Number(warm.matchScore || 0).toFixed(2)} keyword overlap. `
+      + 'Check what it matched against in "What memory returned" below — a run matching its own '
+      + 'earlier write-up of the same incident scores near 1.00 and is an echo, not history.';
+  }
+  if (rows === 0) {
+    return 'Memory returned nothing at all. That is retrieval: check the datapack is resolved and '
+      + 'seeded, and look for a Meko warning in the server log. Newly written rows can also '
+      + 'take a moment to become searchable.';
+  }
+  if (recalled === 0) {
+    return `Memory returned ${rows} row(s), but none were incident records — the window went to `
+      + 'other record types. Routing outcomes grow by one per run forever, so they can crowd '
+      + 'out a small incident corpus. Widen the incident search or narrow it to the record type.';
+  }
+  return `Memory returned ${recalled} incident record(s), so retrieval worked and the gate scored `
+    + 'them below the bar. That is a threshold question, not a memory one: compare the '
+    + 'scores below against token.reuse in application.yml.';
+}
+
+function verdict(warm, sc, cold) {
+  if (!sc) return '';
+
+  const checks = [];
+  // Each check carries a key, so a failure is explained by WHICH check failed — the message
+  // for a wrong reuse mode is wrong advice for a borrowed rollback target.
+  const add = (key, label, expected, actual, ok) =>
+    checks.push({ key, label, expected, actual, ok });
+
+  // Cheap, and it catches an entire class of bug: the panel showing one incident while the
+  // run executed another. IncidentReport.incidentId is what the agent actually received.
+  add('incident', 'Incident that ran', sc.incidentId, warm.incidentId || 'unknown',
+      warm.incidentId === sc.incidentId);
+
+  if (sc.expectedReuseMode != null)
+    add('mode', 'Reuse mode', sc.expectedReuseMode, warm.reuseMode ?? 'unknown',
+        warm.reuseMode === sc.expectedReuseMode);
+  // The prediction names a record, so check the record — not just the mode. Mode alone passes a
+  // run that short-circuited on some other record while the text above names this one.
+  // undefined means an older server that does not send the field: no check rather than a false one.
+  // A FULL run used no match, even though the report carries its best below-threshold candidate.
+  if (sc.expectedMatchId !== undefined) {
+    const matched = warm.reuseMode === 'FULL' ? null : (warm.matchedIncidentId || null);
+    add('match', 'Matched record', sc.expectedMatchId || 'none', matched || 'none',
+        matched === (sc.expectedMatchId || null));
+  }
+  if (sc.expectedWarmModelCalls != null)
+    add('calls', 'Model calls with memory', String(sc.expectedWarmModelCalls), String(warm.llmCalls ?? '?'),
+        warm.llmCalls === sc.expectedWarmModelCalls);
+  if (sc.expectStaleRejection)
+    add('stale', 'Stored fix rejected as stale', 'yes', warm.staleMatchRejected ? 'yes' : 'no',
+        !!warm.staleMatchRejected);
+  // A failed read comes back empty, which looks exactly like memory having nothing. Every other
+  // row assumes recall was complete, so an incomplete one fails the verdict rather than hiding.
+  const lost = (warm.recallFailures || []).length;
+  add('recall', 'Memory reads completed', 'all', lost ? `${lost} failed` : 'all', !lost);
+  // The gate refusing the stored fix is not the end of it: the model still reads the stale record
+  // and can borrow its version as the rollback target, which reintroduces the bug.
+  // Caught and refused is a pass: the agent's own validation rejected the stale target and it
+  // handed off rather than finalise. The failure is a stale target that was ACCEPTED.
+  if (sc.staleVersion) {
+    const borrowed = rollsBackTo(warm.recommendedAction, sc.staleVersion);
+    const refused = borrowed && warm.outcome === 'HANDED_OFF';
+    add('rollback', `Rollback target is not the stale ${sc.staleVersion}`, `avoids ${sc.staleVersion}`,
+        !borrowed ? `avoids ${sc.staleVersion}`
+          : refused ? 'caught by validation, handed off'
+          : `rolls back to ${sc.staleVersion}`,
+        !borrowed || refused);
+  }
+
+  const recalled = (warm.recalled || []).length;
+  const rows = warm.memoryRowsReturned || 0;
+  const evidence = `<ul>
+      <li>Rows returned by memory: <b>${rows}</b>, of which incident records: <b>${recalled}</b></li>
+      <li>Best keyword overlap: <b>${Number(warm.matchScore || 0).toFixed(2)}</b>,
+          Meko score <b>${warm.semanticScore >= 0
+            ? Number(warm.semanticScore).toFixed(2) : 'not ranked'}</b></li>
+      <li>Telemetry: <b>${warm.logLinesSkipped
+            ? n(warm.logLinesSkipped) + ' log lines skipped'
+            : 'every log line read'}</b></li>
+    </ul>`;
+
+  const table = checks.length ? `<table style="margin-top:10px">
+      <tr><th>Claim</th><th>Expected</th><th>Observed</th></tr>
+      ${checks.map(c => `<tr><td>${esc(c.label)}</td><td>${esc(c.expected)}</td>
+        <td><span class="tag ${c.ok ? 'good' : 'warn'}">${esc(c.actual)}</span></td></tr>`).join('')}
+    </table>` : '';
+
+  if (!checks.length) {
+    return `<div class="verdict fail">
+      <div class="head">Could not check this run</div>
+      <div class="why">The scenario arrived without any machine-checkable expectation, so nothing was
+        verified. Reload the page to pick up the current scenario definitions; if it persists, the
+        arm response is missing expectedReuseMode.</div>${evidence}</div>`;
+  }
+
+  const failed = checks.filter(c => !c.ok);
+  if (!failed.length) {
+    return `<div class="verdict pass">
+      <div class="head">Did what it said it would</div>
+      <div class="why">${esc(sc.expectation)}</div>${table}</div>`;
+  }
+
+  const explain = {
+    incident: c => `The run executed ${c.actual}, but the panel shows ${c.expected}. The page and the `
+      + 'request have drifted apart; reload and re-arm before reading anything else.',
+    mode: () => reuseModeDiagnosis(warm, sc, rows, recalled),
+    match: c => `The gate matched ${c.actual} where the prediction names ${c.expected}. Memory holds a `
+      + 'record this scenario did not plan for — check "What memory returned" below for where it came from.',
+    calls: c => `Expected ${c.expected} model call(s) with memory and saw ${c.actual}. If the reuse mode `
+      + 'passed, the extra calls are escalations: see the path and the ledger.',
+    stale: () => 'The stored fix was not rejected as stale although the deployment it assumes has moved '
+      + 'on. That is the staleness check failing, and the failure that causes a second outage.',
+    recall: () => `${lost} Meko read(s) failed during the run with memory (`
+      + (warm.recallFailures || []).join('; ')
+      + '). Recall was partial, so what this run did is not evidence of what memory holds — re-run '
+      + 'before reading the other rows. The server log names the tool and how long it took.',
+    rollback: () => {
+      // Where the version came from is checked, not asserted: if the run without memory never
+      // mentions it, memory is the only place this run could have got it.
+      const v = sc.staleVersion;
+      const coldText = cold ? `${cold.rootCause} ${cold.recommendedAction}` : '';
+      const source = !cold ? ''
+        : coldText.includes(v)
+          ? ` The run without memory mentions ${v} too, so it is not only memory's doing.`
+          : ` The run without memory never mentions ${v}, so memory is where this run got it.`;
+      return `The gate did its job — it refused the stale fix — but the answer still rolls back to `
+        + `${v}, the version the stale record assumed.${source} Refusing to reuse an answer does not `
+        + 'stop the model reading it.';
+    }
+  };
+  const diagnosis = failed.map(c => explain[c.key] ? explain[c.key](c) : `${c.label}: expected `
+    + `${c.expected}, observed ${c.actual}.`).join(' ');
+
+  return `<div class="verdict fail">
+    <div class="head">Did not do what it said it would</div>
+    <div class="why">${esc(diagnosis)}</div>${table}${evidence}</div>`;
+}
+
+function runbook(r) {
+  const chunks = r.runbookChunks || [];
+  if (!chunks.length) {
+    return '<p class="empty">No knowledge-base documents matched this incident. Upload runbooks to the '
+      + 'datapack to give the model curated operational context alongside the telemetry.</p>';
+  }
+  // Meko chunks carry their own "Section: Doc > Heading" line, which is the useful label.
+  return chunks.map(c => {
+    const lines = String(c).split('\n').filter(l => l.trim());
+    const head = lines[0] && lines[0].startsWith('Section:') ? lines.shift() : '';
+    return `<div style="padding:11px 0;border-top:1px solid var(--line)">
+      ${head ? `<div class="note" style="margin-bottom:5px">${esc(head.replace(/^Section:\s*/, ''))}</div>` : ''}
+      <div style="font-size:13.5px;line-height:1.6">${esc(lines.join(' '))}</div>
+    </div>`;
+  }).join('');
+}
+
+function provenance(reports) {
+  const measured = reports.every(r => r.costMeasured);
+  $('provenance').innerHTML = (measured
+    ? 'Model token counts come from provider usage metadata.'
+    : 'Model token counts are estimated locally from prompt and response length. Wire provider usage metadata into '
+      + 'TokenAccounting.record to make them measured — the code has a single seam for it.')
+    + ' Meko retrieval cost is always estimated. Both runs above are real: same planner, same telemetry, '
+    + 'memory the only difference — no counterfactual is used in this comparison.';
+}
+
+let SCENARIOS = [];
+let SERVICES = [];
+let ARMED = null;
+/** Once the symptom holds something deliberate, the service dropdown stops rewriting it. */
+let SYMPTOM_EDITED = false;
+
+async function loadServices() {
+  try {
+    SERVICES = await (await fetch('/api/v1/services')).json();
+    const sel = $('service');
+    sel.innerHTML = SERVICES.map(s =>
+      // No "(has history)" suffix: it came from the seed's constant list and went stale as soon as
+      // a run wrote back. The note under the field reads memory for the selected service instead.
+      `<option value="${esc(s.name)}">${esc(s.name)}</option>`).join('');
+    sel.onchange = serviceChanged;
+    symptomForService();
+    serviceNote();
+  } catch (e) { /* the form still works as a free choice if this fails */ }
+}
+
+function serviceChanged() {
+  symptomForService();
+  serviceNote();
+}
+
+/**
+ * Keep the symptom and the service talking about the same incident.
+ *
+ * The symptom used to be a hardcoded checkout string that the dropdown never touched, so
+ * picking `recommendations` submitted search-family evidence with a checkout symptom. The
+ * model blended them, which reads as the agent failing when it is the form contradicting
+ * itself. Retrieval keys off this text, so it is not cosmetic.
+ *
+ * Anything typed is left alone — a default may be replaced, an answer may not.
+ */
+function symptomForService() {
+  if (SYMPTOM_EDITED) return;
+  const chosen = SERVICES.find(s => s.name === $('service').value);
+  if (chosen && chosen.defaultSymptom) $('symptom').value = chosen.defaultSymptom;
+}
+
+/** Say up front whether the corpus knows this service. A full sweep on an unknown service is
+ *  memory correctly declining, not memory failing — but only if you knew that going in. */
+/**
+ * What memory holds for the chosen service, read from Meko (GET /api/v1/history).
+ *
+ * It used to come from a constant list of the services the seed writes, and said "No seeded
+ * history for search" after search incidents had been written back. The gate considers whatever
+ * is in memory, seeded or written by a run, so that is what this reports. It reports what is
+ * there to be scored, not what the gate will decide.
+ */
+let NOTE_SEQ = 0;
+async function serviceNote() {
+  const service = $('service').value;
+  const id = $('id').value.trim();
+  if (!service) { $('servicenote').textContent = ''; return; }
+  const seq = ++NOTE_SEQ;   // a slower earlier answer must not overwrite a newer one
+  $('servicenote').innerHTML = `Checking what memory holds for <b>${esc(service)}</b>&hellip;`;
+  let h;
+  try {
+    h = await (await fetch(`/api/v1/history?service=${encodeURIComponent(service)}`
+      + `&incidentId=${encodeURIComponent(id)}`)).json();
+  } catch (e) { h = null; }
+  if (seq !== NOTE_SEQ) return;
+
+  const svc = `<b>${esc(service)}</b>`;
+  if (!h || !h.readable) {
+    $('servicenote').innerHTML = `Could not read memory for ${svc}`
+      + (h && h.failure ? ` (${esc(h.failure)})` : '') + ', so nothing can be said about reuse.';
+    return;
+  }
+  const others = h.records.filter(r => !r.self);
+  const own = h.records.filter(r => r.self);
+  const describe = r => `${esc(r.incidentId)} <span class="note">(${r.seeded ? 'seeded' : 'written by ' + esc(r.writtenBy)})</span>`;
+  const echo = own.length
+    ? ` Memory also holds this incident's own earlier write-up (${own.map(r => esc(r.incidentId)).join(', ')}), `
+      + 'which the gate ignores as an echo — use a new incident ID to run it as a recurrence.'
+    : '';
+  $('servicenote').innerHTML = others.length
+    ? `Memory holds ${others.length} incident record(s) for ${svc}: ${others.map(describe).join(', ')}. `
+      + `The reuse gate will score ${others.length === 1 ? 'it' : 'them'} against this incident.${echo}`
+    : `Memory holds no other incident records for ${svc} — expect a full investigation even with memory on.${echo}`;
+}
+
+const OWN_TILE = `
+      <button class="scn own" id="scn-own" aria-pressed="false" onclick="custom()">
+        <span class="t">Your own incident</span>
+        <span class="p">No prediction, no setup. You pick the incident and find out what the gate does
+          with it.</span>
+      </button>`;
+
+async function loadScenarios() {
+  try {
+    SCENARIOS = await (await fetch('/api/v1/scenarios')).json();
+    $('scenarios').innerHTML = SCENARIOS.map((sc, i) => `
+      <button class="scn" id="scn-${esc(sc.id)}" aria-pressed="false" onclick="arm('${esc(sc.id)}')">
+        <span class="t">${esc(sc.title)}</span>
+        <span class="p">${esc(sc.premise)}</span>
+      </button>`).join('') + OWN_TILE;
+  } catch (e) {
+    $('scenarios').innerHTML = `<p class="empty">Could not load scenarios: ${esc(e.message)}</p>` + OWN_TILE;
+  }
+}
+
+function markSelected(id) {
+  SCENARIOS.forEach(sc => {
+    const el = $('scn-' + sc.id);
+    if (el) el.setAttribute('aria-pressed', String(sc.id === id));
+  });
+  const own = $('scn-own');
+  if (own) own.setAttribute('aria-pressed', String(id === 'own'));
+}
+
+async function arm(id) {
+  setStatus('Arming: seeding the corpus and setting deployment state.', 'busy');
+  try {
+    const x = await post(`/api/v1/scenarios/${id}/arm`);
+    ARMED = x;
+    const sc = x.scenario;
+    markSelected(id);
+
+    // Scenario mode. The incident is part of the scenario's definition, like the deployment
+    // state, so it is shown as data. Editing it here used to be possible, which quietly
+    // invalidated the prediction directly above it — hence the separate custom mode.
+    $('custom').style.display = 'none';
+    $('armed').style.display = '';
+    const inc = currentIncident();   // the same call the run will make
+    $('armed').innerHTML = `
+      <h2><span class="step">2</span>${esc(sc.title)}</h2>
+      <p class="note" style="margin:0 0 14px">${esc(sc.premise)}</p>
+      <table>
+        <tr><td style="width:30%">Incident</td><td><span class="fig">${esc(inc.incidentId)}</span>
+          on ${esc(inc.service)}, ${esc(inc.severity)}
+          <div class="note" style="margin-top:4px">&ldquo;${esc(inc.symptom)}&rdquo;</div></td></tr>
+        ${PIN ? `<tr><td>Deployed</td><td>${esc(PIN.service)}
+          <span class="fig">${esc(x.deploymentState[PIN.service])}</span>
+          <div class="note" style="margin-top:4px">the seeded history assumes ${esc(PIN.version)}</div></td></tr>` : ''}
+        <tr><td>Prediction<div class="note" style="margin-top:4px">checked against the run
+          when it finishes</div></td><td>${esc(sc.expectation)}</td></tr>
+        <tr><td>What would mean it's broken</td><td><span class="tag warn">watch for this</span>
+          ${esc(sc.failureTell)}</td></tr>
+        ${x.notes ? `<tr><td>Setup</td><td>${esc(x.notes)}</td></tr>` : ''}
+      </table>
+      <div class="runbar">
+        <button class="primary" id="run-compare" aria-pressed="false"
+          onclick="compare()">Run both and compare</button>
+        <button class="secondary" id="run-ablate" aria-pressed="false"
+          onclick="ablate()">Ablate the context</button>
+        <button class="quiet" onclick="custom(true)">Change the incident</button>
+        <span class="note">Compare runs it twice, context off then on. Ablate runs it three times,
+          removing one source at a time.</span>
+      </div>`;
+
+    hideResults();
+    await loadWorld();
+    $('armed').scrollIntoView({
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start'
+    });
+
+    // Report what the seed actually did. Saying "seeded" on every arm, when the corpus was
+    // already in place and nothing was written, trains people to stop reading the status line.
+    setStatus('Armed. ' + (x.notes || ''), x.promotedToKnowledgeBase ? 'ok' : 'busy');
+  } catch (e) { setStatus(e.message); }
+}
+
+/**
+ * Custom mode: you choose the incident and nothing is predicted.
+ *
+ * @param fromScenario prefill from the armed scenario, so "change the incident" starts from
+ *        what was on screen rather than from an empty form.
+ */
+/**
+ * A fresh incident ID for the custom form.
+ *
+ * The form used to default to INC-DEMO-4821 (now INC-4821) — the "remembered" scenario's own ID — and "Change
+ * the incident" copied the armed scenario's ID in. Write-back upserts on incident ID, so a custom
+ * run under either overwrote that scenario's record with a different incident (a search run left
+ * such a record with no checkout in it). A new ID per custom incident keeps them apart,
+ * and makes a re-asked scenario incident a recurrence that can match it, not an echo of it.
+ */
+function newIncidentId() {
+  // Five digits, so it can never collide with the four-digit scenario and seeded IDs.
+  return 'INC-' + (10000 + Math.floor(Math.random() * 90000));
+}
+
+function freshIncidentId() {
+  $('id').value = newIncidentId();
+  serviceNote();
+}
+
+function custom(fromScenario) {
+  $('id').value = newIncidentId();
+  if (fromScenario && ARMED) {
+    const sc = ARMED.scenario;
+    $('service').value = sc.service;
+    $('symptom').value = sc.symptom;
+    $('severity').value = sc.severity;
+    // The scenario's symptom is a deliberate value, not a default, so the dropdown must not
+    // overwrite it if the service is changed next.
+    SYMPTOM_EDITED = true;
+  }
+  ARMED = null;
+  markSelected('own');
+  symptomForService();
+  serviceNote();
+  $('armed').style.display = 'none';
+  $('custom').style.display = '';
+  hideResults();
+  $('custom').scrollIntoView({
+    behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    block: 'start'
+  });
+  setStatus('Nothing is staged for this one. Use Stage the world above if you need a particular '
+    + 'deployment state.');
+}
+
+function hideResults() {
+  $('results').style.display = 'none';
+  live.stop();
+  $('liveCard').hidden = true;
+  $('live').innerHTML = '';
+  $('ledger').innerHTML = '<p class="empty">Run the comparison to fill this in.</p>';
+  $('detail').innerHTML = '<p class="empty">Nothing yet.</p>';
+  $('answers').innerHTML = '<p class="empty">Run the comparison.</p>';
+  $('context').innerHTML = '<p class="empty">Nothing assembled yet.</p>';
+  $('recall').innerHTML = '<p class="empty">Nothing recalled yet.</p>';
+  $('runbook').innerHTML = '<p class="empty">Nothing retrieved yet.</p>';
+  $('learning').textContent = 'Nothing written yet.';
+}
+
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+/**
+ * POST and read Server-Sent Events back, handing each frame to onFrame. Resolves with the
+ * 'result' frame — the same body the JSON endpoint returns — so the renderers do not care which
+ * one produced it. fetch() rather than EventSource because EventSource cannot send a body.
+ */
+async function streamPost(url, body, onFrame) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok || !res.body) throw new Error(await res.text());
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+    let cut;
+    while ((cut = buffer.indexOf('\n\n')) >= 0) {
+      const block = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      let event = 'message';
+      const data = [];
+      block.split('\n').forEach(line => {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data.push(line.slice(5).replace(/^ /, ''));
+      });
+      if (!data.length) continue;
+      const payload = JSON.parse(data.join('\n'));
+      if (event === 'result') return payload;
+      if (event === 'error') throw new Error(payload.message || 'The run failed.');
+      onFrame(event, payload);
+    }
+  }
+  throw new Error('The stream ended before the run finished.');
+}
+
+/** What each action is called on the page. Unknown actions fall through under their own name. */
+const STEP_LABELS = {
+  retrieveMekoContext: 'recall memory',
+  evaluateReuse: 'reuse gate',
+  collectScopedEvidence: 'scoped telemetry',
+  collectFullEvidence: 'full telemetry sweep',
+  reuseStoredRemediation: 'answer from memory',
+  diagnoseWithSlm: 'diagnose · slm',
+  diagnoseWithLlm: 'diagnose · llm',
+  diagnoseWithFrontier: 'diagnose · frontier',
+  escalateWithLlm: 'escalate → llm',
+  escalateWithFrontier: 'escalate → frontier',
+  finalizeIncident: 'finalize + write back',
+  handOffToHuman: 'hand off to a human'
+};
+
+const LANE_TITLES = {
+  cold: 'Without memory', warm: 'With memory',
+  none: 'Telemetry only', memory: '+ learned memory', everything: '+ curated knowledge'
+};
+
+/**
+ * One lane per run. The state is kept per lane and the lane is redrawn whole on each frame:
+ * frames arrive a few times a second at most, and a redraw is simpler to trust than patches.
+ */
+const live = {
+  lanes: {},
+  timer: null,
+
+  start(runs) {
+    this.stop();
+    this.lanes = {};
+    $('liveCard').hidden = false;
+    $('live').innerHTML = runs.map(r =>
+      `<div class="lane${r === 'warm' || r === 'everything' ? ' warm' : ''}" id="lane-${r}"></div>`).join('');
+    runs.forEach(r => {
+      this.lanes[r] = { started: null, finished: null, ran: [], plan: [], lines: [] };
+      this.draw(r);
+    });
+    this.timer = setInterval(() => Object.keys(this.lanes).forEach(r => this.drawClock(r)), 250);
+  },
+
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  },
+
+  frame(event, f) {
+    const lane = this.lanes[f.run];
+    if (!lane) return;
+    const now = performance.now();
+    if (lane.started === null) lane.started = now;
+    const line = (text, key) => lane.lines.push({ t: (now - lane.started) / 1000, text, key });
+
+    switch (event) {
+      case 'plan':
+        lane.plan = (f.steps || []).slice();
+        break;
+      case 'step': {
+        if (f.state === 'running') {
+          if (lane.plan[0] === f.action) lane.plan.shift();
+          lane.ran.push({ action: f.action, state: 'running' });
+        } else {
+          const s = [...lane.ran].reverse().find(x => x.action === f.action && x.state === 'running');
+          if (s) { s.state = f.state; s.ms = f.ms; }
+          if (lane.plan[0] === f.action) lane.plan.shift();
+          if (f.action === 'finalizeIncident' || f.action === 'handOffToHuman') lane.finished = now;
+        }
+        break;
+      }
+      case 'context':
+        if ((f.recallFailures || []).length)
+          line(`Partial recall: ${f.recallFailures.length} Meko read(s) failed — `
+            + f.recallFailures.join('; '), true);
+        line(f.enabled
+          ? `Recalled ${n(f.priorIncidents)} prior incident(s) from ${n(f.memoryRows)} memory rows and `
+            + `${n(f.runbookChunks)} runbook chunk(s). Routing prefers ${String(f.preferredTier).toLowerCase()}; `
+            + `budget $${Number(f.budgetUsd).toFixed(2)}.`
+          : `Memory off. Routing on the configured default (${String(f.preferredTier).toLowerCase()}).`);
+        break;
+      case 'reuse':
+        line(`Gate: ${f.mode} at ${Number(f.matchScore).toFixed(2)}`
+          + (f.matchId ? ` against ${f.matchId}` : '')
+          + (f.stale ? ` — rejected as stale. ${f.stalenessReason}` : '.'), true);
+        break;
+      case 'evidence':
+        line(`Read ${n(f.logLines)} log lines`
+          + (f.logLinesSkipped ? `, skipped ${n(f.logLinesSkipped)}` : '')
+          + ((f.scopedTo || []).length ? ` — scoped to ${f.scopedTo.join(', ')}.` : '.'), f.logLinesSkipped > 0);
+        break;
+      case 'llm':
+        line(`${f.model}: ${f.inputTokens == null ? '?' : n(f.inputTokens)} in / `
+          + `${f.outputTokens == null ? '?' : n(f.outputTokens)} out tokens.`);
+        break;
+      case 'diagnosis':
+        line(f.servedFromMemory
+          ? `Answered from memory at ${Math.round(f.confidence * 100)}% — no model call.`
+          : `${f.escalation ? 'Escalated' : 'Diagnosed'} on ${String(f.tier).toLowerCase()} at `
+            + `${Math.round(f.confidence * 100)}% confidence`
+            + (f.valid ? '.' : ` — failed validation: ${(f.failedAssumptions || []).join('; ')}`), true);
+        break;
+      case 'replan':
+        line(`Replanned: ${f.reason}`);
+        break;
+    }
+    this.draw(f.run);
+  },
+
+  draw(run) {
+    const lane = this.lanes[run];
+    const el = $('lane-' + run);
+    if (!lane || !el) return;
+    const label = a => esc(STEP_LABELS[a] || a);
+    const ran = lane.ran.map(s => {
+      const cls = s.state === 'running' ? ' running' : s.state === 'SUCCEEDED' ? ' good' : ' warn';
+      const title = s.ms != null ? ` title="${s.ms} ms"` : '';
+      return `<span class="tag${cls}"${title}>${label(s.action)}</span>`;
+    });
+    const planned = lane.plan.map(a => `<span class="tag planned">${label(a)}</span>`);
+    const chips = [...ran, ...planned].join('<span class="sep">&rsaquo;</span>');
+    el.innerHTML = `
+      <h3><span>${esc(LANE_TITLES[run] || run)}</span><span class="clock" id="clock-${run}"></span></h3>
+      <div class="path">${chips || '<span class="note">Waiting for the planner…</span>'}</div>
+      <ol>${lane.lines.map(l => `<li class="${l.key ? 'key' : ''}"><span class="t">${l.t.toFixed(1)}s</span>`
+        + `<span>${esc(l.text)}</span></li>`).join('')}</ol>`;
+    this.drawClock(run);
+  },
+
+  drawClock(run) {
+    const lane = this.lanes[run];
+    const el = $('clock-' + run);
+    if (!lane || !el) return;
+    if (lane.started === null) { el.textContent = 'queued'; return; }
+    const end = lane.finished ?? performance.now();
+    el.textContent = ((end - lane.started) / 1000).toFixed(1) + 's' + (lane.finished ? ' · done' : '');
+  }
+};
+
+/**
+ * Stream when the server offers it; fall back to the JSON endpoint only when the streaming one
+ * does not exist (an older build), never after a run has started, which would run it twice.
+ */
+async function runStreamed(url, body, runs) {
+  live.start(runs);
+  try {
+    return await streamPost(url + '/stream', body, (event, f) => live.frame(event, f));
+  } catch (e) {
+    if (/404|Not Found/.test(e.message)) {
+      $('liveCard').hidden = true;
+      return post(url, body);
+    }
+    throw e;
+  } finally {
+    live.stop();
+  }
+}
+
+/**
+ * The same incident three ways: nothing, memory only, memory and knowledge.
+ *
+ * Three real runs rather than a counterfactual. Taking the sources away one at a time and
+ * letting the room read what happens to the answer is the difference between demonstrating that
+ * context matters and asserting it.
+ */
+async function ablate() {
+  $('results').style.display = '';
+  setStatus('Running the same incident three times, removing one context source at a time. '
+    + 'One after another, because each run\'s write-back is the next one\'s memory.', 'busy');
+  try {
+    const x = await runStreamed('/api/v1/ablate', payload(), ['none', 'memory', 'everything']);
+    // No column is pre-declared the winner.
+    //
+    // Not because more context is suspect — the runbook IS context, and framing it as an addition
+    // to "context" was incoherent. Because which COMPOSITION serves an incident is empirical:
+    // memory carries what happened last time, knowledge carries what the team decided about it,
+    // and the balance that helps most differs per incident. The panel's job is to make that
+    // legible, not to answer it in advance.
+    // LABELLED BY WHAT EACH RUN HAS, not by what it lacks.
+    //
+    // "No context" was wrong and contradicted the note directly underneath it: telemetry IS
+    // context. What the first run lacks is the RIGHT context — nothing about what happened last
+    // time or what the team decided about it. Calling that "no context" hands an audience the
+    // idea that the choice is context versus none, when it is raw signal versus relevant signal.
+    const runs = [
+      ['Telemetry only', x.noContext,
+       'the raw signal, and nothing about what it means here'],
+      ['+ learned memory', x.memoryOnly,
+       'prior incidents and routing outcomes — what happened last time'],
+      ['+ curated knowledge', x.memoryAndKnowledge,
+       'runbooks people wrote, and policy promoted to org-wide knowledge']
+    ];
+
+    // Factual, and usually the most striking line on the panel: the run without the right
+    // context is routinely the one that escalates to an expensive tier and still gets it wrong.
+    const base = x.noContext, full = x.memoryAndKnowledge;
+    const baseTotal = base.inputTokens + base.outputTokens;
+    const fullTotal = full.inputTokens + full.outputTokens;
+    const ratio = fullTotal > 0 ? (baseTotal / fullTotal) : 0;
+    const escalated = String(base.selectedModelTier) !== String(full.selectedModelTier);
+
+    markRun('ablate', 'The answer, one context source at a time',
+      'Three real runs of the same incident, removing one source at a time. Claims about curated '
+      + 'knowledge are checked against the memory-only run, so the runbook is the single variable.');
+    $('answers').innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        ${runs.map(([label, r, note], i) => `<div>
+          <div style="font-size:12.5px;font-weight:500;margin-bottom:4px;color:var(--ink)">
+            ${esc(label)}</div>
+          <div class="note" style="margin-bottom:8px">${esc(note)}</div>
+          <div style="font-size:13px;line-height:1.55">${esc(r.rootCause)}</div>
+          <div style="font-size:13px;line-height:1.55;margin-top:7px;color:var(--muted)">
+            ${esc(r.recommendedAction)}</div>
+          <div class="note" style="margin-top:8px">${n(r.inputTokens + r.outputTokens)} tokens
+            &middot; ${usd(r.totalUsd)} &middot; ${esc(String(r.selectedModelTier).toLowerCase())}</div>
+        </div>`).join('')}
+      </div>
+      ${(x.claims || []).length ? `<table style="margin-top:16px">
+        <tr><th>${claimFraming(x.claimBasis).header}</th>
+            <th style="width:210px">Compared against its own baseline</th></tr>
+        ${x.claims.map(c => {
+          const v = claimVerdict(c);
+          return `<tr>
+            <td>${esc(c.claim.label)}<div class="note" style="margin-top:3px">from
+              ${esc(c.claim.source)}</div></td>
+            <td><span class="tag ${v.good ? 'good' : 'warn'}">${esc(v.text)}</span></td>
+          </tr>`;
+        }).join('')}</table>
+        ${x.claimBasis && x.claimBasis.kind === 'derived'
+          ? `<p class="note" style="margin-top:8px">${claimFraming(x.claimBasis).note} Derived claims
+              are about memory, so each is compared against the telemetry-only run.</p>` : ''}` : ''}
+      ${ratio > 1.5 || escalated ? `<div class="verdict" style="margin-top:14px">
+        <div class="why">Telemetry alone cost <strong>${ratio.toFixed(1)}&times;</strong> the tokens
+          ${escalated ? `and escalated to the <strong>${esc(String(base.selectedModelTier).toLowerCase())}</strong>
+            tier, while the runs with the right context stayed on
+            <strong>${esc(String(full.selectedModelTier).toLowerCase())}</strong>` : ''}.
+          Read the root causes before deciding whether it bought anything.</div>
+      </div>` : ''}
+      <p class="note" style="margin-top:10px">All three runs have context &mdash; telemetry is context.
+        What differs is whether it is the <em>right</em> context. Beyond the raw signal, memory carries
+        what happened last time &mdash; the incident, the version, the fix that
+        worked. Knowledge carries what the team decided about it: runbooks people wrote, and the
+        policy that earned its way from one agent's memory into everyone's. Neither subsumes the
+        other, and which one moves the answer more is a property of the incident rather than a rule.
+        Read the three root causes left to right and judge the composition, not the quantity.</p>`;
+
+    $('context').innerHTML = contextPanel(x.noContext, x.memoryAndKnowledge);
+    $('recall').innerHTML = recall(x.memoryAndKnowledge);
+    $('runbook').innerHTML = runbook(x.memoryAndKnowledge);
+    $('ledger').innerHTML = '<p class="empty">Ablation ran three configurations rather than a '
+      + 'two-way comparison. Use "Run both and compare" for the ledger.</p>';
+    $('detail').innerHTML = detail(x.noContext, false) + detail(x.memoryAndKnowledge, true);
+    $('learning').textContent = x.memoryAndKnowledge.learningToRemember || 'Nothing written.';
+    provenance([x.noContext, x.memoryOnly, x.memoryAndKnowledge]);
+    setStatus('Done. Three real runs, same incident, one context source removed at a time.', 'ok');
+  } catch (e) { setStatus(e.message); }
+}
+
+async function compare() {
+  $('results').style.display = '';
+  setStatus('Running the same incident twice, side by side. The cold run reads every log line, so it '
+    + 'finishes last.', 'busy');
+  try {
+    const x = await runStreamed('/api/v1/compare', payload(), ['cold', 'warm']);
+    $('ledger').innerHTML = verdict(x.withMeko, ARMED && ARMED.scenario, x.withoutMeko)
+      + ledger(x.withoutMeko, x.withMeko, x.delta);
+    $('detail').innerHTML = detail(x.withoutMeko, false) + detail(x.withMeko, true);
+    markRun('compare', 'The answer, with context and without',
+      'Two real runs of the same incident. This is the comparison the demo is actually about; '
+      + 'the bill below is the evidence that it cost less to get here, not the point.');
+    $('answers').innerHTML = answers(x.withoutMeko, x.withMeko, x.claims, x.claimBasis);
+    $('context').innerHTML = contextPanel(x.withoutMeko, x.withMeko);
+    $('recall').innerHTML = recall(x.withMeko);
+    $('runbook').innerHTML = runbook(x.withMeko);
+    $('learning').textContent = x.withMeko.learningToRemember || 'Nothing written.';
+    provenance([x.withoutMeko, x.withMeko]);
+    setStatus('Done. Both runs used the same planner and the same telemetry access.', 'ok');
+  } catch (e) { setStatus(e.message); }
+}
+
+async function runOne(useMeko) {
+  $('results').style.display = '';
+  setStatus(`Running ${useMeko ? 'with' : 'without'} memory.`, 'busy');
+  try {
+    const r = await runStreamed('/api/v1/incidents/investigate', { ...payload(), useMeko },
+      [useMeko ? 'warm' : 'cold']);
+    $('detail').innerHTML = detail(r, useMeko);
+    $('recall').innerHTML = recall(r);
+    $('runbook').innerHTML = runbook(r);
+    $('learning').textContent = r.learningToRemember || 'Nothing written.';
+    $('ledger').innerHTML = `<p class="empty">Single run: ${n(r.inputTokens + r.outputTokens)} tokens,
+      ${r.llmCalls} model call(s), ${usd(r.actualUsd)}. Run both to see the comparison.</p>`;
+    provenance([r]);
+    setStatus('Done.', 'ok');
+  } catch (e) { setStatus(e.message); }
+}
+
+async function seed() {
+  setStatus('Writing structured history into the datapack.', 'busy');
+  try {
+    const x = await post('/api/v1/meko/seed');
+    $('learning').textContent =
+      ['-- MEMORY (observations, stay in mem0) --', ...(x.memoryRecords || []),
+       '', x.policyAlreadyShared
+             ? '-- KNOWLEDGE BASE (already shared, nothing rewritten) --'
+             : x.promotedToKnowledgeBase
+               ? '-- KNOWLEDGE BASE (promoted, shared across agents) --'
+               : '-- NOT PROMOTED: these stayed in memory, spend ceiling will fall back to config --',
+       ...(x.knowledgeRecords || [])].join('\n\n');
+    $('results').style.display = '';
+    setStatus(x.message, x.seeded && x.promotedToKnowledgeBase ? 'ok' : '');
+  } catch (e) { setStatus(e.message); }
+}
+
+/** Destructive, so it reports exactly what it removed and what is left. */
+async function prune() {
+  if (!confirm('Delete duplicate records from this datapack? Promoted policy rows are left alone.')) return;
+  setStatus('Removing duplicate records.', 'busy');
+  try {
+    const x = await post('/api/v1/meko/prune');
+    $('results').style.display = '';
+    $('learning').textContent = [x.message, '', '-- REMAINING --', ...(x.remaining || [])].join('\n');
+    setStatus(x.message, x.ran ? 'ok' : '');
+  } catch (e) { setStatus(e.message); }
+}
+
+async function advance() {
+  try {
+    const x = await post('/api/v1/meko/advance-deployment');
+    await loadWorld();
+    // The endpoint already phrases this correctly in both directions; restating the versions
+    // here is how "now 5.0.0, up from 5.0.0" got onto the screen.
+    setStatus(x.effect, x.changed ? 'ok' : '');
+  } catch (e) { setStatus(e.message); }
+}
+
+async function resetDeploy() {
+  try {
+    const x = await post('/api/v1/meko/reset-deployment');
+    await loadWorld();
+    setStatus(x.effect, x.changed ? 'ok' : '');
+  } catch (e) { setStatus(e.message); }
+}
+
+/* Evidence tabs. Built from the panels' data-tab, so adding a card adds a tab. */
+const EV_ORDER = ['Run trace', 'Prompt', 'Memory', 'Runbook', 'Written back'];
+function setEvidenceTab(name) {
+  document.querySelectorAll('#evidence > .card').forEach(c => c.classList.toggle('on', c.dataset.tab === name));
+  document.querySelectorAll('#evtabs button').forEach(b => {
+    const on = b.dataset.tab === name;
+    b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1;
+  });
+  try { localStorage.setItem('sre-evtab', name); } catch (e) { /* ignore */ }
+}
+function setEvidenceAll(all) {
+  const ev = $('evidence');
+  if (all === undefined) all = ev.classList.contains('tabbed');
+  ev.classList.toggle('tabbed', !all);
+  $('evtabs').hidden = all;
+  $('evall').setAttribute('aria-pressed', all);
+  $('evall').textContent = all ? 'Show as tabs' : 'Show all';
+  try { localStorage.setItem('sre-evall', all ? '1' : ''); } catch (e) { /* ignore */ }
+}
+window.addEventListener('DOMContentLoaded', () => {
+  const bar = $('evtabs');
+  bar.innerHTML = EV_ORDER.map(t =>
+    `<button role="tab" data-tab="${t}" aria-selected="false" tabindex="-1">${t}</button>`).join('');
+  bar.addEventListener('click', e => { const b = e.target.closest('button'); if (b) setEvidenceTab(b.dataset.tab); });
+  bar.addEventListener('keydown', e => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const btns = [...bar.querySelectorAll('button')];
+    const i = btns.indexOf(document.activeElement);
+    const next = btns[(i + (e.key === 'ArrowRight' ? 1 : btns.length - 1)) % btns.length];
+    setEvidenceTab(next.dataset.tab); next.focus();
+  });
+  let tab = EV_ORDER[0], all = false;
+  try { tab = localStorage.getItem('sre-evtab') || tab; all = !!localStorage.getItem('sre-evall'); } catch (e) { /* ignore */ }
+  setEvidenceTab(EV_ORDER.includes(tab) ? tab : EV_ORDER[0]);
+  setEvidenceAll(all);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,83 @@
+# ---------------------------------------------------------------------------
+# Profile: groq  (the default — see spring.profiles.active in application.yml)
+#
+# Three tiers on Groq's OpenAI-compatible endpoint, registered by GroqModelsConfig,
+# which is @Profile("groq") so nothing Groq-shaped exists under any other profile.
+#
+# Groq namespaces the open-weight models under their origin, so the ids carry an
+# "openai/" prefix and are NOT OpenAI endpoints. Getting that wrong is a 404 on the
+# first call rather than an error at startup, which is why every id is overridable.
+# ---------------------------------------------------------------------------
+groq:
+  base-url: ${GROQ_BASE_URL:https://api.groq.com/openai/v1}
+  api-key: ${GROQ_API_KEY:}
+  slm-model: ${GROQ_SLM_MODEL:openai/gpt-oss-20b}
+  # The llm and frontier tiers are the SAME model. What separates them is how long it
+  # thinks: reasoning effort is what the agent's escalation step is actually buying.
+  # gpt-oss accepts low, medium and high only — not the "none"/"default" that Groq's
+  # other reasoning models take. GroqProperties rejects those at startup.
+  llm-model: ${GROQ_LLM_MODEL:openai/gpt-oss-120b}
+  frontier-model: ${GROQ_FRONTIER_MODEL:openai/gpt-oss-120b}
+  llm-effort: ${GROQ_LLM_EFFORT:low}
+  frontier-effort: ${GROQ_FRONTIER_EFFORT:high}
+
+embabel:
+  models:
+    # REGISTERED model names, not provider model ids. The groq-* names are Embabel-side
+    # handles invented by GroqModelsConfig: the two 120b tiers are one model at two
+    # reasoning efforts, so they need distinct names to stay distinct services.
+    default-llm: ${AI_LLM_MODEL:groq-gpt-oss-120b-low}
+    llms:
+      slm: ${AI_SLM_MODEL:groq-gpt-oss-20b}
+      llm: ${AI_LLM_MODEL:groq-gpt-oss-120b-low}
+      frontier: ${AI_FRONTIER_MODEL:groq-gpt-oss-120b-high}
+
+token:
+  pricing:
+    # Groq's published gpt-oss rates. VERIFY AGAINST YOUR OWN ACCOUNT before showing
+    # these numbers to anyone — the demo reports dollars, and they are only as honest
+    # as what is configured here.
+    #
+    # READ THIS BEFORE QUOTING THE TIER DELTA. llm and frontier are the same model, so
+    # their per-token rates are identical and the escalation costs only the extra tokens
+    # it produces. gpt-oss bills reasoning tokens as output, but they never appear in the
+    # response text — and this demo ESTIMATES tokens from text whenever the provider
+    # reports no usage (TokenAccounting.record). So a high-effort escalation currently
+    # under-reports here. On this profile the honest delta is slm -> llm, where the model
+    # genuinely changes and the rate halves. The gemini profile has a real three-step
+    # ladder if that is the point you need to make.
+    slm:
+      input-per-million: ${PRICE_SLM_IN:0.075}
+      output-per-million: ${PRICE_SLM_OUT:0.30}
+    llm:
+      input-per-million: ${PRICE_LLM_IN:0.15}
+      output-per-million: ${PRICE_LLM_OUT:0.60}
+    frontier:
+      input-per-million: ${PRICE_FRONTIER_IN:0.15}
+      output-per-million: ${PRICE_FRONTIER_OUT:0.60}
+
+# ---------------------------------------------------------------------------
+# Free-tier rate limit.
+#
+# Groq's free tier allows 8,000 tokens per minute. The honest 60-lines-per-service sweep sends
+# about 32,000 in one request and comes back:
+#
+#   413: Request too large ... service tier `on_demand` on tokens per minute (TPM):
+#        Limit 8000, Requested 31871
+#
+# That lands on the COLD run, which is half the comparison the demo exists to make — so on a
+# free key the demo cannot show its own point. 10 lines per service puts the cold request near
+# 5,300 tokens, leaving room for the warm run and its output inside the same minute.
+#
+# This is a reduction, and the app says so: IncidentDataService warns at startup and the results
+# card carries a banner naming the real default for the whole run. The arithmetic stays true
+# either way, because every figure is measured from the run that actually happened — what a
+# silent reduction would corrupt is the impression, not the numbers.
+#
+# ON A PAID GROQ KEY, SET THIS BACK: SWEEP_LINES_PER_SERVICE=60. The banner then disappears and
+# the saving is the unqualified one. Running `Run both and compare` AND an escalation inside one
+# minute can still brush the ceiling at 10; drop to 8 if you see a 413 again.
+# ---------------------------------------------------------------------------
+incident:
+  sweep:
+    lines-per-service: ${SWEEP_LINES_PER_SERVICE:10}

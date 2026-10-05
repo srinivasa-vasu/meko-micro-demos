@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# Profile: gemini
+#
+#   mvn spring-boot:run -Dspring-boot.run.profiles=gemini
+#   APP_PROFILE=gemini mvn spring-boot:run
+#
+# Needs GEMINI_API_KEY. Nothing else changes: the agent, the reuse gate and the
+# Meko wiring are provider-agnostic, which is the point of keeping the axis here.
+#
+# Unlike the groq profile, these are three genuinely different models rather than
+# two efforts of one — so this profile shows a real three-step cost ladder. If the
+# escalation's price is what you need to demonstrate, present on this one.
+# ---------------------------------------------------------------------------
+embabel:
+  models:
+    # REGISTERED model names. Embabel's google-genai starter registers each model under
+    # its model_id (the `name:` in its bundled yaml is only the Spring bean name), so
+    # these are the dotted ids and not the underscored ones.
+    default-llm: ${AI_LLM_MODEL:gemini-3.5-flash}
+    llms:
+      slm: ${AI_SLM_MODEL:gemini-3.1-flash-lite}
+      llm: ${AI_LLM_MODEL:gemini-3.5-flash}
+      frontier: ${AI_FRONTIER_MODEL:gemini-3.1-pro-preview}
+
+token:
+  pricing:
+    # Google's published rates, from secondary sources rather than a fetch of Google's
+    # own pricing page. TREAT AS UNVERIFIED and set the PRICE_* variables from your
+    # billing console before presenting. Pro pricing in particular steps up above a
+    # 200K-token prompt, which these flat rates do not model.
+    slm:
+      input-per-million: ${PRICE_SLM_IN:0.10}
+      output-per-million: ${PRICE_SLM_OUT:0.40}
+    llm:
+      input-per-million: ${PRICE_LLM_IN:1.50}
+      output-per-million: ${PRICE_LLM_OUT:9.00}
+    frontier:
+      input-per-million: ${PRICE_FRONTIER_IN:2.00}
+      output-per-million: ${PRICE_FRONTIER_OUT:12.00}

@@ -1,0 +1,254 @@
+# Effort estimates for every step the story agents can take. ILLUSTRATIVE ASSUMPTIONS, not measurements: no figure
+# here comes from a study or from production data. Replace them with your organization's numbers (ticket handling
+# times, escalation turnaround, review cycle times) and every story total follows.
+#
+# What is measured is which steps ran: the planner decides that from the context it had, with the same estimates in
+# every lane. Counts (re-asks, repeated steps, evidence requests, missed requirements) are therefore facts of the run;
+# minutes are those facts multiplied by these assumptions.
+#
+#   minutes  human-equivalent minutes for the step. Agents act in seconds; this is what the step costs the
+#            organization when a person does it or waits on it.
+#   time     hands-on: someone on your side is working (priced at goap.cost.hourly-rate-usd).
+#            waiting:  elapsed time waiting on someone else, such as a customer's reply or another team's queue
+#                      (counted in minutes, not priced as labour).
+#   basis    why this number, in one line. Shown on hover in the UI.
+#
+# Override one without editing this file: --goap.effort.estimates.payments-specialist.escalate-for-policy.minutes=10
+# A step that redoes earlier work uses the original step's estimate, so repeating a check costs what doing it cost.
+goap:
+  effort:
+    estimates:
+      support-frontline:
+        converse:
+          minutes: 6
+          time: waiting
+          basis: "The customer's chat with the vendor bot: a few exchanges to state the problem. Same in every lane."
+        escalate:
+          minutes: 1
+          time: hands-on
+          basis: "Creating the ticket and handoff note."
+      payments-specialist:
+        open-case-file:
+          minutes: 2
+          time: hands-on
+          basis: "Reading the ticket and whatever case history is available."
+        ask-transaction:
+          minutes: 4
+          time: waiting
+          basis: "Customer finds and re-sends transaction details (amount, date, merchant)."
+        ask-redo-troubleshooting:
+          minutes: 6
+          time: waiting
+          basis: "Customer repeats troubleshooting steps they already did with the bot."
+        ask-card-status:
+          minutes: 2
+          time: waiting
+          basis: "One question and reply: is the card still in your possession?"
+        verify-settlement:
+          minutes: 5
+          time: hands-on
+          basis: "Look up authorization and capture records in the payments console."
+        retrieve-policy:
+          minutes: 1
+          time: hands-on
+          basis: "Reading the retrieved policy. The lookup itself takes milliseconds."
+        escalate-for-policy:
+          minutes: 25
+          time: waiting
+          basis: "Waiting on payments operations to confirm which policy applies: a short queue on a good day."
+        resolve:
+          minutes: 3
+          time: hands-on
+          basis: "Approve the provisional refund and record the outcome."
+      sre-investigator:
+        correlate-deploy:
+          minutes: 12
+          time: hands-on
+          basis: "Line up the latency graph against the deploy timeline and diff the release."
+        rule-out-database:
+          minutes: 18
+          time: hands-on
+          basis: "Check database CPU, connections and lock waits across the incident window."
+        checkpoint:
+          minutes: 1
+          time: hands-on
+          basis: "Writing findings and the next step down. The write itself takes milliseconds."
+        verify-connection-pool-interrupted:
+          minutes: 0
+          time: hands-on
+          basis: "The agent died as this step started: no effort recorded."
+      sre-takeover:
+        restore-investigation:
+          minutes: 2
+          time: hands-on
+          basis: "Reading the alert and any checkpoint left by the first responder."
+        verify-connection-pool:
+          minutes: 10
+          time: hands-on
+          basis: "Compare pool usage with maxPoolSize and threads waiting for a connection."
+        mitigate:
+          minutes: 6
+          time: hands-on
+          basis: "Restore the pool size and watch latency recover."
+      kyc-review:
+        pull-current-profile:
+          minutes: 4
+          time: hands-on
+          basis: "Open the customer's current profile and ownership structure."
+        retrieve-prior-review:
+          minutes: 1
+          time: hands-on
+          basis: "Reading the previous review. The lookup itself takes milliseconds."
+        diff-against-prior:
+          minutes: 5
+          time: hands-on
+          basis: "Compare address, ownership, beneficiaries and volume with the previous review."
+        targeted-evidence:
+          minutes: 20
+          time: hands-on
+          basis: "Request and check evidence for one material change (source of funds, sanctions screening)."
+        no-evidence-needed:
+          minutes: 1
+          time: hands-on
+          basis: "Record that nothing material changed."
+        full-review-item:
+          minutes: 30
+          time: hands-on
+          basis: "Re-verify one area from scratch (identity, address, ownership, funds, beneficiaries): request and check."
+        sign-off:
+          minutes: 10
+          time: hands-on
+          basis: "Prepare the rationale and route it for human sign-off."
+      catch-up:
+        read-diff:
+          minutes: 5
+          time: hands-on
+          basis: "Read the pull request's changes."
+        recall-project-context:
+          minutes: 2
+          time: hands-on
+          basis: "Reading the recalled decisions and requests. The lookup itself takes milliseconds."
+        reconstruct-manually:
+          minutes: 90
+          time: hands-on
+          basis: "Two weeks of PR threads, chat and wiki, plus pinging two teammates: about an hour and a half of digging."
+        architecture-check:
+          minutes: 15
+          time: hands-on
+          basis: "Check the change against ADR-194."
+        no-architecture-check:
+          minutes: 0
+          time: hands-on
+          basis: "No architecture decision applies: nothing to check."
+        add-idempotency-test:
+          minutes: 25
+          time: hands-on
+          basis: "Write the regression test the reviewer asked for."
+        keep-existing-tests:
+          minutes: 0
+          time: hands-on
+          basis: "No change: the existing tests are kept."
+        request-review:
+          minutes: 5
+          time: hands-on
+          basis: "Push and write the review request."
+        review-bounced:
+          minutes: 40
+          time: hands-on
+          basis: "Another round trip: the reviewer re-reads, the developer adds the missing test, the reviewer reviews again."
+      payment-failure:
+        gather-signals:
+          minutes: 4
+          time: hands-on
+          basis: "Collect the customer report, the transaction and the gateway status."
+        look-up-known-patterns:
+          minutes: 1
+          time: hands-on
+          basis: "Reading the retrieved pattern. The lookup itself takes milliseconds."
+        validate-known-pattern:
+          minutes: 8
+          time: hands-on
+          basis: "Confirm the known pattern holds: compare authorization and capture ids."
+        hypothesis-duplicate-charge:
+          minutes: 20
+          time: hands-on
+          basis: "Test for a duplicate charge: pull both captures and compare ids."
+        hypothesis-delayed-capture:
+          minutes: 25
+          time: hands-on
+          basis: "Test for a delayed capture: query the acquirer's queue."
+        hypothesis-capture-timeout:
+          minutes: 30
+          time: hands-on
+          basis: "Test for a gateway capture timeout: search the gateway logs for the request."
+        resolve:
+          minutes: 6
+          time: hands-on
+          basis: "Apply the fix for the diagnosed cause and tell the customer."
+        close-case:
+          minutes: 1
+          time: hands-on
+          basis: "Close the case record."
+        publish-learning:
+          minutes: 2
+          time: hands-on
+          basis: "Write the root cause up for other teams."
+      compliance-auditor:
+        retrieve-record:
+          minutes: 3
+          time: hands-on
+          basis: "Reading the transaction's conversation and records. The lookup itself takes milliseconds."
+        request-vendor-transcript:
+          minutes: 120
+          time: waiting
+          basis: "Waiting on the vendor's support team to export the chat log: a couple of hours in their queue."
+        request-case-notes:
+          minutes: 30
+          time: waiting
+          basis: "Waiting on the payments specialist team to pull their ticket notes for the transaction."
+        retrieve-policy:
+          minutes: 1
+          time: hands-on
+          basis: "Reading the retrieved policy. The lookup itself takes milliseconds."
+        request-policy:
+          minutes: 25
+          time: waiting
+          basis: "Waiting on payments operations to send the policy text: a short queue on a good day."
+        check-against-policy:
+          minutes: 10
+          time: hands-on
+          basis: "Check each handling rule of the policy against the record."
+        file-finding:
+          minutes: 2
+          time: hands-on
+          basis: "Review the drafted finding and file it."
+      kyc-review-checker:
+        retrieve-record:
+          minutes: 3
+          time: hands-on
+          basis: "Reading the review's conversation and records. The lookup itself takes milliseconds."
+        request-working-papers:
+          minutes: 60
+          time: waiting
+          basis: "Waiting on the analyst desk to assemble the review's working papers."
+        retrieve-standard:
+          minutes: 1
+          time: hands-on
+          basis: "Reading the retrieved standard. The lookup itself takes milliseconds."
+        request-standard:
+          minutes: 20
+          time: waiting
+          basis: "Waiting on the standard's owner to send the current text."
+        check-against-standard:
+          minutes: 15
+          time: hands-on
+          basis: "Check the comparison, the materiality calls and the evidence against each clause of the standard."
+        file-finding:
+          minutes: 2
+          time: hands-on
+          basis: "Review the drafted finding and file it."
+      response-writer:
+        write:
+          minutes: 1
+          time: hands-on
+          basis: "A person reviews the drafted reply or note before it goes out."

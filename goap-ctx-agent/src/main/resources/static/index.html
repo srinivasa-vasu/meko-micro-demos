@@ -1,0 +1,1032 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meko × Embabel Stories</title>
+<style>
+:root{--bg:#091016;--panel:#101a24;--panel2:#0c141c;--ink:#edf3f8;--muted:#8ea0b2;--line:#263443;--accent:#71ddb9;--warn:#f5c66a;--bad:#ff8b8b;--blue:#8fbcff;--accent-bg:#14382c;--warn-bg:#3a2e14;--bad-bg:#3a1c1f;--blue-bg:#16263d}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 10% 0,#173128 0,#0b1219 35%,#091016 75%);color:var(--ink);font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+.wrap{max-width:2400px;margin:auto;padding:0 clamp(12px,1.6vw,32px) 28px}
+/* Sticky app bar: brand, status and the story tabs stay in reach while the lanes scroll. */
+.appbar{position:sticky;top:0;z-index:20;margin:0 calc(-1 * clamp(12px,1.6vw,32px));padding:10px clamp(12px,1.6vw,32px) 0;background:rgba(9,16,22,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+.top{display:flex;justify-content:space-between;gap:12px 20px;align-items:center;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;min-width:0}
+.eyebrow{text-transform:uppercase;letter-spacing:.16em;color:var(--accent);font-size:11px;font-weight:800}
+.title{font-size:20px;font-weight:900;margin:0;white-space:nowrap}
+.subtitle{color:var(--muted);font-size:12.5px}
+.subtitle b{color:var(--accent);font-weight:700}
+.status-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{padding:5px 10px;border-radius:99px;background:#18242f;color:var(--muted);font-size:11px;white-space:nowrap}
+.pill.live{background:var(--accent-bg);color:var(--accent)}.pill.down{background:var(--warn-bg);color:var(--warn)}
+.hero{margin:14px 0;border:1px solid #2a5546;border-radius:14px;padding:12px 16px;background:linear-gradient(120deg,#142821,#101a22)}
+.hero b{color:var(--accent)}
+
+.panel{background:rgba(16,26,36,.96);border:1px solid var(--line);border-radius:14px;padding:14px;min-width:0}
+.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 10px}
+/* Story tabs */
+.story-list{display:flex;gap:4px;margin-top:8px;overflow-x:auto;scrollbar-width:thin}
+.story-card{flex:1 0 auto;min-width:180px;border:0;border-bottom:3px solid transparent;background:transparent;border-radius:8px 8px 0 0;padding:7px 12px 8px;cursor:pointer;text-align:left;color:var(--muted);font:inherit}
+.story-card:hover{background:#121d28;color:var(--ink)}
+.story-card.active{border-bottom-color:var(--accent);background:#132028;color:var(--ink)}
+.story-card .k{font-size:10px;text-transform:uppercase;letter-spacing:.1em}
+.story-card.active .k{color:var(--accent)}
+.story-card .t{font-weight:800;font-size:13.5px;white-space:nowrap}
+/* Story header: the story and its controls on the left, how it works on the right. */
+.story{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:14px 24px;margin-top:14px;align-items:start}
+.story-head h1{font-size:24px;margin:2px 0 4px}
+.problem{color:#c5d1dc;max-width:820px}
+details.about{min-width:0}
+/* Folded (after a run starts): the story shrinks to title, boundary and controls so the results get the screen. */
+.story:has(> details.about:not([open])){grid-template-columns:minmax(0,1fr) auto}
+.story:has(> details.about:not([open])) :is(#problem,#hook){display:none}
+.story:has(> details.about:not([open])) details.about > summary h2{display:none}
+details.about:not([open]) > summary::after{content:"How this story works";font-size:11px;border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+details.about > summary{list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.about > summary::-webkit-details-marker{display:none}
+details.about > summary::after{content:"Show";font-size:10px;color:var(--blue);letter-spacing:.06em}
+details.about[open] > summary::after{content:"Hide"}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;margin-left:4px}
+.seg button{border:0;background:transparent;color:var(--muted);padding:6px 10px;font:inherit;font-size:12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:#1f2e3b;color:var(--ink);font-weight:700}
+.hook{color:var(--muted);font-style:italic;margin-top:4px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.btn{border:1px solid var(--line);background:#1a2632;color:var(--ink);padding:8px 12px;border-radius:9px;cursor:pointer;font:inherit}
+.btn.primary{background:var(--accent);color:#06130f;border-color:var(--accent);font-weight:800}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.active{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px var(--accent);font-weight:700}
+.btn.primary.active{background:var(--accent);color:#06130f;box-shadow:0 0 0 3px var(--accent-bg),0 0 0 4px var(--accent)}
+.btn.active:disabled{opacity:1}
+.btn.active.running{animation:btnpulse 1.2s ease-in-out infinite}
+@keyframes btnpulse{50%{box-shadow:0 0 0 4px var(--accent-bg),0 0 0 5px var(--accent)}}
+@media (prefers-reduced-motion: reduce){.btn.active.running{animation:none}}
+.btn:focus-visible,.story-card:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+.status{color:var(--muted);font-size:12px;margin-top:8px;min-height:18px}
+.explain{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px}
+.cols.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:1300px){.cols.three{grid-template-columns:minmax(0,1fr)}}
+.explain .card h3{margin:0 0 4px;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}
+.tools{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.tool{font:11px ui-monospace,monospace;background:var(--blue-bg);color:var(--blue);padding:2px 7px;border-radius:6px}
+.summary{margin-top:12px;font-size:17px;font-weight:800;line-height:1.4}
+.summary .good{color:var(--accent)}.summary .meh{color:var(--muted);font-weight:600;font-size:13px}
+/* Scoreboard: one tile per headline number, readable from the back of the room. */
+.scoreboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.score{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+.score .sl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.score .sv{display:flex;flex-wrap:wrap;align-items:baseline;column-gap:8px;row-gap:0;font-weight:900;font-size:clamp(22px,1.7vw,36px);font-variant-numeric:tabular-nums;line-height:1.15;margin-top:2px}
+.score .sv > span{white-space:nowrap;min-width:0}
+.score .sv.text{font-size:15px;font-weight:800}
+.score .sv.small{font-size:clamp(15px,1.05vw,22px)}
+.score{min-width:0;overflow:hidden}
+.score .arr{color:var(--muted);font-size:.6em}
+.score .win{color:var(--accent)}.score .lose{color:var(--bad)}
+.score .ss{font-size:11.5px;color:var(--muted);margin-top:2px}
+.punch{margin-top:10px;color:var(--muted);font-size:13px}
+/* Monthly projection: per-case difference × volume. */
+.proj{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+.proj-head{display:flex;gap:10px 16px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.proj-head b{color:var(--ink);font-size:13px}
+.proj-head input{width:92px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:7px;padding:4px 7px;font:inherit;font-variant-numeric:tabular-nums}
+.proj-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;margin-top:8px}
+.proj-grid .p{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.proj-grid .p .v{font-weight:900;font-size:clamp(18px,1.3vw,26px);font-variant-numeric:tabular-nums;white-space:nowrap}
+.proj-grid .p .v.win{color:var(--accent)}.proj-grid .p .v.lose{color:var(--bad)}
+.proj-grid .p .l{font-size:11.5px;color:var(--muted)}
+.punch b{color:var(--ink)}
+/* Lanes share row tracks (subgrid), so each section starts at the same height in every lane. */
+.cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:12px;row-gap:0;margin-top:12px}
+.castbox{margin-top:10px;border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
+.castbox > summary{cursor:pointer;padding:7px 12px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.castbox > summary .hint{font-weight:600;text-transform:none;letter-spacing:0;margin-left:6px}
+.cast{display:flex;align-items:stretch;gap:0;padding:0 10px 10px;overflow-x:auto}
+.cast .member{flex:1 1 0;min-width:190px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:12px;display:flex;flex-direction:column;gap:3px}
+.cast .member.later{border-style:dashed}.cast .member.earlier{opacity:.85;border-style:dashed}
+.cast .member .nm{font-weight:800;font-size:13px;color:var(--ink)}
+.cast .member .id{font:11px ui-monospace,monospace;color:var(--blue)}
+.cast .member .sys,.cast .member .role{color:var(--muted)}
+.cast .when{align-self:flex-start;font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;border-radius:4px;padding:1px 5px;background:#1f2e3b;color:var(--muted)}
+.cast .when.now{background:var(--accent-bg);color:var(--accent)}.cast .when.later{background:#2a2350;color:#c9b6ff}
+.cast .hand{flex:0 0 96px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:10.5px;color:var(--muted);padding:0 6px}
+.cast .hand b{font-size:16px;color:var(--ink);line-height:1}
+.cast .acts{margin-top:4px;border-top:1px dashed var(--line);padding-top:4px;display:flex;flex-direction:column;gap:2px}
+.cast .acts div{font-size:11px;color:#c5d1dc}.cast .acts .ln{font-weight:800;color:var(--muted);margin-right:4px}
+.cast .acts .none{color:var(--muted)}
+@media(max-width:820px){.cast{flex-direction:column}.cast .hand{flex-basis:auto;padding:4px 0}.cast .hand b{transform:rotate(90deg)}}
+.cols > .panel.lane{display:grid;grid-row:span 12;grid-template-rows:subgrid;align-content:start}
+.trail{display:flex;flex-direction:column;gap:6px;max-height:560px;overflow:auto;padding-right:2px}
+.trail table{width:100%;border-collapse:collapse;font-size:12px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.trail table.issue{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}
+.trail table.decision{box-shadow:inset 3px 0 0 #8b7cf0}
+.trail table.issue.decision{box-shadow:inset 3px 0 0 var(--warn)}
+.trail table.finding{border-color:var(--accent)}
+.trail th{width:5.6em;text-align:left;vertical-align:top;color:var(--muted);font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;padding:4px 6px 4px 9px;white-space:nowrap}
+.trail td{padding:4px 8px 4px 0;vertical-align:top;overflow-wrap:anywhere}
+.trail tr + tr th,.trail tr + tr td{border-top:1px solid #1a2633}
+.trail td.mono{font:11.5px ui-monospace,monospace}
+.trail tr.issue td{color:var(--warn);font-weight:700}
+.trail tr.ok td{color:var(--muted)}
+.trail .kind{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;border-radius:4px;padding:1px 5px;background:#1f2e3b;color:var(--muted)}
+.trail .kind.decision{background:#2a2350;color:#c9b6ff}.trail .kind.finding{background:var(--accent-bg);color:var(--accent)}
+.cols > .panel.lane > *{min-width:0}
+/* While lanes stream they grow independently; rows are shared again once every lane has finished. */
+.cols.streaming > .panel.lane{display:block;grid-row:auto}
+body.brief .detail{display:none}
+.cols.one{grid-template-columns:minmax(0,1fr)}
+.col-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.col-head .name{font-weight:900;font-size:16px}
+.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.metric{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:7px 8px}
+.metric .n{font-size:20px;font-weight:900;font-variant-numeric:tabular-nums}
+.metric .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.metric.win .n{color:var(--accent)}.metric.lose .n{color:var(--bad)}
+.section{margin-top:12px}
+.section > .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:5px;display:flex;justify-content:space-between}
+.phase{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;background:var(--panel2)}
+.phase-title{font-weight:700;font-size:12px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.badge{font-size:10px;padding:1px 7px;border-radius:99px;background:#1d2a36;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.badge.ok{background:var(--accent-bg);color:var(--accent)}.badge.bad{background:var(--bad-bg);color:var(--bad)}.badge.warn{background:var(--warn-bg);color:var(--warn)}
+.plan{margin-top:6px;font-size:12px}
+.plan .why{color:var(--muted);font-size:11px}
+.chain{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:3px}
+.chip{font:11px ui-monospace,monospace;padding:2px 6px;border-radius:6px;background:#17222d;border:1px solid var(--line)}
+.chip.new{border-color:var(--warn);color:var(--warn)}
+.chip.ran{border-color:#2f5d4e}
+.arrow{color:var(--muted);font-size:11px}
+.steps{display:flex;flex-direction:column;gap:4px}
+.step{display:grid;grid-template-columns:70px 42px minmax(0,1fr);gap:8px;align-items:start;font-size:12.5px;padding:5px 7px;border-radius:7px;background:var(--panel2);border-left:3px solid var(--line)}
+.step.WORK{border-left-color:#3c4d5e}.step.REWORK{border-left-color:var(--bad);background:#1b1416}.step.ASK{border-left-color:var(--warn);background:#1b1912}.step.CONTEXT{border-left-color:var(--blue);background:#111a26}
+.step .kind{font-size:10px;font-weight:800;letter-spacing:.05em}
+.step.REWORK .kind{color:var(--bad)}.step.ASK .kind{color:var(--warn)}.step.CONTEXT .kind{color:var(--blue)}.step.WORK .kind{color:var(--muted)}
+.step .min{font-variant-numeric:tabular-nums;color:var(--muted);text-align:right;cursor:help}
+.step .min small{display:block;font-size:9px;letter-spacing:.04em;text-transform:uppercase}
+.step .min.wait{font-style:italic}
+.step .who{font-weight:700}
+.found{display:flex;flex-direction:column;gap:5px}
+.found .item{font-size:12px;background:var(--blue-bg);border-radius:7px;padding:6px 8px}
+.found .item.doc .doc-head{font-weight:700;margin-left:2px}
+.found .item.doc .doc-body{white-space:pre-line;margin-top:5px;line-height:1.5;color:#c5d1dc}
+.found .item.passed{background:var(--panel2);border:1px dashed #3a4a5a}
+.found .item.passed .why{color:var(--warn);font-weight:700}
+.found .item.passed .pt{color:var(--muted);margin-top:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;white-space:normal}
+/* Memory → knowledge → right context: which rungs this story exercises, and how. */
+.ladder{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:6px;margin-top:10px}
+.rung{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:9px;padding:6px 10px;background:var(--panel2);font-size:12px;color:#c5d1dc}
+.rung .rn{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin-bottom:1px}
+.rung.off{border-left-color:var(--line);color:var(--muted);opacity:.6}
+.rung.off .rn{color:var(--muted)}
+@media(max-width:820px){.ladder{grid-auto-flow:row;grid-auto-columns:auto;grid-template-columns:minmax(0,1fr)}}
+.writer{display:inline-block;font:10px ui-monospace,monospace;background:#0d1622;color:var(--blue);padding:1px 6px;border-radius:5px;margin-right:6px}
+.transcript{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.line{font-size:12.5px;padding:4px 8px;border-radius:7px;background:var(--panel2)}
+.line b{color:var(--muted);font-weight:700}
+.line.customer{background:#1a1f2b}.line.specialist{background:#1c1a12}
+table.receipts{width:100%;border-collapse:collapse;font-size:11.5px;table-layout:fixed}
+table.receipts td:nth-child(1){width:34%}table.receipts td:nth-child(3){width:52px}table.receipts td:nth-child(4){width:62px}
+table.receipts td{overflow-wrap:anywhere}
+table.receipts td{padding:3px 5px;border-bottom:1px solid #1a2530;vertical-align:top}
+table.receipts td.tool{font-family:ui-monospace,monospace;color:var(--blue);background:none;border-radius:0}
+table.receipts td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+.fail{color:var(--bad)}
+details summary{cursor:pointer;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.empty{color:var(--muted);font-size:12px}
+.series{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}
+.bars{display:flex;align-items:flex-end;gap:14px;height:180px;padding:10px 4px 0;border-bottom:1px solid var(--line)}
+.bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.bar .fillb{width:100%;max-width:70px;border-radius:6px 6px 0 0;background:#3c4d5e}
+.bar.meko .fillb{background:var(--accent)}
+.bar.db .fillb{background:var(--blue)}
+.bar .v{font-weight:900;font-size:15px;margin-bottom:4px;font-variant-numeric:tabular-nums}
+.bar .c{font-size:11px;color:var(--muted);margin-top:4px;text-align:center}
+.legend{font-size:12px;color:var(--muted);margin-top:8px}
+/* Learning series: one grouped chart, case by case, next to what happened. */
+.series2{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:14px 24px;margin-top:12px;align-items:start}
+.gchart{display:flex;gap:clamp(16px,3vw,48px);align-items:flex-end;height:230px;padding:0 6px;border-bottom:1px solid var(--line)}
+.gcase{flex:1;display:flex;flex-direction:column;align-items:center;height:100%}
+.gbars{flex:1;display:flex;gap:6px;align-items:flex-end;width:100%;justify-content:center}
+.gbar{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;width:clamp(34px,4vw,64px)}
+.gbar .v{font-weight:900;font-size:14px;font-variant-numeric:tabular-nums;margin-bottom:3px}
+.gbar .fillb{width:100%;border-radius:6px 6px 0 0;background:#3c4d5e}
+.gbar.db .fillb{background:var(--blue)}.gbar.meko .fillb{background:var(--accent)}
+.gcap{display:flex;gap:clamp(16px,3vw,48px);padding:6px 6px 0}
+.gcap > div{flex:1;text-align:center;font-size:12px;color:var(--muted)}
+.gcap b{color:var(--ink)}
+.gcap small{display:block;font-size:10.5px}
+.glegend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:8px;flex-wrap:wrap}
+.glegend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.story-steps{margin:0;padding-left:18px;font-size:13px;color:#c5d1dc;display:flex;flex-direction:column;gap:8px}
+.story-steps b{color:var(--ink)}
+@media(max-width:1100px){.series2{grid-template-columns:minmax(0,1fr)}}
+.boundary{margin-top:8px;font-size:13px;color:#d9e3ec;background:#13202c;border:1px dashed #3a5068;border-radius:8px;padding:6px 10px}
+.boundary b{color:var(--blue)}
+.toggle{display:inline-flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);margin-left:4px;cursor:pointer}
+.banner{display:none;margin:0 0 12px;border:1px solid var(--bad);background:var(--bad-bg);color:var(--bad);border-radius:12px;padding:10px 14px;font-weight:700}
+.banner.on{display:block}
+.btn.danger{border-color:var(--bad);color:var(--bad)}.btn.danger.on{background:var(--bad);color:#1a0b0c}
+.live{display:flex;flex-direction:column;gap:5px;font-size:12.5px}
+.live .ev{animation:fadein .25s ease-out}
+@keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.live .ev{animation:none}}
+.live .phasehead{margin-top:6px;font-weight:800;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.live .planbox{border:1px solid var(--line);border-radius:8px;padding:5px 7px;background:var(--panel2)}
+.live .planbox.replan{border-color:var(--warn)}
+.live .planbox .why{font-size:11px;color:var(--muted)}
+.chip.done{background:var(--accent-bg);border-color:#2f5d4e;color:var(--accent)}
+.live .call{font:11.5px ui-monospace,monospace;color:var(--muted);padding:2px 6px}
+.live .call.meko{color:var(--blue)}.live .call.fail{color:var(--bad)}.live .call.model{color:#c9b6ff}
+.decisioncard{border:1px solid #6b5bd6;background:#1a1730;border-radius:8px;padding:6px 8px;font-size:12px}
+.decisioncard .q{color:var(--muted);font-size:11px}
+.decisioncard .a{font:11.5px ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:3px}
+.decisioncard .by{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#c9b6ff;margin-top:3px}
+.decisioncard.rule .by{color:var(--muted)}
+.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-right:6px;animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.costgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.tiers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.tieropt{border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel2);font-size:12px}
+.tieropt .c{font:700 16px ui-monospace,monospace;font-variant-numeric:tabular-nums}
+.tieropt.chosen{border-color:var(--accent);background:var(--accent-bg)}.tieropt.chosen .c{color:var(--accent)}
+.tieropt.off{opacity:.55}
+.written{margin-top:8px;font-size:13px;background:#131d27;border-left:3px solid var(--accent);border-radius:7px;padding:8px 10px;white-space:pre-wrap}
+@media(max-width:1700px){.subtitle{display:none}}
+@media(max-width:1100px){.story,.story:has(> details.about:not([open])){grid-template-columns:minmax(0,1fr)}}
+@media(max-width:820px){.appbar{position:static}.cols,.series{grid-template-columns:minmax(0,1fr)!important}.cols > .panel.lane{grid-row:auto;grid-template-rows:none;margin-bottom:12px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.explain{grid-template-columns:minmax(0,1fr)}.title{font-size:17px}.story-card{min-width:150px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="appbar">
+    <div class="top">
+      <div class="brand">
+        <span class="eyebrow">Meko × Embabel GOAP</span>
+        <span class="title">Agents that don't lose the plot</span>
+        <span class="subtitle"><b>GOAP</b> decides what to do next from what the agent knows. <b>Meko</b> decides what the agent knows.</span>
+      </div>
+      <div class="status-row"><div class="pill" id="mekoStatus">Meko: checking…</div><div class="pill" id="llmStatus">Models: checking…</div><div class="pill" title="Five agent workflows across system boundaries. Same agents, same planner, same code, run with and without Meko (and with your application's own database). Counts are measured from what the planner did; minutes are estimates.">Synthetic data</div><button class="btn" id="seedBtn" hidden title="Write the stories' synthetic organizational context into the live datapack. Safe to repeat: entries already there are skipped.">Seed datapack</button><button class="btn danger" id="outageBtn" title="Make every Meko call fail, as if Meko were down">Simulate Meko outage</button></div>
+    </div>
+    <nav id="storyList" class="story-list" aria-label="Stories"></nav>
+  </header>
+  <div class="banner" id="outageBanner" role="status" style="margin-top:12px">Meko outage simulated: every context-store call fails. "With Meko" runs degrade to what an agent without memory would do.</div>
+
+  <main style="min-width:0">
+    <section class="panel story">
+      <div class="story-head">
+        <div id="domain" class="eyebrow"></div>
+        <h1 id="title"></h1>
+        <div id="problem" class="problem"></div>
+        <div id="hook" class="hook"></div>
+        <div id="boundary" class="boundary"></div>
+        <div id="ladder" class="ladder" aria-label="Memory, knowledge, right context, decision traces"></div>
+        <details class="castbox" id="castBox"><summary>Agents in this case<span class="hint" id="castHint"></span></summary><div class="cast" id="cast"></div></details>
+        <div class="controls" id="controls"></div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+      </div>
+      <details class="about" id="about">
+        <summary><h2 style="margin:0">How this story works</h2></summary>
+        <div class="explain">
+          <div class="card"><h3>Without Meko</h3><div id="without"></div></div>
+          <div class="card"><h3>With Meko</h3><div id="with"></div><div id="tools" class="tools"></div></div>
+          <div class="card" id="dbCard"><h3>Your own database</h3><div>The same agents on a store your application owns: it holds only what this application's agents wrote, found by case id or keyword. What other tools and systems wrote lives in their systems.</div></div>
+          <div class="card"><h3>What GOAP does</h3><div id="goap"></div></div>
+        </div>
+      </details>
+    </section>
+    <section id="results"></section>
+  </main>
+</div>
+<script>
+const el = id => document.getElementById(id);
+let stories = [], selected = null, mekoLive = false, lastIncident = null, tierInfo = {};
+let showDb = false, brief = true;
+/** The control button that started the results on screen (kept across re-renders of the controls). */
+let activeButton = null;
+/** The runs on screen per story and lane (story runs, then follow-ups), for the agents' actual reads and writes. */
+const castRuns = {};
+
+/** One agent's Meko activity in some runs, from their receipts, and how many of its records other agents used. */
+function castActivity(id, runs) {
+  const a = {reads: 0, writes: 0, traces: 0, failed: 0, used: 0};
+  runs.forEach(r => {
+    (r.receipts || []).forEach(x => {
+      if (x.agent !== id) return;
+      if (!x.ok) { a.failed++; return; }
+      if (/search|get|SELECT/i.test(x.tool)) a.reads++; else a.writes++;
+      if (String(x.detail).includes(id + ' · decision ')) a.traces++;
+    });
+    a.used += (r.found || []).filter(f => f.writtenBy === id).length;
+  });
+  return a;
+}
+
+/** The agents in this case, in order, with what crosses between them and, after a run, what each did per lane. */
+function renderCast() {
+  const cast = selected.cast || [];
+  el('castBox').style.display = cast.length ? '' : 'none';
+  const lanes = castRuns[selected.id] || {};
+  const laneNames = {without: 'Without', db: 'Own DB', with: 'Meko'};
+  const ran = Object.keys(lanes).filter(l => lanes[l].length);
+  el('castHint').textContent = cast.length + ' agents' + (ran.length ? ' · with what each did in the last run' : '');
+  el('cast').innerHTML = cast.map((m, i) => {
+    const acts = ran.map(l => {
+      const a = castActivity(m.id, lanes[l]);
+      const parts = [];
+      if (a.reads || a.writes) parts.push(a.reads + ' read' + (a.reads === 1 ? '' : 's') + ' · ' + a.writes + ' write' + (a.writes === 1 ? '' : 's'));
+      if (a.traces) parts.push(a.traces + ' decision' + (a.traces === 1 ? '' : 's') + ' traced');
+      if (a.used) parts.push(a.used + ' of its records used');
+      if (a.failed) parts.push(a.failed + ' failed');
+      return '<div><span class="ln">' + esc(laneNames[l] || l) + '</span>' + (parts.length ? esc(parts.join(' · ')) : '<span class="none">nothing in shared context</span>') + '</div>';
+    }).join('');
+    return (i ? '<div class="hand"><b>→</b>' + esc(cast[i - 1].handsOver || '') + '</div>' : '') +
+      '<div class="member ' + esc(m.when) + '"><span class="when ' + esc(m.when) + '">' + esc(m.when) + '</span>' +
+      '<div class="nm">' + esc(m.name) + '</div><div class="id">' + esc(m.id) + '</div><div class="sys">' + esc(m.system) + '</div>' +
+      '<div class="role">' + esc(m.role) + '</div>' + (acts ? '<div class="acts">' + acts + '</div>' : '') + '</div>';
+  }).join('');
+}
+
+/** Records a run on screen for the agents section: a new run of the case replaces the lane's runs, a follow-up adds to them. */
+function noteCastRun(lane, run, followUp) {
+  const lanes = castRuns[selected.id] = castRuns[selected.id] || {};
+  if (!followUp) lanes[lane] = [];
+  (lanes[lane] = lanes[lane] || []).push(run);
+  renderCast();
+}
+
+/** Stories whose case has run in this page: their follow-up has something to look at. */
+const ranCase = new Set();
+const SERIES_CASES = 3;
+try { showDb = localStorage.getItem('showDb') === 'true'; brief = localStorage.getItem('brief') !== 'false'; } catch (e) { /* storage unavailable: defaults */ }
+document.body.classList.toggle('brief', brief);
+
+function esc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+
+function metricLabel(key) {
+  const labels = {minutes:'Minutes (est.)', repeatedSteps:'Repeated steps', customerQuestions:'Customer re-asked', evidenceRequests:'Evidence requests',
+    hypothesesTested:'Hypotheses tested', missedRequirements:'Missed requirements', teammateInterruptions:'Teammate pings',
+    actionsExecuted:'Actions run', replans:'Replans', contextCalls:'Meko calls', contextItemsUsed:'Context items used',
+    recordsRequested:'Records requested'};
+  return labels[key] || key;
+}
+
+function renderCatalog() {
+  el('storyList').innerHTML = stories.map(s =>
+    '<button class="story-card ' + (s.id === selected.id ? 'active' : '') + '" data-id="' + esc(s.id) + '" title="' + esc(s.hook) + '"' +
+    (s.id === selected.id ? ' aria-current="true"' : '') + '><div class="k">' + esc(s.domain) + '</div><div class="t">' + esc(s.title) + '</div></button>').join('');
+  document.querySelectorAll('.story-card').forEach(node => node.onclick = () => {
+    if (liveSource) { liveSource.close(); liveSource = null; }
+    selected = stories.find(s => s.id === node.dataset.id);
+    activeButton = null;
+    renderCatalog(); renderStory(); el('results').innerHTML = '';
+    renderButtonsEnabled();
+  });
+}
+
+function renderStory() {
+  el('domain').textContent = selected.domain;
+  el('title').textContent = selected.title;
+  el('problem').textContent = selected.problem;
+  el('hook').textContent = selected.hook;
+  el('without').textContent = selected.withoutMeko;
+  el('with').textContent = selected.withMeko;
+  el('goap').textContent = selected.goap;
+  el('tools').innerHTML = selected.mekoTools.map(t => '<span class="tool">' + esc(t) + '</span>').join('');
+  el('boundary').innerHTML = '<b>Boundary:</b> ' + esc(selected.boundary);
+  const rungNames = {memory: '1 · Memory', knowledge: '2 → Knowledge', 'right context': '3 → Right context', 'decision traces': '4 → Decision traces'};
+  renderCast();
+  el('ladder').innerHTML = (selected.ladder || []).map(r => '<div class="rung' + (r[1] ? '' : ' off') + '"><div class="rn">' + esc(rungNames[r[0]] || r[0]) + '</div>' +
+    esc(r[1] || 'Not what this story is about') + '</div>').join('');
+  el('dbCard').style.display = showDb ? '' : 'none';
+  el('status').textContent = mekoLive ? '' : 'Meko is not connected: "With Meko" runs use the in-memory stand-in.';
+  const learning = selected.id === 'organization-learned';
+  // The learning story only shows its effect across cases, so the series is its primary action.
+  const buttons = learning ? [['series', 'Run ' + SERIES_CASES + ' cases each way', true]] : [];
+  // One run compares the lanes side by side; a follow-up, where the story has one, looks at that case afterwards.
+  const step = n => selected.followUp ? n + ' · ' : '';
+  buttons.push(['compare', step(1) + (learning ? 'Run one case' : 'Run the case'), !learning,
+    showDb ? 'Runs the same agents without Meko, on your own database and with Meko, side by side' : 'Runs the same agents without Meko and with Meko, side by side']);
+  if (selected.followUp) buttons.push(['followup', step(2) + selected.followUp.label, false,
+    'Later, given only the ' + selected.followUp.subject + ' id, in each lane. Run the case first.']);
+  if (selected.id === 'agent-died-2am') buttons.push(['start', '1 · Start incident (agent dies)'], ['takeover', '2 · Take over']);
+  if (learning) buttons.push(['mismatch', 'A case the pattern doesn\'t fit']);
+  if (selected.reset) buttons.push(['reset', selected.reset]);
+  el('controls').innerHTML = buttons.map(b => '<button class="btn ' + (b[2] ? 'primary' : '') + '" id="b-' + b[0] + '"' +
+    (b[3] ? ' title="' + esc(b[3]) + '"' : '') + (buttonDisabled(b[0]) ? ' disabled' : '') + '>' + esc(b[1]) + '</button>').join('') +
+    '<label class="toggle"><input type="checkbox" id="dbToggle"' + (showDb ? ' checked' : '') + '> Show the build-it-yourself comparison</label>' +
+    '<span class="seg" role="group" aria-label="Detail level" title="Story hides the planner internals, gate decisions, model routing and Meko call logs"><button type="button" data-brief="true" aria-pressed="' + brief + '">Story</button><button type="button" data-brief="false" aria-pressed="' + !brief + '">Full detail</button></span>';
+  // Mark the button that started a run: highlighted while it runs and after, until another run or story replaces it.
+  document.querySelectorAll('#controls .btn').forEach(b => {
+    b.classList.toggle('active', b.id === activeButton);
+    b.addEventListener('click', () => {
+      activeButton = b.id;
+      document.querySelectorAll('#controls .btn').forEach(x => x.classList.toggle('active', x === b));
+      b.classList.add('running');
+      b.setAttribute('aria-pressed', 'true');
+    }, {capture: true});
+  });
+  document.querySelectorAll('[data-brief]').forEach(b => b.onclick = () => {
+    brief = b.dataset.brief === 'true';
+    document.body.classList.toggle('brief', brief);
+    try { localStorage.setItem('brief', String(brief)); } catch (e) { /* not persisted */ }
+    document.querySelectorAll('[data-brief]').forEach(x => x.setAttribute('aria-pressed', String((x.dataset.brief === 'true') === brief)));
+  });
+  el('dbToggle').onchange = () => {
+    showDb = el('dbToggle').checked;
+    try { localStorage.setItem('showDb', String(showDb)); } catch (e) { /* not persisted */ }
+    renderStory();
+  };
+  el('b-compare').onclick = () => streamRun('compare', 'Running the case live, side by side…');
+  if (el('b-followup')) el('b-followup').onclick = () => streamRun('followup', selected.followUp.running);
+  if (el('b-mismatch')) el('b-mismatch').onclick = () => streamRun('mismatch', 'Running a case that only looks like the learned pattern…');
+  if (el('b-start')) el('b-start').onclick = () => act('Investigator working…', () => post('/api/stories/agent-died-2am/start', {meko: true}), r => {
+    lastIncident = r.caseId; renderStory(); renderSingle(r); noteCastRun('with', r, false);
+    el('status').textContent = 'Investigator died on ' + r.caseId + '. Restart the server now if you like, then press Take over.';
+  });
+  if (el('b-takeover')) el('b-takeover').onclick = () => act('Takeover agent restoring ' + lastIncident + '…',
+    () => post('/api/stories/agent-died-2am/takeover', {caseId: lastIncident, meko: true}), r => { renderSingle(r); noteCastRun('with', r, true); });
+  if (el('b-series')) el('b-series').onclick = () => act('Resetting learning, then running ' + SERIES_CASES + ' cases each way…', () => post('/api/stories/organization-learned/series?cases=' + SERIES_CASES + '&db=' + showDb), renderSeries);
+  if (el('b-reset')) el('b-reset').onclick = () => act(selected.reset + '…', () => post('/api/stories/' + selected.id + '/reset'),
+    r => { el('results').innerHTML = ''; activeButton = null; ranCase.delete(selected.id); el('status').textContent = r.note; });
+}
+
+async function post(url, body) {
+  const response = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: body ? JSON.stringify(body) : null});
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+/** A run is starting: fold the story explainer so the results land on the first screen, controls still in view. */
+function beginRun() {
+  el('about').open = false;
+}
+
+async function act(message, call, render) {
+  beginRun();
+  document.querySelectorAll('#controls .btn').forEach(b => b.disabled = true);
+  el('status').textContent = message;
+  el('status').title = '';
+  const started = Date.now();
+  try {
+    const result = await call();
+    render(result);
+    if (el('status').textContent === message) el('status').textContent = 'Done in ' + ((Date.now() - started) / 1000).toFixed(1) + 's' + timing(result) + '.';
+  } catch (e) {
+    el('status').textContent = 'Error: ' + e.message;
+  } finally {
+    renderButtonsEnabled();
+  }
+}
+
+/** Where a result's time went, measured: Meko calls and model calls, summed over every run in it. */
+function timing(result) {
+  const runs = [];
+  const walk = v => { if (!v) return; if (v.metrics) runs.push(v); else if (Array.isArray(v)) v.forEach(walk); else if (typeof v === 'object') Object.values(v).forEach(walk); };
+  walk(result);
+  if (!runs.length) return '';
+  const sec = k => (runs.reduce((t, r) => t + (r.metrics[k] || 0), 0) / 1000).toFixed(1);
+  return ' (Meko calls ' + sec('contextMillis') + 's, model calls ' + sec('modelMillis') + 's)';
+}
+
+/** Take over needs a dead incident; a follow-up needs the case to have run. */
+function buttonDisabled(name) {
+  return (name === 'takeover' && !lastIncident) || (name === 'followup' && !ranCase.has(selected.id));
+}
+
+function renderButtonsEnabled() {
+  document.querySelectorAll('#controls .btn').forEach(b => {
+    b.disabled = buttonDisabled(b.id.replace(/^b-/, ''));
+    b.classList.remove('running');
+    b.classList.toggle('active', b.id === activeButton);
+  });
+  if (el('dbToggle')) el('dbToggle').disabled = false;
+}
+
+function storeLabel(run) {
+  return {NONE: 'No durable context', MEKO_LIVE: 'Meko · live datapack', LOCAL_STAND_IN: 'Meko stand-in (offline)', SHARED_DB: 'Only this app\'s own writes', OTHER_SYSTEM_DB: 'Another system\'s own store'}[run.store] || run.store;
+}
+
+/** What a run leads with: its own headline (an audit's differs from its story's), else the story's. */
+function headlineOf(run) {
+  return (run && run.headline) || selected.headline;
+}
+
+function headlineKeys(run) {
+  const keys = headlineOf(run).map(h => h[0]);
+  ['actionsExecuted', 'replans', 'contextCalls'].forEach(k => { if (!keys.includes(k)) keys.push(k); });
+  return keys.slice(0, 4);
+}
+
+function metricsHtml(run, other) {
+  return '<div class="metrics">' + headlineKeys(run).map(k => {
+    const v = run.metrics[k] ?? 0;
+    let cls = '';
+    const head = headlineOf(run).find(h => h[0] === k);
+    if (other && head) {
+      const o = other.metrics[k] ?? 0;
+      if (v !== o) cls = ((head[2] === 'lower') === (v < o)) ? 'win' : 'lose';
+    }
+    return '<div class="metric ' + cls + '"><div class="n">' + esc(v) + '</div><div class="l">' + esc(head ? head[1] : metricLabel(k)) + '</div></div>';
+  }).join('') + '</div>';
+}
+
+function planHtml(phase) {
+  const plans = phase.plans || [];
+  const executed = (phase.executed || []).map(e => e.action);
+  let html = '';
+  plans.forEach((plan, i) => {
+    const previous = i > 0 ? plans[i - 1].steps.map(s => s.action) : [];
+    const why = i === 0 ? 'First plan' : 'Replanned after ' + plan.afterActions + ' action' + (plan.afterActions === 1 ? '' : 's') + ': the world state was not what the planner assumed';
+    html += '<div class="plan"><div class="why">' + esc(why) + ' · planner cost ' + plan.cost.toFixed(2) + '</div><div class="chain">' +
+      plan.steps.map((s, j) => (j ? '<span class="arrow">→</span>' : '') + '<span class="chip ' + (i > 0 && !previous.includes(s.action) ? 'new' : '') + '">' + esc(s.action) + '</span>').join('') + '</div></div>';
+  });
+  html += '<div class="plan"><div class="why">Executed</div><div class="chain">' +
+    (executed.length ? executed.map((a, j) => (j ? '<span class="arrow">→</span>' : '') + '<span class="chip ran">' + esc(a) + '</span>').join('') : '<span class="empty">nothing</span>') + '</div></div>';
+  return html;
+}
+
+function phaseBadge(phase) {
+  if (phase.status === 'COMPLETED') return '<span class="badge ok">completed</span>';
+  if (phase.status === 'TERMINATED' || phase.status === 'KILLED') return '<span class="badge bad">agent died · ' + esc(phase.status.toLowerCase()) + '</span>';
+  return '<span class="badge warn">' + esc(phase.status.toLowerCase()) + '</span>';
+}
+
+function writerHtml(run) {
+  const m = run.metrics, priced = m.writerPriced;
+  if (!priced) return '';
+  const names = {slm: 'Small', llm: 'Mid', frontier: 'Frontier'};
+  const sub = t => tierInfo[t] ? modelLabel(tierInfo[t]) : '';
+  const line = run.transcript.slice().reverse().find(l => l.speaker.indexOf(' · ') > 0);
+  // The writer runs last, so when it generated text its call is the run's last model call; otherwise it made none.
+  const call = m.writerGenerated ? (run.modelCalls || []).slice(-1)[0] : null;
+  const unavailable = m.writerUnavailable || [];
+  const gaps = m.writerGaps || 0;
+  return '<div class="section"><div class="label"><span>Which model wrote it, and why</span><span>' + gaps + ' gap' + (gaps === 1 ? '' : 's') + ' in context</span></div>' +
+    '<div class="tiers">' + Object.keys(priced).map(t => {
+      const off = unavailable.includes(t);
+      return '<div class="tieropt ' + (t === m.writerTier ? 'chosen' : '') + (off ? ' off' : '') + '"><div>' + esc(names[t] || t) + ' <span class="empty">' + esc(sub(t)) + '</span></div><div class="c">' +
+        (off ? 'n/a' : priced[t].toFixed(2)) + '</div><div class="empty">' + (off ? 'unavailable' : (t === m.writerTier ? 'chosen: cheapest' : 'planner cost')) + '</div></div>';
+    }).join('') + '</div>' +
+    '<div class="empty" style="margin-top:4px">Cost = tier price + risk per gap the model must reason around. Small models carry the most risk per gap.</div>' +
+    (line ? '<div class="written"><b>' + esc(line.speaker) + '</b>\n' + esc(line.text) + '</div>' : '') +
+    (call ? '<div class="empty" style="margin-top:4px">' + esc(call.provider) + ' · ' + esc(call.model) + ' · ' +
+      (call.ok ? esc((call.promptTokens || 0) + ' in / ' + (call.completionTokens || 0) + ' out tokens') : 'failed: ' + esc(call.error)) + ' · ' + esc(call.millis) + ' ms</div>' :
+      '<div class="empty" style="margin-top:4px">No model call: template used.</div>') +
+    '</div>';
+}
+
+// Minutes are estimates from estimates.yml; hovering shows the basis. Waiting time is marked and not priced.
+function stepHtml(s) {
+  const tip = 'Estimate: ' + s.minutes + ' min ' + (s.waiting ? 'waiting' : 'hands-on') + (s.basis ? ' — ' + s.basis : '');
+  return '<div class="step ' + esc(s.kind) + '"><div class="kind">' + esc({WORK: 'WORK', REWORK: 'REPEATED', ASK: 'ASKED', CONTEXT: 'CONTEXT'}[s.kind]) +
+    '</div><div class="min' + (s.waiting ? ' wait' : '') + '" title="' + esc(tip) + '">' + esc(s.minutes) + 'm' + (s.waiting ? '<small>wait</small>' : '') +
+    '</div><div><span class="who">' + esc(s.persona) + ':</span> ' + esc(s.text) + '</div></div>';
+}
+
+/**
+ * One item of context the agents used. An uploaded document's chunk is shown whole: its section heading, then its body.
+ * Meko's chunker can flatten a numbered list into one line ("chargeback.Verify …"), so sentence breaks are restored.
+ */
+function foundHtml(f) {
+  const writer = '<span class="writer">' + esc(f.writtenBy) + '</span>';
+  if (!String(f.writtenBy).startsWith('uploaded document')) return '<div class="item" title="' + esc(f.text) + '">' + writer + esc(f.text) + '</div>';
+  const text = String(f.text);
+  const split = text.indexOf('\n');
+  const head = split < 0 ? text : text.slice(0, split);
+  const body = split < 0 ? '' : text.slice(split + 1).trim().replace(/([.!?])(?=[A-Z"])/g, '$1\n');
+  return '<div class="item doc">' + writer + '<span class="doc-head">' + esc(head.replace(/^Section:\s*/, '')) + '</span>' +
+    (body ? '<div class="doc-body">' + esc(body) + '</div>' : '') + '</div>';
+}
+
+/**
+ * A follow-up's audit trail, one small table per entry, stacked in record order: who wrote it, what kind of entry,
+ * what was asked or done, how it was decided or why, the response, what the audit flags, and where it came from.
+ */
+function auditTrailHtml(run) {
+  const trail = run.auditTrail || [];
+  if (!trail.length) return '';
+  const issues = trail.filter(e => e.issue).length;
+  const row = (label, value, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><th>' + label + '</th><td' + (label === 'Who' || label === 'Source' ? ' class="mono"' : '') + '>' + value + '</td></tr>';
+  return '<div class="section"><div class="label"><span>Audit trail, entry by entry</span><span>' + trail.length + ' entries · ' +
+    issues + ' issue' + (issues === 1 ? '' : 's') + '</span></div><div class="trail">' + trail.map(e =>
+      '<table class="' + esc(e.kind) + (e.issue ? ' issue' : '') + '">' +
+      row('#', esc(e.n) + ' <span class="kind ' + esc(e.kind) + '">' + esc(e.kind) + '</span>') +
+      row('Who', esc(e.who)) +
+      row('What', esc(e.what)) +
+      row('How', esc(e.how)) +
+      row('Response', e.response ? esc(prettyJson(e.response)) : '<span class="empty">nothing recorded</span>') +
+      row('Issue', e.issue ? esc(e.issue) : 'none', e.issue ? 'issue' : 'ok') +
+      row('Source', esc(e.source)) +
+      '</table>').join('') + '</div></div>';
+}
+
+function columnHtml(run, other) {
+  const steps = run.steps.map(stepHtml).join('');
+  const found = run.found.length ? '<div class="found">' + run.found.map(foundHtml).join('') + '</div>'
+    : '<div class="empty">Nothing. The agents knew only what was handed to them directly.</div>';
+  // Retrieved but deliberately not used: this is what makes it the right context rather than just more context.
+  const passed = (run.passedOver || []).length ? '<div class="label" style="margin-top:8px"><span>Passed over, and why</span><span>' + run.passedOver.length + '</span></div><div class="found">' +
+    run.passedOver.map(f => '<div class="item passed" title="' + esc(f.text) + '"><span class="writer">' + esc(f.writtenBy) + '</span><span class="why">' + esc(f.reason) + '</span>' +
+      '<div class="pt">' + esc(f.text) + '</div></div>').join('') + '</div>' : '';
+  const lineHtml = l => {
+    const cls = l.speaker === 'Customer' ? 'customer' : (l.speaker === 'Payments specialist' ? 'specialist' : '');
+    return '<div class="line ' + cls + '"><b>' + esc(l.speaker) + ':</b> ' + esc(l.text) + '</div>';
+  };
+  // Lead with what happened after the handoff: that is where the two runs differ.
+  const full = run;
+  run = Object.assign({}, run, {transcript: run.transcript.filter(l => l.speaker.indexOf(' · ') < 0)});
+  const handoff = run.transcript.findIndex(l => l.speaker === 'Ticket note');
+  const transcript = !run.transcript.length ? '' : handoff < 0
+    ? '<div class="transcript">' + run.transcript.map(lineHtml).join('') + '</div>'
+    : '<div class="transcript">' + run.transcript.slice(handoff).map(lineHtml).join('') + '</div>' +
+      '<details style="margin-top:6px"><summary>Before the handoff (' + handoff + ' lines)</summary><div class="transcript">' +
+      run.transcript.slice(0, handoff).map(lineHtml).join('') + '</div></details>';
+  const receipts = run.receipts.length ? '<table class="receipts">' + run.receipts.map(r =>
+    '<tr><td class="tool ' + (r.ok ? '' : 'fail') + '">' + esc(r.tool) + '</td><td>' + esc(r.detail) + '<div class="empty">' + esc(r.agent) + '</div></td><td class="num">' + esc(r.hits) + ' hit' + (r.hits === 1 ? '' : 's') + '</td><td class="num">' + esc(r.millis) + ' ms</td></tr>').join('') + '</table>'
+    : '<div class="empty">No context store calls.</div>';
+  // Exactly 12 slots in a fixed order, so lanes line up row by row (see .cols > .panel.lane). "detail" slots are
+  // hidden in Story mode; every lane hides the same ones, so the rows still match.
+  const slot = (html, detail) => '<div class="slot' + (detail ? ' detail' : '') + '">' + (html || '') + '</div>';
+  return '<section class="panel lane">' +
+    slot('<div class="col-head"><div class="name">' + esc(laneName(run.lane)) + '</div><span class="pill ' + (run.meko ? 'live' : '') + '">' + esc(storeLabel(run)) + '</span></div>') +
+    slot(metricsHtml(run, other)) +
+    slot('<div class="section"><div class="label"><span>Outcome</span><span>' + esc(run.caseId) + '</span></div><div class="card">' + esc(run.outcome || 'No outcome: the plan did not complete.') + '</div></div>') +
+    slot(auditTrailHtml(run)) +
+    slot('<div class="section"><div class="label"><span>What the planner did</span></div>' + run.phases.map(p =>
+      '<div class="phase"><div class="phase-title"><span>' + esc(p.label) + '</span>' + phaseBadge(p) + '</div>' + planHtml(p) + '</div>').join('') + '</div>', true) +
+    slot('<div class="section"><div class="label"><span>Steps</span><span title="Each step\'s minutes are an estimate from effort/estimates.yml; hover a step for its basis. Which steps ran is what the planner decided.">' + esc(run.metrics.minutes) + ' min, estimated</span></div><div class="steps">' + steps + '</div></div>') +
+    slot(transcript ? '<div class="section"><details' + (selected.id === 'dont-make-me-explain' || selected.id === 'vacation-catch-up' ? ' open' : '') + '><summary>' + (handoff < 0 ? 'Conversation' : 'Conversation after the handoff') + '</summary>' + transcript + '</details></div>' : '') +
+    slot('<div class="section"><div class="label"><span>Context the agents used, and who wrote it</span><span>' + run.found.length + ' used</span></div>' + found + passed + '</div>') +
+    slot(decisionsHtml(full), true) +
+    slot(writerHtml(full), true) +
+    slot(costHtml(full)) +
+    slot('<div class="section"><details' + (run.meko ? ' open' : '') + '><summary>Meko calls (' + run.receipts.length + ', ' + esc(run.metrics.contextMillis) + ' ms)</summary>' + receipts + '</details></div>', true) +
+    '</section>';
+}
+
+// ---------------------------------------------------------------- live streaming
+let liveSource = null;
+
+function laneTitle(lane) { return {with: 'With Meko', db: 'Your own database', without: 'Without Meko'}[lane] || lane; }
+function laneName(lane) { return {MEKO: 'With Meko', DATABASE: 'Your own database', WITHOUT: 'Without Meko'}[lane] || lane; }
+
+function streamRun(mode, message) {
+  if (liveSource) liveSource.close();
+  beginRun();
+  document.querySelectorAll('#controls .btn').forEach(b => b.disabled = true);
+  if (el('dbToggle')) el('dbToggle').disabled = true;
+  el('status').textContent = message;
+  const started = Date.now();
+  const runs = {};
+  let lanes = [];
+  const source = new EventSource('/api/stories/' + selected.id + '/stream?mode=' + mode + '&db=' + showDb);
+  liveSource = source;
+  const on = (type, fn) => source.addEventListener(type, e => fn(JSON.parse(e.data)));
+  on('lanes', ls => {
+    lanes = ls.map(l => l.name);
+    el('results').innerHTML = '<div class="cols streaming ' + (lanes.length === 1 ? 'one' : lanes.length === 3 ? 'three' : '') + '">' + lanes.map(l =>
+      '<section class="panel lane" id="lane-' + l + '"><div class="col-head"><div class="name"><span class="pulse"></span>' + laneTitle(l) +
+      '</div><span class="pill ' + (l === 'with' ? 'live' : '') + '">live</span></div><div class="live" id="feed-' + l + '"></div></section>').join('') + '</div>';
+  });
+  const feed = lane => el('feed-' + lane);
+  const add = (lane, html) => { const f = feed(lane); if (!f) return; f.insertAdjacentHTML('beforeend', '<div class="ev">' + html + '</div>'); };
+  on('phase', e => add(e.lane, '<div class="phasehead">' + esc(e.data.label) + '</div>'));
+  on('plan', e => {
+    const p = e.data;
+    add(e.lane, '<div class="planbox ' + (p.replan ? 'replan' : '') + '" data-phase="' + esc(p.phase) + '"><div class="why">' +
+      (p.replan ? 'Replanned: the world state was not what the planner assumed' : 'Plan') + ' · cost ' + p.plan.cost.toFixed(2) + '</div><div class="chain">' +
+      p.plan.steps.map((st, i) => (i ? '<span class="arrow">→</span>' : '') + '<span class="chip ' + (p.replan ? 'new' : '') + '" data-action="' + esc(st.action) + '">' + esc(st.action) + '</span>').join('') + '</div></div>');
+  });
+  on('action', e => {
+    const boxes = feed(e.lane) ? feed(e.lane).querySelectorAll('.planbox') : [];
+    const box = boxes[boxes.length - 1];
+    if (box) box.querySelectorAll('.chip[data-action="' + CSS.escape(e.data.action.action) + '"]').forEach(c => c.classList.add('done'));
+  });
+  on('step', e => add(e.lane, stepHtml(e.data)));
+  on('decision', e => add(e.lane, decisionHtml(e.data)));
+  on('receipt', e => add(e.lane, '<div class="call meko ' + (e.data.ok ? '' : 'fail') + '">Meko · ' + esc(e.data.tool) + ' · ' + esc(e.data.hits) + ' hit' + (e.data.hits === 1 ? '' : 's') + ' · ' + esc(e.data.millis) + ' ms' + (e.data.ok ? '' : ' · FAILED') + '</div>'));
+  on('model', e => add(e.lane, '<div class="call model ' + (e.data.ok ? '' : 'fail') + '">Model · ' + esc(e.data.model) + ' (' + esc(e.data.tier) + ') · ' +
+    (e.data.ok ? esc((e.data.promptTokens || 0) + '+' + (e.data.completionTokens || 0) + ' tokens · $' + Number(e.data.usd || 0).toFixed(5)) : 'failed') + ' · ' + esc(e.data.millis) + ' ms</div>'));
+  // Only dialogue goes in the live feed; notices, briefs and drafts are shown with the result.
+  on('line', e => { if (e.data.dialogue)
+    add(e.lane, '<div class="line ' + (e.data.speaker === 'Customer' ? 'customer' : 'specialist') + '"><b>' + esc(e.data.speaker) + ':</b> ' + esc(e.data.text) + '</div>'); });
+  on('run', e => {
+    noteCastRun(e.lane, e.data, mode === 'followup');
+    runs[e.lane] = e.data;
+    const lane = el('lane-' + e.lane);
+    if (lane) lane.outerHTML = columnHtml(e.data, null).replace('<section class="panel lane">', '<section class="panel lane" id="lane-' + e.lane + '">');
+  });
+  on('failed', e => add(e.lane, '<div class="call fail">Run failed: ' + esc(e.data) + '</div>'));
+  on('done', () => {
+    source.close();
+    liveSource = null;
+    const cols = el('results').querySelector('.cols.streaming');
+    if (cols) cols.classList.remove('streaming');
+    if (runs.without && runs.with) renderCompare({withoutMeko: runs.without, database: runs.db, withMeko: runs.with});
+    if (mode === 'compare' && runs.with) ranCase.add(selected.id);
+    el('status').textContent = 'Done in ' + ((Date.now() - started) / 1000).toFixed(1) + 's' + timing(runs) + '.';
+    renderButtonsEnabled();
+  });
+  source.onerror = () => {
+    if (!liveSource) return;
+    source.close(); liveSource = null;
+    el('status').textContent = 'The live stream was interrupted.';
+    renderButtonsEnabled();
+  };
+}
+
+function decisionHtml(d) {
+  return '<div class="decisioncard ' + (d.byModel ? '' : 'rule') + '"><div class="q">' + esc(d.persona) + ' asked: ' + esc(d.question) + ' (' + esc(d.context) + ')</div>' +
+    '<div class="a">' + esc(prettyJson(d.answer)) + '</div><div class="by">Decided by ' + esc(d.decidedBy) + '</div></div>';
+}
+
+function prettyJson(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 1).replace(/\n\s*/g, ' '); } catch (e) { return text; }
+}
+
+function money(v) {
+  if (v == null) return '$0';
+  return v >= 1 ? '$' + v.toFixed(2) : (v === 0 ? '$0' : '$' + v.toFixed(5));
+}
+
+/**
+ * A run's model spend, split: the response writer (the run's last call, when it generated text) and the gate
+ * decisions (every other call, all on the small tier). With context the writer gets cheaper, but the gates have more
+ * to read and can run more often, so the total can go either way by fractions of a cent.
+ */
+function modelSplit(run) {
+  const calls = (run.modelCalls || []).filter(c => c.ok);
+  const writer = run.metrics.writerGenerated && calls.length ? calls[calls.length - 1] : null;
+  const gates = writer ? calls.slice(0, -1) : calls;
+  return {writerUsd: writer ? writer.usd : 0, writerModel: writer ? String(writer.model).split('/').pop() : null,
+    gatesUsd: gates.reduce((t, c) => t + (c.usd || 0), 0), gateCalls: gates.length};
+}
+
+function costHtml(run) {
+  const m = run.metrics;
+  return '<div class="section"><div class="label"><span>Cost of this run</span><span>at list prices</span></div><div class="costgrid">' +
+    '<div class="tieropt"><div>LLM spend</div><div class="c">' + money(m.modelUsd) + '</div><div class="empty">' + (() => {
+      const x = modelSplit(run);
+      return (x.writerModel ? 'writer ' + money(x.writerUsd) + ' (' + esc(x.writerModel) + ') + ' : '') + x.gateCalls + ' LLM gate decision' + (x.gateCalls === 1 ? '' : 's') + ' ' + money(x.gatesUsd);
+    })() + ' · list price, free plans bill $0</div></div>' +
+    '<div class="tieropt"><div>Effort</div><div class="c">' + money(m.effortUsd) + '</div><div class="empty">' + esc(m.handsOnMinutes) + ' hands-on min at $' + esc(m.hourlyRateUsd) + '/h' + (m.waitingMinutes ? ' · ' + esc(m.waitingMinutes) + ' min waiting, not priced' : '') + ' (estimates)</div></div>' +
+    '<div class="tieropt"><div>Meko</div><div class="c">' + esc(m.contextCalls) + ' calls</div><div class="empty">' + esc(m.contextMillis) + ' ms' + (m.contextFailures ? ' · ' + esc(m.contextFailures) + ' failed' : '') + '</div></div>' +
+    '</div></div>';
+}
+
+function decisionsHtml(run) {
+  if (!run.decisions || !run.decisions.length) return '';
+  return '<div class="section"><div class="label"><span>Decisions at the gates</span><span>' + run.decisions.filter(d => d.byModel).length + ' by a model</span></div>' +
+    '<div class="live">' + run.decisions.map(decisionHtml).join('') + '</div></div>';
+}
+
+/** One tile per headline number: without → with Meko, coloured by which way is better; the database lane underneath. */
+function summaryHtml(a, b, d) {
+  const val = (r, k) => r ? (r.metrics[k] ?? 0) : null;
+  // Colour only a difference the audience can see: values that format the same are shown as a tie.
+  const tile = (label, va, vb, vd, better, fmt, note) => {
+    const cls = (x, y) => fmt(x) === fmt(y) || better == null ? '' : ((better === 'lower') === (x < y) ? 'win' : 'lose');
+    return '<div class="score"><div class="sl">' + esc(label) + '</div><div class="sv"><span class="' + cls(va, vb) + '">' + esc(fmt(va)) +
+      '</span><span class="arr">→</span><span class="' + cls(vb, va) + '">' + esc(fmt(vb)) + '</span></div>' +
+      '<div class="ss">' + (note || 'without → with Meko') + (d ? ' · own database ' + esc(fmt(vd)) : '') + '</div></div>';
+  };
+  const tiles = headlineOf(a).map(h => tile(h[1], val(a, h[0]), val(b, h[0]), val(d, h[0]), h[2], x => x));
+  // Where the saving is the customer's (or another team's) waiting rather than your team's work, say so.
+  if (val(a, 'waitingMinutes') || val(b, 'waitingMinutes')) {
+    tiles.push(tile('Waiting minutes (est.)', val(a, 'waitingMinutes'), val(b, 'waitingMinutes'), val(d, 'waitingMinutes'), 'lower', x => x,
+      'customer replies and queues · not priced'));
+  }
+  const cents = v => '$' + Number(v || 0).toFixed(2);
+  tiles.push(tile('Hands-on labour (est.)', val(a, 'effortUsd'), val(b, 'effortUsd'), val(d, 'effortUsd'), 'lower', cents,
+    val(a, 'handsOnMinutes') + ' → ' + val(b, 'handsOnMinutes') + ' hands-on min at $' + esc(b.metrics.hourlyRateUsd) + '/h').replace('<div class="sv">', '<div class="sv small">'));
+  const models = r => r ? (r.metrics.modelUsd || 0) : 0;
+  const sa = modelSplit(a), sb = modelSplit(b);
+  tiles.push(tile('LLM spend per case', models(a), models(b), models(d), 'lower', money,
+    'writer ' + money(sa.writerUsd) + ' → ' + money(sb.writerUsd) + ' · LLM gate decisions ' + money(sa.gatesUsd) + ' (' + sa.gateCalls + ') → ' + money(sb.gatesUsd) + ' (' + sb.gateCalls + ')').replace('<div class="sv">', '<div class="sv small">'));
+  if (a.metrics.writerModel && b.metrics.writerModel) {
+    const short = r => r && r.metrics.writerModel ? String(r.metrics.writerModel).split('/').pop() : '–';
+    tiles.push('<div class="score"><div class="sl">Reply written by</div><div class="sv text"><span>' + esc(short(a)) + '</span><span class="arr">→</span><span>' + esc(short(b)) +
+      '</span></div><div class="ss">the planner picks the cheapest safe model' + (d ? ' · own database ' + esc(short(d)) : '') + '</div></div>');
+  }
+  const tradeoff = a.metrics.writerPromptTokens && b.metrics.writerPromptTokens && b.metrics.writerPromptTokens > a.metrics.writerPromptTokens
+    ? ' Trade-off: with Meko the writer\'s prompt carried ' + b.metrics.writerPromptTokens + ' tokens vs ' + a.metrics.writerPromptTokens + ', and still went to a cheaper model.' : '';
+  lastCompare = {a, b};
+  return '<div class="scoreboard">' + tiles.join('') + '</div>' + '<div class="proj" id="projection">' + projectionHtml(a, b) + '</div>' +
+    '<div class="punch"><b>' + esc(selected.punchline) + '</b> Same agents, same planner, same code; only the context store differs. Counts are measured; minutes and cost are estimates.' + esc(tradeoff) + '</div>';
+}
+
+// ---------------------------------------------------------------- monthly projection
+let lastCompare = null, projVolume = 2000;
+try { projVolume = Number(localStorage.getItem('projVolume')) || 2000; } catch (e) { /* default */ }
+
+/** What one unit of each counted metric is called in a projection ("6,000 customer re-asks avoided"). */
+const PROJ_NOUNS = {customerQuestions: 'customer re-asks', repeatedSteps: 'repeated steps', evidenceRequests: 'evidence requests',
+  missedRequirements: 'missed requirements', hypothesesTested: 'hypothesis tests', recordsRequested: 'records requests'};
+
+/**
+ * Per-case difference (without → with Meko) × cases per month. Only differences are shown: a story whose saving is
+ * customer waiting shows waiting, not a zero labour line. Counts are measured; hours and dollars use the estimates.
+ */
+function projectionHtml(a, b) {
+  const n = projVolume, fmt = v => Math.round(v).toLocaleString();
+  const usd = v => Math.abs(v) >= 100 ? '$' + Math.round(v).toLocaleString() : '$' + v.toFixed(2);
+  const m = (r, k) => r.metrics[k] || 0;
+  const cells = [];
+  // Counted metrics first: they are measured, not estimated.
+  headlineOf(a).filter(h => h[0] !== 'minutes').forEach(h => {
+    const delta = (m(a, h[0]) - m(b, h[0])) * n;
+    if (delta) cells.push([delta > 0 ? 'win' : 'lose', fmt(Math.abs(delta)), (PROJ_NOUNS[h[0]] || h[1].toLowerCase()) + (delta > 0 ? ' avoided' : ' added'), 'counted from the plans × volume']);
+  });
+  const handsOn = (m(a, 'handsOnMinutes') - m(b, 'handsOnMinutes')) * n / 60;
+  if (Math.round(handsOn)) cells.push([handsOn > 0 ? 'win' : 'lose', fmt(Math.abs(handsOn)) + ' h', 'hands-on hours ' + (handsOn > 0 ? 'saved' : 'added'), 'estimate']);
+  const labour = (m(a, 'effortUsd') - m(b, 'effortUsd')) * n;
+  if (Math.round(labour)) cells.push([labour > 0 ? 'win' : 'lose', usd(Math.abs(labour)), 'labour ' + (labour > 0 ? 'saved' : 'added'), 'estimate at $' + esc(b.metrics.hourlyRateUsd) + '/h']);
+  const waiting = (m(a, 'waitingMinutes') - m(b, 'waitingMinutes')) * n / 60;
+  if (Math.round(waiting)) cells.push([waiting > 0 ? 'win' : 'lose', fmt(Math.abs(waiting)) + ' h', 'customer and queue waiting ' + (waiting > 0 ? 'saved' : 'added'), 'estimate']);
+  // Model spend as both monthly totals: the point is that context costs next to nothing in tokens, not a delta.
+    const providers = [...new Set(Object.values(tierInfo).map(t => t.provider).filter(Boolean))].join('/') || 'model';
+  cells.push(['', usd(m(a, 'modelUsd') * n) + ' → ' + usd(m(b, 'modelUsd') * n), 'LLM spend (' + esc(providers) + ' list price)', 'reply writer + gate decisions; Meko calls are not model calls']);
+  return '<div class="proj-head"><b>Per month at</b><input id="projVolume" type="number" min="1" step="100" value="' + esc(n) + '" aria-label="Cases per month"> cases' +
+    '<span>Per-case difference × volume. Counts are measured; hours and dollars use the effort estimates.</span></div>' +
+    '<div class="proj-grid">' + cells.map(c => '<div class="p"><div class="v ' + c[0] + '">' + c[1] + '</div><div class="l">' + c[2] + '<br><span style="opacity:.75">' + c[3] + '</span></div></div>').join('') + '</div>';
+}
+
+// The input lives inside the re-rendered block, so listen on the document.
+document.addEventListener('change', e => {
+  if (!lastCompare || e.target.id !== 'projVolume') return;
+  projVolume = Math.max(1, Number(e.target.value) || 2000);
+  try { localStorage.setItem('projVolume', String(projVolume)); } catch (err) { /* not persisted */ }
+  el('projection').innerHTML = projectionHtml(lastCompare.a, lastCompare.b);
+});
+
+function renderCompare(x) {
+  const d = x.database;
+  el('results').innerHTML = '<section class="panel" style="margin-top:12px">' + summaryHtml(x.withoutMeko, x.withMeko, d) + '</section>' +
+    '<div class="cols ' + (d ? 'three' : '') + '">' + columnHtml(x.withoutMeko, x.withMeko) + (d ? columnHtml(d, x.withoutMeko) : '') +
+    columnHtml(x.withMeko, x.withoutMeko) + '</div>';
+}
+
+function renderSingle(run) {
+  el('results').innerHTML = '<div class="cols one">' + columnHtml(run, null) + '</div>';
+}
+
+function renderSeries(x) {
+  castRuns[selected.id] = {without: x.withoutMeko || [], db: x.database || [], with: x.withMeko || []};
+  renderCast();
+  const groups = [['withoutMeko', 'Without Meko', ''], ['database', 'Your own database', 'db'], ['withMeko', 'With Meko', 'meko']].filter(g => x[g[0]]);
+  const cases = x.withMeko.length;
+  const sum = (runs, k) => runs.reduce((t, r) => t + (r.metrics[k] || 0), 0);
+  const a = x.withoutMeko, b = x.withMeko, d = x.database;
+  // What each case did, in words, under its bar.
+  const validated = r => r.phases.some(p => p.executed.some(e => e.action === 'validateKnownPattern'));
+  const stepMin = (r, action) => r.steps.filter(st => st.action === action).reduce((t, st) => t + st.minutes, 0);
+  const did = r => {
+    const ran = r.phases.flatMap(p => p.executed.map(e => e.action));
+    const shared = r.steps.some(st => st.action === 'closeAndShare' && st.kind === 'CONTEXT');
+    const n = r.metrics.hypothesesTested || 0;
+    return validated(r) ? 'validated a known lesson' : 'tested ' + n + ' hypothes' + (n === 1 ? 'is' : 'es') + (shared ? ' + wrote up the lesson' : '');
+  };
+  const max = Math.max(...groups.flatMap(g => x[g[0]].map(r => r.metrics.minutes)), 1);
+  const chart = '<div class="gchart">' + Array.from({length: cases}, (_, i) => '<div class="gcase"><div class="gbars">' + groups.map(g => {
+      const r = x[g[0]][i];
+      return '<div class="gbar ' + g[2] + '" title="' + esc(g[1] + ', case ' + (i + 1) + ': ' + r.metrics.minutes + ' min, ' + did(r)) + '"><div class="v">' + r.metrics.minutes +
+        '</div><div class="fillb" style="height:' + Math.max(3, r.metrics.minutes / max * 170) + 'px"></div></div>';
+    }).join('') + '</div></div>').join('') + '</div>' +
+    '<div class="gcap">' + Array.from({length: cases}, (_, i) => '<div><b>Case ' + (i + 1) + '</b> · ' + (i === 0 ? 'EU payments-ops team' : 'your support app') +
+      groups.map(g => '<small>' + esc(g[1]) + ': ' + esc(did(x[g[0]][i])) + '</small>').join('') + '</div>').join('') + '</div>' +
+    '<div class="glegend">' + groups.map(g => '<span><i style="background:' + (g[2] === 'meko' ? 'var(--accent)' : g[2] === 'db' ? 'var(--blue)' : '#3c4d5e') + '"></i>' + esc(g[1]) + '</span>').join('') +
+    '<span>Estimated minutes per case</span></div>';
+  // Every number in the explanation is read from the runs above, so it always matches the chart.
+  const first = a[0], firstMeko = b[0], second = cases > 1 ? 1 : 0;
+  const hyp = first.metrics.hypothesesTested || 0;
+  const writeUp = firstMeko.metrics.minutes - first.metrics.minutes;
+  const later = (runs, from) => runs.slice(from);
+  const explain = '<ol class="story-steps">' +
+    '<li><b>Case 1: the EU team solves it the hard way.</b> ' + hyp + ' hypothes' + (hyp === 1 ? 'is' : 'es') + ', ' + stepMin(first, 'testHypotheses') + ' minutes.' +
+    (writeUp > 0 ? ' With a place to keep it, the agent also writes the root cause up' +
+      (d ? ' (to Meko\'s shared knowledge, or to its own database)' : ' and promotes it to Meko\'s shared knowledge') + ': ' + writeUp + ' extra minute' + (writeUp === 1 ? '' : 's') +
+      ', which is why ' + (d ? 'those bars are' : 'that bar is') + ' ' + firstMeko.metrics.minutes + ', not ' + first.metrics.minutes + '.' : '') + '</li>' +
+    (cases > 1 ? '<li><b>Case 2: your app, a different application.</b> ' + (validated(b[1])
+      ? 'With Meko it finds the EU team\'s lesson, checks it fits this case, and validates it in ' + stepMin(b[1], 'validateKnownPattern') + ' minutes instead of investigating.'
+      : 'With Meko this run did not reuse the lesson: it ' + did(b[1]) + '.') +
+      (d ? (validated(d[1]) ? ' Your own database also found a lesson to reuse.' : ' With your own database it cannot: the lesson is in the EU team\'s database, so it ' + did(d[1]) + '.') : '') + '</li>' : '') +
+    (cases > 2 ? '<li><b>Case 3 onwards.</b> With Meko ' + later(b, 2).filter(validated).length + ' of ' + later(b, 2).length + ' took the cheap path.' +
+      (d ? ' Your own database: ' + later(d, 2).filter(validated).length + ' of ' + later(d, 2).length + ', once your app had solved the case itself.' : '') +
+      ' A case that only looks like the pattern is rejected, not misdiagnosed (try "A case the pattern doesn\'t fit").</li>' : '') + '</ol>';
+
+  // Scoreboard: totals over the series, then the steady state projected per month.
+  const tile = (label, va, vb, vd, fmt, note) => {
+    const cls = (p, q) => fmt(p) === fmt(q) ? '' : (p < q ? 'win' : 'lose');
+    return '<div class="score"><div class="sl">' + esc(label) + '</div><div class="sv"><span class="' + cls(va, vb) + '">' + esc(fmt(va)) + '</span><span class="arr">→</span><span class="' +
+      cls(vb, va) + '">' + esc(fmt(vb)) + '</span></div><div class="ss">' + (note || 'without → with Meko') + (vd != null ? ' · own database ' + esc(fmt(vd)) : '') + '</div></div>';
+  };
+  const scratch = runs => runs.filter(r => !r.phases.some(p => p.executed.some(e => e.action === 'validateKnownPattern'))).length;
+  const tiles = [
+    tile('Minutes for ' + cases + ' cases (est.)', sum(a, 'minutes'), sum(b, 'minutes'), d ? sum(d, 'minutes') : null, v => v),
+    tile('Hypotheses tested', sum(a, 'hypothesesTested'), sum(b, 'hypothesesTested'), d ? sum(d, 'hypothesesTested') : null, v => v),
+    tile('Cases investigated from scratch', scratch(a), scratch(b), d ? scratch(d) : null, v => v, 'without → with Meko: the organization pays once'),
+    tile('LLM spend, ' + cases + ' cases', sum(a, 'modelUsd'), sum(b, 'modelUsd'), d ? sum(d, 'modelUsd') : null, money, 'writer + LLM gate decisions, list price')
+  ];
+  // Monthly projection from the steady state (the last case): only the first case of the month pays to learn.
+  lastCompare = {a: a[cases - 1], b: b[cases - 1]};
+  el('results').innerHTML = '<section class="panel" style="margin-top:12px"><div class="scoreboard">' + tiles.join('') + '</div>' +
+    '<div class="proj" id="projection">' + projectionHtml(lastCompare.a, lastCompare.b) + '</div>' +
+    '<div class="punch"><b>' + esc(selected.punchline) + '</b> The projection compares case ' + cases + ' without and with Meko, after the lesson exists. Counts are measured; minutes and cost are estimates.' +
+    (d && cases > 1 ? ' Against your own database the steady state is the same once your app has solved the pattern itself; Meko\'s edge there is every pattern another team learns first (case 2: ' +
+      d[1].metrics.minutes + ' → ' + b[1].metrics.minutes + ' min).' : '') + '</div>' +
+    '<div class="series2"><div>' + chart + '</div><div>' + explain + '</div></div>' +
+    '<div class="legend">Showing the detail of case ' + (second + 1) + ' below' + (second ? ': the first case your app handles' : '') + '.</div></section>' +
+    '<div class="cols ' + (groups.length === 3 ? 'three' : '') + '">' + groups.map(g => columnHtml(x[g[0]][second], g[0] === 'withoutMeko' ? x.withMeko[second] : x.withoutMeko[second])).join('') + '</div>';
+}
+
+/** Model name plus reasoning effort when the same model serves two tiers at different effort. */
+function modelLabel(x) {
+  const name = x.model.split('/').pop();
+  const sameModel = Object.values(tierInfo).filter(o => o.model === x.model).length > 1;
+  return sameModel && x.effort ? name + ' (' + x.effort + ')' : name;
+}
+
+async function loadLlmStatus() {
+  const pill = el('llmStatus');
+  try {
+    const s = await (await fetch('/api/llm/status')).json();
+    const t = s.tiers || {};
+    tierInfo = t;
+    const ok = Object.values(t).filter(x => x.available);
+    pill.textContent = !s.enabled ? 'Models: disabled (templates)' : 'Models: ' + Object.values(t).map(x => modelLabel(x) + (x.available ? '' : ' ✕')).join(' · ');
+    pill.className = 'pill ' + (ok.length ? 'live' : 'down');
+    pill.title = Object.values(t).map(x => x.tier + ': ' + x.provider + ' ' + x.model + (x.effort ? ', reasoning effort ' + x.effort : '') + ' — ' + x.diagnosis).join('\n');
+  } catch (e) { pill.textContent = 'Models: unknown'; pill.className = 'pill down'; }
+}
+
+function renderOutage(on) {
+  el('outageBtn').classList.toggle('on', on);
+  el('outageBtn').textContent = on ? 'End Meko outage' : 'Simulate Meko outage';
+  el('outageBanner').classList.toggle('on', on);
+}
+
+el('outageBtn').onclick = async () => {
+  const on = !el('outageBtn').classList.contains('on');
+  try { renderOutage((await post('/api/meko/outage?on=' + on)).simulatedOutage); } catch (e) { el('status').textContent = 'Error: ' + e.message; }
+};
+
+el('seedBtn').onclick = async () => {
+  const btn = el('seedBtn');
+  btn.disabled = true;
+  el('status').textContent = 'Seeding the live datapack…';
+  try {
+    // A partial failure comes back as 502 with the same body, so read it rather than throwing.
+    const response = await fetch('/api/meko/seed', {method: 'POST'});
+    const r = await response.json().catch(() => ({error: response.statusText}));
+    if (!r.seeded) throw new Error(r.error || response.statusText);
+    const outcomes = Object.entries(r.seeded);
+    const written = outcomes.filter(([, v]) => v.startsWith('promoted') || v.startsWith('memory written')).length;
+    const present = outcomes.filter(([, v]) => v.startsWith('already')).length;
+    const problems = outcomes.filter(([, v]) => !v.startsWith('promoted') && !v.startsWith('memory written') && !v.startsWith('already'))
+      .map(([k, v]) => k + ': ' + v).concat(r.errors);
+    el('status').textContent = 'Seeded ' + r.datapack + ': ' + written + ' written, ' + present + ' already present' +
+      (problems.length ? '. Problems: ' + problems.join('; ') : '') + '.';
+    el('status').title = outcomes.map(([k, v]) => k + ' — ' + v).join('\n');
+  } catch (e) {
+    el('status').textContent = 'Seeding failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+async function loadMekoStatus() {
+  const pill = el('mekoStatus');
+  try {
+    const s = await (await fetch('/api/meko/status')).json();
+    renderOutage(!!s.simulatedOutage);
+    mekoLive = !!s.connected;
+    el('seedBtn').hidden = !s.connected;
+    if (s.connected) {
+      const k = s.knowledge || {};
+      pill.textContent = 'Meko: live · ' + s.datapackName + (k.documents != null ? ' · ' + k.documents + ' KB doc' + (k.documents === 1 ? '' : 's') : '');
+      pill.className = 'pill live';
+      pill.title = (s.datapackId || '') + (k.documents != null ? '\nKnowledge base: ' + k.documents + ' uploaded document(s), ' + (k.promoted ?? '?') + ' promoted memories' : '') +
+        (k.documents === 0 ? '\nUpload src/main/resources/kb/*.md through the Meko app, then seed.' : '');
+    }
+    else { pill.textContent = s.configured ? 'Meko: unreachable · using stand-in' : 'Meko: offline · using stand-in'; pill.className = 'pill down'; pill.title = s.diagnosis || ''; }
+  } catch (e) { pill.textContent = 'Meko: unknown'; pill.className = 'pill down'; }
+  if (selected) renderStory();
+}
+
+async function load() {
+  try {
+    stories = await (await fetch('/api/stories')).json();
+    // Deep links for presenters: ?story=<id>&run=compare|with|without|series
+    const params = new URLSearchParams(location.search);
+    selected = stories.find(s => s.id === params.get('story')) || stories[0];
+    renderCatalog(); renderStory();
+    const auto = {compare: 'b-compare', series: 'b-series', mismatch: 'b-mismatch'}[params.get('run')];
+    if (auto && el(auto)) el(auto).click();
+  } catch (e) { el('status').textContent = 'Unable to load stories: ' + e.message; }
+  loadMekoStatus();
+  loadLlmStatus();
+}
+load();
+</script>
+</body>
+</html>

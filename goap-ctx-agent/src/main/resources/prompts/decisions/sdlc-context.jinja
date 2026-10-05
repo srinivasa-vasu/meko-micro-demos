@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}For pull request {{ pr }}, which changes the payment retry contract: is an architecture decision relevant to the change, is there an open review request that must be addressed before approval, and is there an incident lesson that applies? Only items about {{ pr }} itself count; ignore other PRs and anything marked superseded. A request that a later record says was addressed is no longer open.{% endblock %}
+{% block shape %}{"adrRelevant": true or false, "openReviewRequest": "the request, or null", "incidentLesson": "the lesson, or null"}{% endblock %}

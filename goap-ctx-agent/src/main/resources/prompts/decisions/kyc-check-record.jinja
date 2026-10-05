@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}A reviewer is checking KYC review {{ review }}. Does the record below contain the analyst's working record: which previous review was used (or that none was), the materiality judgement, the evidence requested, and the sign-off?{% endblock %}
+{% block shape %}{"workingRecord": true or false}{% endblock %}

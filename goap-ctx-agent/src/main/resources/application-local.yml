@@ -1,0 +1,28 @@
+# Local model tiers on Ollama. Add this profile to a provider profile, which keeps the frontier tier:
+#   SPRING_PROFILES_ACTIVE=groq,local-llm   or   SPRING_PROFILES_ACTIVE=openrouter,local-llm
+# On its own (SPRING_PROFILES_ACTIVE=local-llm) the frontier tier is unconfigured and the planner routes around it.
+# Local models have no list price, so the planner uses fallback-planner-price for them.
+# On a 16 GB laptop the local models compete with everything else for memory and CPU; prefer the Groq default.
+goap:
+  llm:
+    tiers:
+      slm:
+        provider: ollama
+        base-url: ${SLM_BASE_URL:http://localhost:11434/v1}
+        model: ${SLM_MODEL:gemma3:4b}
+        api-key: ""
+        requires-key: false
+        max-tokens: 600
+        usd-per1m-input: 0
+        usd-per1m-output: 0
+        fallback-planner-price: 0.05
+      llm:
+        provider: ollama
+        base-url: ${LLM_BASE_URL:http://localhost:11434/v1}
+        model: ${LLM_MODEL:llama3.1:latest}
+        api-key: ""
+        requires-key: false
+        max-tokens: 600
+        usd-per1m-input: 0
+        usd-per1m-output: 0
+        fallback-planner-price: 0.15

@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}The previous investigator died mid-investigation. According to the context, has the latency spike already been correlated with a deployment, has the database already been ruled out, and what is the next step?{% endblock %}
+{% block shape %}{"deployCorrelated": true or false, "databaseRuledOut": true or false, "nextStep": "short description"}{% endblock %}

@@ -1,0 +1,11 @@
+{# Shared wrapper for every gate decision. Each gate template in decisions/ extends this and fills the two blocks. #}
+{{ caseTag }} [decision {{ decisionId }}]
+You make one judgement for an agent. Use ONLY the context below. If the context does not establish something, treat it as unknown (null or false); never guess or use outside knowledge.
+
+Question: {% block question %}{% endblock %}
+
+Context:
+{{ context }}
+
+Answer with a single JSON object and nothing else, in this shape:
+{% block shape %}{% endblock %}

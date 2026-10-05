@@ -1,0 +1,44 @@
+# Model tiers on Groq (the default profile). Create a key at console.groq.com (no card): export GROQ_API_KEY=...
+# Prices are Groq list prices (free-plan calls are not billed).
+goap:
+  llm:
+    tiers:
+      slm:
+        provider: groq
+        base-url: ${SLM_BASE_URL:https://api.groq.com/openai/v1}
+        model: ${SLM_MODEL:openai/gpt-oss-20b}
+        api-key: ${GROQ_API_KEY:}
+        requires-key: true
+        usd-per1m-input: 0.075
+        usd-per1m-output: 0.30
+        expected-output-tokens: 300
+        extra-body:
+          reasoning_effort: low
+          include_reasoning: false
+      llm:
+        provider: groq
+        base-url: ${LLM_BASE_URL:https://api.groq.com/openai/v1}
+        model: ${LLM_MODEL:openai/gpt-oss-120b}
+        api-key: ${GROQ_API_KEY:}
+        requires-key: true
+        usd-per1m-input: 0.15
+        usd-per1m-output: 0.60
+        expected-output-tokens: 400
+        fallback-planner-price: 0.15
+        extra-body:
+          reasoning_effort: low
+          include_reasoning: false
+      frontier:
+        provider: groq
+        base-url: ${FRONTIER_BASE_URL:https://api.groq.com/openai/v1}
+        model: ${FRONTIER_MODEL:openai/gpt-oss-120b}
+        api-key: ${GROQ_API_KEY:}
+        requires-key: true
+        max-tokens: 4000
+        usd-per1m-input: 0.15
+        usd-per1m-output: 0.60
+        expected-output-tokens: 1500
+        fallback-planner-price: 0.30
+        extra-body:
+          reasoning_effort: high
+          include_reasoning: false

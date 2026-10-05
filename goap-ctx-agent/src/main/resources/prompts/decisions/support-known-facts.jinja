@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}Which of these facts about the customer's case are already established: the transaction id, the amount, the merchant, whether the customer already retried and restarted the app, and whether the card is in the customer's possession?{% endblock %}
+{% block shape %}{"transaction": "id or null", "amount": "amount with currency or null", "merchant": "name or null", "troubleshootingDone": true or null, "cardWithCustomer": true or null}{% endblock %}

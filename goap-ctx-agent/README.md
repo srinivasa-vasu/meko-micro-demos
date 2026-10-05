@@ -1,0 +1,292 @@
+# Meko × Embabel GOAP: Agents That Don't Lose the Plot
+
+Five relatable agent workflows **across system boundaries**, each run by the **same agents, the same Embabel GOAP
+planner and the same code**, with and without **[Meko](https://mekodata.ai/)**. A toggle (*Show the build-it-yourself
+comparison*) adds a third lane, **your application's own database**, to show what Meko adds over what you would build
+yourself.
+
+> **Embabel GOAP decides what to do next from what the agent knows. Meko decides what the agent knows.**
+
+## The stories
+
+Each story states its boundary on screen:
+
+| Story | Boundary | Without | Your own database | With Meko |
+|---|---|---|---|---|
+| **Don't Make Me Explain It Again** | A vendor's chatbot (its own store) escalates to your payments specialist; only the CRM ticket crosses | 3 customer re-asks · 56 min | 3 · 56 min | 0 · 19 min |
+| **The Agent Died at 2 AM** | The payments team's on-call agent dies; your platform SRE agent takes over with only the incident id | 2 repeated steps · 80 min | 2 · 80 min | 0 · 50 min |
+| **What Changed Since Last Review?** | Last quarter's review was written by the analyst desk's agent | 5 evidence requests · 166 min | 5 · 166 min | 1 · 41 min |
+| **I Was on Vacation. Catch Me Up.** | Decisions and requests were written by Claude Code, the PR bot, the incident bot | 1 missed requirement · 158 min | 1 · 158 min | 0 · 53 min |
+| **The Organization Learned** | Case 1 is solved by the EU payments-ops team's agent, cases 2-3 by your support app | 3 cases: 264 min | 199 min | 131 min |
+
+Counts (re-asks, repeated steps, evidence requests, missed requirements) come from the plans the planner actually
+chose. Minutes are estimates; see [How effort is estimated](#how-effort-is-estimated).
+
+### Follow-ups: decision traces, read back later
+
+Two stories have a follow-up in which someone accountable, given only an id, reads the case's record back:
+
+* **Audit this transaction** (story 1). A compliance auditor reviews how the dispute was handled. Every party writes to
+  the transaction's conversation, keyed by the transaction id, so with Meko one `conversation_get` returns the
+  customer's account, the handoff, every re-ask, the settlement check, each decision and the resolution.
+* **Check this review** (story 3). A model-risk reviewer checks the agent's KYC review against the KYC re-review
+  standard: which previous review it compared against and what it passed over, the materiality decision, each evidence
+  request and the sign-off.
+
+Without the record, each piece has to be requested from the party that holds it, and waited for, and what comes back
+is the outcome only: a party's own system keeps what was done, not how an agent's decision was made. Decision traces
+exist only where an agent wrote them: in Meko, or in your own database for your own application's agents.
+
+| Follow-up | Without | Your own database | With Meko |
+|---|---|---|---|
+| **Audit this transaction** | 3 records requested · 0 decision traces · 192 min | 2 · 1 decision trace · 162 min | 0 · 2 decision traces · 17 min |
+| **Check this review** | 2 records requested · 0 decision traces · 102 min | 1 · 1 decision trace · 42 min | 0 · 2 decision traces · 22 min |
+
+## What you see in the app
+
+Open `http://localhost:8080` and pick a story from the bar at the top.
+
+* **The story header** states the problem, the system boundary, and which of the four things the story is about:
+  memory, knowledge, the right context, decision traces. *How this story works* (collapsed by default) explains the
+  without-Meko and with-Meko paths and what the planner does.
+* **Agents in this case** (collapsed by default) shows every agent in the case in the order it acts: its id, the system
+  it lives in, what it does, whether it acted earlier (its writes are already in shared context), now, or later (the
+  follow-up), and what crosses the boundary to the next one. After a run, each agent shows what it actually did in
+  each lane: its reads and writes to shared context, the decisions it traced, and how many of its records other agents
+  used. Without Meko, the agents across a boundary have nothing in shared context.
+* **Run the case** runs the same agents without Meko and with Meko, live and side by side (and in your own database
+  too, with the build-it-yourself comparison switched on). The button that started the run stays highlighted while it
+  runs and afterwards, so it is clear which action produced the results on screen.
+* **The follow-up** (*Audit this transaction*, *Check this review*) becomes available once the case has run.
+* **Resets** start a story over where a run changes what the next run sees: *Reset learning* (story 5), *Start a new
+  review cycle* (story 3), *Reopen the review request* (story 4). Each says what it did.
+* **Story / Full detail.** *Story* (the default) shows the outcome, the steps, the context used and the cost. *Full
+  detail* adds the planner's plans and replans, the decisions at each gate, which model wrote the reply and why, and
+  every Meko call with its latency.
+
+Each lane then shows:
+
+* **A summary** of the headline counts, without → with Meko, and a monthly projection at a volume you set.
+* **The steps** the planner ran, each with its estimated minutes; hover for the basis of the estimate.
+* **Context the agents used, and who wrote it**, and under **Passed over, and why**, what was retrieved and
+  deliberately not used. Uploaded policy documents are shown in full.
+* **For a follow-up, the audit trail**: one small table per entry of the record, in order, with *Who* wrote it, its
+  kind (decision, record, dialogue), *What* was asked or done, *How* it was decided or why, the *Response*, the *Issue*
+  the audit flags, and the *Source*: the case's conversation, or which party it had to be requested from.
+* **Cost**: model spend at list price, the effort cost of the hands-on minutes, and Meko calls and latency.
+
+The header shows whether Meko and the models are connected, and has two more controls: *Seed datapack* (with live
+Meko) and *Simulate Meko outage*.
+
+A slide deck sets the context before the live demo: open [`assets/overview.html`](assets/overview.html) in a browser.
+It covers the five use cases and the audit follow-ups, the agents and how they interact (including the
+auditor and the model-risk reviewer who read a case back later), the four things a context
+engine provides, and the data infrastructure tax behind each. It is one self-contained file with light and dark themes,
+navigable with the arrow keys, and prints one slide per page.
+
+## What the demo shows
+
+**Memory → knowledge → the right context → decision traces.** Each story states which of these it exercises: memory
+that agents and tools wrote, knowledge people uploaded or agents promoted, the right context for this case, and decision
+traces, each gate decision written into the case's conversation with who made it and on how much context. Retrieval is
+not reuse: each lane names what it passed over and why.
+
+**Distractors.** The seed adds five look-alikes: an outdated 2025 review of the same customer, a review of a
+near-identical customer id, a superseded early decision on the same pull request, an open request on a different pull
+request, and a look-alike chargeback policy. The agents pick the right item in each case. Choosing among what was
+retrieved is a decision, not a code filter.
+
+**Every story writes its result back.** The payments specialist records its resolution. The incident's conversation
+holds the timeline: what each agent did, what was redone and why, the finding and the mitigation. The catch-up agent
+records that the reviewer's request was addressed, so the next catch-up knows it is closed. The KYC review records its
+decision. Each payment case records its root cause and whether it was diagnosed by reusing a lesson (whose), after
+rejecting one (why), or by testing hypotheses. A result that supersedes an agent's own earlier memory updates it in
+place; one agent never edits another's. These are plain writes, with no model calls.
+
+**Results written back without personal data.** A KYC review writes back the decision, the risk class and **keyed
+fingerprints** of the profile (an HMAC per field, scoped to the customer, keyed with a secret that never leaves the
+application), plus a coarse monthly-volume band: never the address, the ownership or a beneficiary's name. The next
+review fingerprints the current profile with the same key and diffs it: "address unchanged, one new beneficiary".
+The models see the same fingerprints and counts, never the profile, and the review's record refers to other reviews by
+date and id only.
+
+**Your own database.** If all your agents live in one application you own, your own database can do the job: within one
+application it keeps its own handoffs, checkpoints and lessons (in story 5 it reuses the lesson it rediscovered itself
+from case 3). It never sees what another system wrote. The moment agents cross a boundary (a team, a vendor, a
+framework, a tool) you need a shared context layer: build it, or use Meko. The right context needs **reach** (what
+other teams, vendors and tools wrote), **meaning** (found without shared keys), **provenance** (who wrote it and when)
+and **promotion** (lessons becoming organizational knowledge), for every team. That is the data infrastructure tax Meko
+takes on. Every silo pays once; with Meko the organization pays once.
+
+**The right model for the job.** Every story ends with a response writer (a customer reply, a handover note, a review
+rationale, a catch-up brief, a resolution note, an audit finding). Which model writes it is a planning decision: rich
+context has no gaps and the planner picks the small model; gaps make a larger model the cheapest safe choice.
+
+**Trust.** *A case the pattern doesn't fit* (story 5): Meko retrieves the learned pattern, the agent checks it against
+the case's signals and rejects it, and the planner investigates instead of misdiagnosing. *Simulate Meko outage*: every
+context-store call fails, "with Meko" runs degrade to the path an agent without memory takes, and every failed call is
+visible.
+
+## How it works
+
+Each story is one or more Embabel agents using the GOAP planner. Actions declare preconditions and effects. A "gate"
+action (open the case file, restore the checkpoint, look up the prior review) can lead to several outcomes; once it
+has run, the planner **replans** against what was actually recovered. When context is missing, the only way to reach
+the goal goes through more expensive actions: ask the customer, redo the database check, re-verify every KYC area.
+
+* **The judgement at each gate is made by a model reading only the context the agent has**: which facts are already
+  established, how far the dead investigator got, which changes are material, whether a review request is open,
+  whether a learned pattern fits. The planner's conditions come from the answer, so the without-Meko behaviour emerges
+  from thin context rather than from separate code. The small model decides; if no model is available, a
+  deterministic rule decides, and the decision record says which.
+* Handoffs and takeovers run as **separate agent processes** that share only what is passed explicitly (a ticket note,
+  an incident id) plus whatever is in the context store. The SRE investigator is genuinely terminated mid-plan.
+* Counts are measured from the run: actions executed, replans, planner cost, Meko calls and latency, and the business
+  effects the actions record.
+* The lanes run at the same time and stream to the browser as they go: plans appear, steps complete, replans are
+  highlighted, and every Meko call, decision and model call shows up as it happens.
+
+### How effort is estimated
+
+Every minute in the demo is an **illustrative assumption**, not a measurement. No figure comes from a study or
+production data. They live in one file, [`estimates.yml`](src/main/resources/effort/estimates.yml), one entry per step
+an agent can take, each with:
+
+* `minutes`: human-equivalent minutes for the step (agents act in seconds; this is what the step costs the
+  organization when a person does it or waits on it);
+* `time`: `hands-on` (someone on your side is working) or `waiting` (on a customer's reply or another team's queue);
+* `basis`: one line on why, shown when you hover a step's minutes in the app.
+
+What is measured is **which steps ran**: the planner decides that from the context it had, with the same estimates in
+every lane. A story's minutes are the sum of its executed steps; a step that redoes earlier work uses the original
+step's estimate. The effort cost is **hands-on minutes** × `HOURLY_RATE_USD` (default $60/h, also an assumption);
+waiting minutes are reported but not priced as labour.
+
+| Story | Without Meko | With Meko | Kind of saving |
+|---|---|---|---|
+| Don't Make Me Explain It Again | 56 (13 hands-on, 43 waiting) | 19 (13 hands-on, 6 waiting) | Customer waiting and time to resolution; your specialist's effort is the same |
+| The Agent Died at 2 AM | 80 | 50 | Hands-on: two investigation steps not redone |
+| What Changed Since Last Review? | 166 | 41 | Hands-on: five full re-verifications replaced by a diff and one targeted request |
+| I Was on Vacation. Catch Me Up. | 158 | 53 | Hands-on: 90 min of digging and a 40-min bounced review |
+| The Organization Learned (3 cases) | 264 | 131 | Hands-on: hypotheses not re-tested on cases 2 and 3 |
+
+A few large estimates carry most of each gap (the 25-min policy escalation, 90 min of digging, a 40-min bounced review,
+5 × 30-min re-verifications); halve them and every story still favours Meko, because the steps themselves disappear
+from the plan. To use your own numbers, edit the file, or override one at startup, for example
+`--goap.effort.estimates.payments-specialist.escalate-for-policy.minutes=10`.
+
+## Run
+
+Java 21+, Spring Boot 4.1.1, Embabel Agent 1.5.1.
+
+```bash
+mvn spring-boot:run           # offline: "With Meko" uses an in-memory stand-in
+```
+
+Open `http://localhost:8080`. A link can run a story on load, for example `/?story=agent-died-2am&run=compare`
+(`run` = `compare` | `series` | `mismatch`).
+
+### Live Meko
+
+```bash
+export MEKO_ENABLED=true
+export MEKO_API_KEY='mko_tkn_...'
+export MEKO_DATAPACK_NAME='meko-goap'      # or pin MEKO_DATAPACK_ID
+export KYC_FINGERPRINT_KEY='<your secret>' # the key for KYC profile fingerprints; use the same one wherever you compare
+mvn spring-boot:run
+```
+
+Then:
+
+1. Upload the six documents in `src/main/resources/kb/` to the datapack's knowledge base in the Meko app.
+2. Press **Seed datapack** in the app header (or `POST /api/meko/seed`). It writes what other agents and tools wrote
+   (a prior KYC review in fingerprint form, notes from a coding assistant, a PR review bot and an incident bot) and the
+   distractors. It is safe to repeat. It also removes any KYC review stored in the datapack as plain text, and reports any it
+   could not remove.
+
+The header shows the datapack and how many documents its knowledge base holds.
+
+#### Knowledge base documents
+
+Meko's shared knowledge has two sources, and the demo uses both: **documents** people upload through the Meko app, and
+**lessons** agents promote from memory (the root cause the EU team's agent promotes in story 5). Knowledge search covers
+both. The documents are fictional and short:
+
+| Document | Used by |
+|---|---|
+| `CARD-DISPUTE-07` failed-capture dispute policy | Your payments specialist chooses it (story 1) |
+| `CARD-DISPUTE-03` chargeback policy | The look-alike it must pass over (story 1) |
+| `SUPPORT-STD-02` payments support handoff standard | Organizational context for story 1 |
+| `RB-PAY-12` payment API latency runbook | Organizational context for story 2 |
+| `KYC-STD-04` periodic re-review standard | Your KYC agent's materiality decision, and the review check (story 3) |
+| `ADR-194` payment retry idempotency | Your catch-up agent's brief (story 4) |
+
+Upload the documents before seeding. Where a document is missing, the seed promotes a one-line version instead, so the
+stories still work.
+
+A failed Meko call never stops a run: it is recorded, and the planner takes the path an agent without that context
+would take.
+
+### Offline stand-in
+
+Without Meko configured, "With Meko" runs use an in-memory stand-in with the same behaviour (cross-agent memory,
+case-scoped recall, promotion into shared knowledge, conversations, artifacts), keyword search instead of semantic
+search, and nothing kept across restarts. The app labels these runs as a stand-in. The "your own database" lane uses
+the same kind of store with nothing seeded: it holds only what this application's agents wrote.
+
+### Model tiers
+
+The response writer has three tiers, and the small tier also makes the gate decisions. The provider is a Spring
+profile:
+
+| Profile | Key | Start with |
+|---|---|---|
+| `groq` (default) | `GROQ_API_KEY` | `mvn spring-boot:run` |
+| `openrouter` | `OPENROUTER_API_KEY` | `SPRING_PROFILES_ACTIVE=openrouter mvn spring-boot:run` |
+| `local-llm` | none (Ollama) | add to either: `SPRING_PROFILES_ACTIVE=groq,local-llm` |
+
+| Tier | Default model | Request settings | List price (in / out per 1M, Groq) |
+|---|---|---|---|
+| `slm` | `openai/gpt-oss-20b` | `reasoning_effort: low` | $0.075 / $0.30 |
+| `llm` | `openai/gpt-oss-120b` | `reasoning_effort: low` | $0.15 / $0.60 |
+| `frontier` | `openai/gpt-oss-120b` | `reasoning_effort: high` | $0.15 / $0.60 |
+
+Mid and frontier are the same model at different reasoning effort: reasoning tokens are billed as output, so deeper
+reasoning costs more. OpenRouter runs the same models, so runs are comparable across providers. The `local-llm`
+profile runs the small and mid tiers on Ollama and keeps the frontier tier with the provider.
+
+Override any tier with `SLM_MODEL`/`SLM_BASE_URL`, `LLM_MODEL`/`LLM_BASE_URL`, `FRONTIER_MODEL`/`FRONTIER_BASE_URL`
+(any OpenAI-compatible server). `LLM_ENABLED=false` turns model calls off: the planner still routes, gate decisions use
+their rules, and the writer uses templates. Without a key, every tier is unavailable and the same happens.
+
+The tier is chosen by the planner: each tier's action is priced at its estimated cost for the prompt plus a risk
+penalty per gap in the context (highest for the small model, none for frontier). No gaps → small; one gap → mid; two
+→ frontier. A tier that isn't usable right now (no key, endpoint down, rate limit) is priced out, so the plan routes
+around it.
+
+## APIs
+
+```text
+GET  /api/stories
+GET  /api/stories/{id}/stream?mode=compare|with|db|without|mismatch|followup[&db=true]   (server-sent events)
+POST /api/stories/{id}/run                     {"meko": true|false}
+POST /api/stories/{id}/compare[?db=true]
+POST /api/stories/{id}/reset
+POST /api/stories/agent-died-2am/start         {"meko": true}
+POST /api/stories/agent-died-2am/takeover      {"caseId": "INC-…", "meko": true}
+POST /api/stories/organization-learned/series?cases=3[&db=true]
+POST /api/stories/organization-learned/mismatch {"meko": true}
+GET  /api/meko/status
+POST /api/meko/seed
+POST /api/meko/outage?on=true|false
+GET  /api/llm/status
+POST /api/llm/warmup
+```
+
+`mode=followup` runs a story's follow-up in each lane on the case that lane last handled. `/api/cases` is an earlier,
+simpler commander flow kept for reference.
+
+## Data
+
+All customer, banking, production and regulatory records are synthetic. KYC profiles are written to Meko only as keyed
+fingerprints.

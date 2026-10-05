@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}Audit the handling of the payment dispute for transaction {{ transaction }} against the dispute policy in the context. Which policy was applied? Was the settlement verified before the refund was approved? How many times was the customer asked to repeat information after the handoff? Does the handling comply with the policy that governs this situation? If the context holds no policy text, compliance cannot be verified: answer null.{% endblock %}
+{% block shape %}{"policyApplied": "policy id or null", "settlementVerifiedBeforeRefund": true, false or null, "customerReasked": number, "compliant": true, false or null, "findings": ["one sentence per finding"]}{% endblock %}

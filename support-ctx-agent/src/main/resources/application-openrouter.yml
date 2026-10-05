@@ -1,0 +1,62 @@
+# ---------------------------------------------------------------------------
+# Profile: openrouter
+#
+#   mvn spring-boot:run -Dspring-boot.run.profiles=openrouter
+#   APP_PROFILE=openrouter mvn spring-boot:run
+#
+# Needs OPENROUTER_API_KEY. Same three tiers as the groq profile, reached through a
+# router instead of one provider.
+#
+# WHY YOU MIGHT NEED THIS ONE. Groq's free tier caps tokens per minute below what the
+# cold run sends in a single request, which returns 413 — and the cold run is half the
+# comparison the demo is built on. OpenRouter does not apply a per-minute token ceiling
+# of that shape, so the expensive run can actually complete.
+#
+# Reasoning effort travels differently here: OpenRouter reads a `reasoning` object and
+# ignores OpenAI's `reasoning_effort`. OpenRouterModelsConfig sends the right shape; if
+# it did not, both 120b tiers would quietly run at the router's default effort.
+# ---------------------------------------------------------------------------
+openrouter:
+  base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+  api-key: ${OPENROUTER_API_KEY:}
+  slm-model: ${OPENROUTER_SLM_MODEL:openai/gpt-oss-20b}
+  # Same model, two efforts — the escalation step is buying thinking time, not a bigger model.
+  llm-model: ${OPENROUTER_LLM_MODEL:openai/gpt-oss-120b}
+  frontier-model: ${OPENROUTER_FRONTIER_MODEL:openai/gpt-oss-120b}
+  llm-effort: ${OPENROUTER_LLM_EFFORT:low}
+  frontier-effort: ${OPENROUTER_FRONTIER_EFFORT:high}
+  # Optional attribution on OpenRouter's leaderboards. Unset means the headers are not sent.
+  site-url: ${OPENROUTER_SITE_URL:}
+  app-title: ${OPENROUTER_APP_TITLE:}
+
+embabel:
+  models:
+    # REGISTERED model names, not provider model ids. These are Embabel-side handles invented
+    # by OpenRouterModelsConfig: the two 120b tiers are one model at two reasoning efforts, so
+    # they need distinct names to stay distinct services.
+    default-llm: ${AI_LLM_MODEL:openrouter-gpt-oss-120b-low}
+    llms:
+      slm: ${AI_SLM_MODEL:openrouter-gpt-oss-20b}
+      llm: ${AI_LLM_MODEL:openrouter-gpt-oss-120b-low}
+      frontier: ${AI_FRONTIER_MODEL:openrouter-gpt-oss-120b-high}
+
+token:
+  pricing:
+    # Seeded from Groq's published gpt-oss rates, because the models are the same. OpenRouter
+    # routes to whichever provider is serving, so the rate you are actually charged varies by
+    # route and these are an approximation in a way the groq profile's are not. Set the PRICE_*
+    # variables from your OpenRouter activity page before quoting any figure.
+    #
+    # As on groq, llm and frontier are one model: identical per-token rates, so the escalation
+    # shows up only as extra output tokens — and reasoning tokens do not appear in the response
+    # text this demo estimates from. The honest delta here is slm -> llm. Use the gemini profile
+    # if the price of escalation is the point you need to make.
+    slm:
+      input-per-million: ${PRICE_SLM_IN:0.075}
+      output-per-million: ${PRICE_SLM_OUT:0.30}
+    llm:
+      input-per-million: ${PRICE_LLM_IN:0.15}
+      output-per-million: ${PRICE_LLM_OUT:0.60}
+    frontier:
+      input-per-million: ${PRICE_FRONTIER_IN:0.15}
+      output-per-million: ${PRICE_FRONTIER_OUT:0.60}

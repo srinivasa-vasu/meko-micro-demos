@@ -1,0 +1,137 @@
+spring:
+  application:
+    name: sre-support-agent
+
+  # Which model provider this run uses. Everything provider-specific — the role map and
+  # the per-token prices that go with it — lives in application-<profile>.yml, so the two
+  # cannot be half-switched: pointing the roles at Gemini while still pricing them as
+  # gpt-oss was the failure mode this split exists to remove.
+  #
+  #   mvn spring-boot:run -Dspring-boot.run.profiles=gemini
+  #   APP_PROFILE=gemini mvn spring-boot:run
+  profiles:
+    active: ${APP_PROFILE:openrouter}
+
+  ai:
+    mcp:
+      client:
+        enabled: ${MEKO_ENABLED:true}
+        name: sre-support-agent
+        version: 0.1.0
+        type: SYNC
+        # The WRITE timeout, in effect: a Meko write runs a server-side extraction and was observed
+        # taking over 30s on its own, which failed write-back. Reads are bounded separately and
+        # tighter by meko.read-timeout, so raising this does not let a hung read stall a run.
+        request-timeout: ${MEKO_WRITE_TIMEOUT:90s}
+        streamable-http:
+          connections:
+            mekodata:
+              url: ${MEKO_MCP_URL:https://mcp.mekodata.ai/mcp}
+  jackson:
+    serialization:
+      indent-output: true
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+meko:
+  # Must match the connection key above; the old build checked for "meko" while the
+  # connection was named "mekodata", so the Authorization header was silently dropped.
+  connection-name: mekodata
+  api-key: ${MEKO_API_KEY:}
+
+  # The id is looked up once at startup via datapack_list and cached.
+  datapack-name: ${MEKO_DATAPACK_NAME:change-risk}
+  # Pin an id to skip the lookup entirely. Wins over the name when set — use it in CI, where
+  # depending on a name resolving is one more thing that can fail.
+  datapack-id: ${MEKO_DATAPACK_ID:}
+
+  # Namespaces what this app writes via memory_add, and doubles as the conversation_create
+  # session_id seed so restarts reconnect one conversation instead of spawning empties.
+  # memory_search is cross-agent within a datapack, so changing this does not hide history.
+  agent-id: ${MEKO_AGENT_ID:sre-agent}
+  # How long a Meko READ is waited for before the run carries on without it (and reports the
+  # recall as partial). Writes use spring.ai.mcp.client.request-timeout above.
+  read-timeout: ${MEKO_READ_TIMEOUT:30s}
+  # The seed plants one record under this second identity, so the demo can show the SRE agent
+  # solving an incident using a record another agent wrote. Must differ from agent-id above.
+  deploy-bot-agent-id: ${MEKO_DEPLOY_BOT_AGENT_ID:platform-deploy-bot}
+
+# How much telemetry each investigation path reads.
+#
+# The default is the honest one: 60 lines across 20 services, which is conservative next to a
+# real 2am incident. Lower it ONLY to fit a provider rate limit — a profile that does is saying
+# so, and the UI shows a banner for the whole run. See SweepProperties.
+incident:
+  sweep:
+    lines-per-service: ${SWEEP_LINES_PER_SERVICE:60}
+    scoped-lines-per-service: ${SWEEP_SCOPED_LINES_PER_SERVICE:8}
+
+# USD per 1,000,000 tokens, spend ceilings, and the deterministic thresholds. The demo
+# reports dollars rather than arbitrary planner units, and its credibility rests on these
+# being your real numbers.
+token:
+  # Per-token pricing for the three model roles lives in application-<profile>.yml, next
+  # to the role map that decides which models those roles resolve to. They are the same
+  # decision and splitting them lets one drift from the other.
+  pricing:
+    # Meko is not free. Every search and every write embeds its text, and a demo about cost
+    # that omits its own cost invites the audience to wonder what else is missing. Input-only;
+    # the output rate is never used. Set this to your embedding model's real rate.
+    embedding:
+      input-per-million: ${PRICE_EMBEDDING_IN:0.02}
+      output-per-million: 0.0
+  # Spend ceiling by severity. Meko knowledge overrides these when a SPEND_POLICY record
+  # is present, so on stage the budget reads as organizational policy, not config.
+  budget-usd:
+    SEV1: 0.50
+    SEV2: 0.15
+    SEV3: 0.05
+  reuse:
+    # Verification must be cheaper than the work it avoids by at least an order of
+    # magnitude, or it is not worth doing. These thresholds gate deterministic scoring only.
+    short-circuit-threshold: 0.85
+    scoped-threshold: 0.55
+
+  # When one agent's routing experience is allowed to become everyone's routing policy.
+  routing:
+    # How many observations of a tier before its success rate is worth acting on.
+    min-observations: ${ROUTING_MIN_OBSERVATIONS:5}
+    # The bar a tier must clear to be routed to first, measured as "answered without escalating".
+    target-success-rate: ${ROUTING_TARGET_SUCCESS:0.85}
+    # ONE WAY. Promotion moves the derived policy out of this agent's private mem0 store and
+    # into the datapack knowledge base, where every agent reads it — and evicts it from mem0.
+    # It also requires owner or maintainer rights; a viewer key gets a 403, which is handled
+    # as "stayed private" rather than as an error. Off by default: turn it on deliberately,
+    # when you want to show the graduation step.
+    promote: ${ROUTING_PROMOTE:false}
+
+  # The assumption behind the annual figure on the end card. It is a straight-line
+  # extrapolation from a single incident — state it, do not bury it.
+  projection:
+    incidents-per-month: ${PROJECTED_INCIDENTS_PER_MONTH:2000}
+
+embabel:
+  agent:
+    platform:
+      llm-operations:
+        data-binding:
+          max-attempts: 3
+      models:
+        # Stays in the base file rather than the gemini profile on purpose: the google-genai
+        # starter is on the classpath unconditionally and registers its catalogue under every
+        # profile, so this key has to bind under every profile too. Only the ROLE MAP is
+        # profile-scoped — which models those registrations are actually used for.
+        googlegenai:
+          api-key: ${GEMINI_API_KEY:}
+          max-attempts: 2
+
+logging:
+  level:
+    meko.ai.sre: INFO
