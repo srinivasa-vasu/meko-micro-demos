@@ -119,10 +119,28 @@ public class MekoClient {
 
     /** Call a tool with conversation_id and agent_id attached. Wrong for the datapack_* family. */
     public McpCall call(String tool, String datapackId, Map<String, Object> arguments) {
+        return call(tool, datapackId, null, arguments);
+    }
+
+    /** As {@link #call(String, String, Map)}, acting as another agent when one is given. */
+    public McpCall call(String tool, String datapackId, String asAgent,
+                        Map<String, Object> arguments) {
         var args = new LinkedHashMap<String, Object>(arguments);
         args.put("conversation_id", conversationFor(datapackId));
-        args.put("agent_id", agentId);
+        args.put("agent_id", agentOr(asAgent));
         return callRaw(tool, args);
+    }
+
+    /**
+     * The agent to act as: the one asked for, else this console.
+     * <p>
+     * Needed because agent_id is a FILTER on most of the surface — memory_update, _delete_by_id,
+     * _delete_all, _promote, knowledgebase_search and every conversation_* except _list. Acting
+     * only as the console makes rows written by any other agent unreachable, and the miss reads
+     * as "not found" rather than as the wrong agent.
+     */
+    String agentOr(String asAgent) {
+        return asAgent == null || asAgent.isBlank() ? agentId : asAgent.strip();
     }
 
     // ------------------------------------------------------------------
@@ -193,17 +211,17 @@ public class MekoClient {
         args.put("text", text);
         args.put("datapack_id", datapackId);
         args.put("conversation_id", conversationFor(datapackId));
-        args.put("agent_id", asAgent == null || asAgent.isBlank() ? agentId : asAgent);
+        args.put("agent_id", agentOr(asAgent));
         return callRaw("memory_add", args);
     }
 
-    public McpCall updateMemory(String datapackId, String memoryId, String text) {
-        return call("memory_update", datapackId, Map.of(
+    public McpCall updateMemory(String datapackId, String memoryId, String text, String asAgent) {
+        return call("memory_update", datapackId, asAgent, Map.of(
                 "memory_id", memoryId, "text", text, "datapack_id", datapackId));
     }
 
-    public McpCall deleteMemory(String datapackId, String memoryId) {
-        return call("memory_delete_by_id", datapackId, Map.of(
+    public McpCall deleteMemory(String datapackId, String memoryId, String asAgent) {
+        return call("memory_delete_by_id", datapackId, asAgent, Map.of(
                 "memory_id", memoryId, "datapack_id", datapackId));
     }
 
@@ -215,13 +233,13 @@ public class MekoClient {
      * promoted rows before anyone noticed — but nothing should reach it without an explicit,
      * typed confirmation.
      */
-    public McpCall deleteAllMemories(String datapackId) {
-        return call("memory_delete_all", datapackId, Map.of("datapack_id", datapackId));
+    public McpCall deleteAllMemories(String datapackId, String asAgent) {
+        return call("memory_delete_all", datapackId, asAgent, Map.of("datapack_id", datapackId));
     }
 
     /** One way: promotion evicts the row from mem0 and needs owner or maintainer rights. */
-    public McpCall promoteMemories(String datapackId, List<String> memoryIds) {
-        return call("memory_promote", datapackId, Map.of(
+    public McpCall promoteMemories(String datapackId, List<String> memoryIds, String asAgent) {
+        return call("memory_promote", datapackId, asAgent, Map.of(
                 "memory_ids", memoryIds, "datapack_id", datapackId));
     }
 
@@ -257,9 +275,10 @@ public class MekoClient {
     }
 
     /** Create a conversation explicitly, separate from the console's own cached one. */
-    public McpCall createConversation(String datapackId, String title, String sessionId) {
+    public McpCall createConversation(String datapackId, String title, String sessionId,
+                                      String asAgent) {
         var args = new LinkedHashMap<String, Object>();
-        args.put("agent_id", agentId);
+        args.put("agent_id", agentOr(asAgent));
         if (datapackId != null && !datapackId.isBlank()) {
             args.put("datapack_id", datapackId);
         }
@@ -275,11 +294,12 @@ public class MekoClient {
     }
 
     public McpCall getConversation(String datapackId, String conversationId,
-                                   boolean includeMessages, int limit, int offset) {
+                                   boolean includeMessages, int limit, int offset,
+                                   String asAgent) {
         var args = new LinkedHashMap<String, Object>();
         args.put("conversation_id", conversationId);
         args.put("datapack_id", datapackId);
-        args.put("agent_id", agentId);
+        args.put("agent_id", agentOr(asAgent));
         args.put("include_messages", includeMessages);
         args.put("limit", limit);
         args.put("offset", offset);
@@ -295,14 +315,14 @@ public class MekoClient {
      */
     public McpCall addMessage(String datapackId, String conversationId, String input,
                               String output, String reasoning, List<String> plan,
-                              String metadataJson, String seed) {
+                              String metadataJson, String seed, String asAgent) {
         var args = new LinkedHashMap<String, Object>();
         args.put("conversation_id", conversationId);
         args.put("input", input);
         args.put("output", output);
         args.put("datapack_id", datapackId);
         // Must match the agent that created the conversation, or the write is not accepted.
-        args.put("agent_id", agentId);
+        args.put("agent_id", agentOr(asAgent));
         if (reasoning != null && !reasoning.isBlank()) {
             args.put("reasoning", reasoning);
         }
@@ -319,11 +339,11 @@ public class MekoClient {
     }
 
     public McpCall updateConversation(String datapackId, String conversationId,
-                                      String title, String metadataJson) {
+                                      String title, String metadataJson, String asAgent) {
         var args = new LinkedHashMap<String, Object>();
         args.put("conversation_id", conversationId);
         args.put("datapack_id", datapackId);
-        args.put("agent_id", agentId);
+        args.put("agent_id", agentOr(asAgent));
         // Omitted fields are kept; passing one replaces it.
         if (title != null && !title.isBlank()) {
             args.put("title", title);
@@ -335,11 +355,11 @@ public class MekoClient {
     }
 
     /** Hard delete of the conversation and every trace under it. No undo. */
-    public McpCall deleteConversation(String datapackId, String conversationId) {
+    public McpCall deleteConversation(String datapackId, String conversationId, String asAgent) {
         var args = new LinkedHashMap<String, Object>();
         args.put("conversation_id", conversationId);
         args.put("datapack_id", datapackId);
-        args.put("agent_id", agentId);
+        args.put("agent_id", agentOr(asAgent));
         return callRaw("conversation_delete", args);
     }
 
@@ -348,8 +368,8 @@ public class MekoClient {
         return conversationFor(datapackId);
     }
 
-    public McpCall searchKnowledge(String datapackId, String query, int limit) {
-        return call("knowledgebase_search", datapackId, Map.of(
+    public McpCall searchKnowledge(String datapackId, String query, int limit, String asAgent) {
+        return call("knowledgebase_search", datapackId, asAgent, Map.of(
                 "query", query, "datapack_id", datapackId, "limit", limit));
     }
 

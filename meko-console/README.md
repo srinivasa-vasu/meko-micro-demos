@@ -20,23 +20,104 @@ Then open <http://localhost:8090>. Port is `PORT`, agent id is `MEKO_AGENT_ID`.
 
 ## Operations
 
-| Operation | Tool | Notes |
-|---|---|---|
-| Search memory | `memory_search` | Hybrid ranking. Compare `score` against `raw_similarity_score`. |
-| List memories | `memory_get_all` | Exact enumeration, private or promoted collection. |
-| Add memory | `memory_add` | Stored verbatim. Can write as another agent. |
-| Update memory | `memory_update` | Overwrite a row in place. |
-| Delete memory | `memory_delete_by_id` | Permanent. |
-| Delete ALL memories | `memory_delete_all` | No undo. Requires retyping the datapack id. |
-| Promote to shared | `memory_promote` | One way, and permission-gated. |
-| Search knowledge base | `knowledgebase_search` | Documents and promoted memories, chunked. |
-| List conversations | `conversation_list` | Most recently updated first. |
-| Create conversation | `conversation_create` | `session_id` is a honoured dedup key. |
-| Get conversation | `conversation_get` | Metadata, or the full turn history. |
-| Add message | `conversation_add_message` | One turn: input + output, with optional plan and reasoning. |
-| Update conversation | `conversation_update` | Title and metadata; omitted fields are kept. |
-| Delete conversation | `conversation_delete` | Hard delete of every trace under it. No undo. |
-| Raw tool call | anything | Arguments sent verbatim. Nothing added. |
+Pick a datapack in the sidebar first: every typed operation runs against it. The console then
+fills in `datapack_id`, and also `conversation_id` and `agent_id` where the tool needs them, so
+the form only asks for what you have to decide.
+
+**Bold** marks a field you must fill in. *as agent* is the optional **Act as agent** field: blank
+means the console's own agent, and whatever you enter is sent as `agent_id`. The *sent on the wire* column shows the tool's full
+argument set, with ⚙ marking what the console adds. Open *Arguments sent* above any result to
+see the exact JSON.
+
+### Memory
+
+| Operation | Tool | You fill in | Sent on the wire |
+|---|---|---|---|
+| Search memory | `memory_search` | **query**, limit (10) | `query`, `limit`, `datapack_id`⚙, `conversation_id`⚙, `agent_id`⚙ |
+| List memories | `memory_get_all` | collection: private / promoted | `promoted`, `datapack_id`⚙, `conversation_id`⚙, `agent_id`⚙. There is no `page`; sending one throws. |
+| Add memory | `memory_add` | **text**, write-as agent (default: the console) | `text`, `datapack_id`⚙, `conversation_id`⚙, `agent_id` |
+| Update memory | `memory_update` | **memory id**, **replacement text**, as agent | `memory_id`, `text`, `agent_id` (must be the writer), `datapack_id`⚙, `conversation_id`⚙ |
+| Delete memory | `memory_delete_by_id` | **memory id**, as agent | `memory_id`, `agent_id` (must be the writer), `datapack_id`⚙, `conversation_id`⚙ |
+| Promote to shared | `memory_promote` | **memory ids**, one per line, as agent | `memory_ids` (array), `agent_id`, `datapack_id`⚙, `conversation_id`⚙. One way. Needs owner or maintainer rights. |
+| Delete ALL memories | `memory_delete_all` | **the datapack id, retyped**, as agent | `agent_id`, `datapack_id`⚙, `conversation_id`⚙. Deletes only that agent's memories, not the whole datapack. If the retyped id doesn't match, the server refuses and nothing reaches Meko. |
+
+### Knowledge
+
+| Operation | Tool | You fill in | Sent on the wire |
+|---|---|---|---|
+| Search knowledge base | `knowledgebase_search` | **query**, limit (5), as agent | `query`, `limit`, `agent_id` (the schema says it scopes the search), `datapack_id`⚙, `conversation_id`⚙ |
+
+### Conversations
+
+Except for `conversation_list` (see below), `conversation_id` here is the conversation you are
+acting on, not the console's own.
+
+| Operation | Tool | You fill in | Sent on the wire |
+|---|---|---|---|
+| List conversations | `conversation_list` | limit (20), offset (0) | `limit`, `offset`, `datapack_id`⚙, `agent_id`⚙. `conversation_id` is left out on purpose. |
+| Create conversation | `conversation_create` | title, session id, as agent | `agent_id` (becomes the owner), plus `datapack_id`⚙, `title`, `session_id` when set. Nothing is required. |
+| Get conversation | `conversation_get` | **conversation id**, messages (include), message limit (50), as agent | `conversation_id`, `include_messages`, `limit`, `offset`, `agent_id`, `datapack_id`⚙ |
+| Add message | `conversation_add_message` | **conversation id**, **user input**, **assistant output**, reasoning, plan, seed, as agent | `conversation_id`, `input`, `output`, `agent_id` (must be the creator), `datapack_id`⚙, plus `reasoning`, `plan` (array), `seed` when set |
+| Update conversation | `conversation_update` | **conversation id**, new title, new metadata (JSON string), as agent | `conversation_id`, `agent_id`, `datapack_id`⚙, plus `title`, `metadata` when set. Fields you leave out are kept. |
+| Delete conversation | `conversation_delete` | **conversation id**, **the id, retyped**, as agent | `conversation_id`, `agent_id`, `datapack_id`⚙. If the retyped id doesn't match, the server refuses. |
+
+### Where `agent_id` filters
+
+According to the tool schemas, `agent_id` decides **which rows a call can reach** on most tools,
+not just how the call is attributed. Act as the wrong agent and the call answers "not found" or
+does nothing, which looks the same as the row not existing.
+
+| `agent_id` filters or must match | `agent_id` is trace attribution only |
+|---|---|
+| `memory_update`, `memory_delete_by_id` (must be the writer) | `memory_search` (searches every agent) |
+| `memory_delete_all` (deletes only that agent's memories) | `memory_get_all` (lists every agent) |
+| `memory_promote` | `conversation_list` |
+| `memory_add` (picks the store the memory lands in) | |
+| `knowledgebase_search` (the schema says it scopes the search) | |
+| `conversation_create` (sets the owner) | |
+| `conversation_get`, `_update`, `_delete` (ownership filter) | |
+| `conversation_add_message` (must be the creator) | |
+
+Every tool in the left column has an **Act as agent** field (**Write as agent** on Add memory).
+To work on another agent's rows, copy the agent from the *Written by* column of a search or
+listing.
+
+### Datapack (sidebar)
+
+| Operation | Tool | You fill in | Sent on the wire |
+|---|---|---|---|
+| Reload | `datapack_list` | nothing | `conversation_id`⚙ only. It rejects `agent_id`. |
+| Describe | `datapack_describe` | the selected datapack | `datapack_id`, `include_status: true`, `conversation_id`⚙ |
+
+### Raw
+
+| Operation | Tool | You fill in | Sent on the wire |
+|---|---|---|---|
+| Raw tool call | any registered tool | **tool name**, arguments (JSON object) | Exactly what you typed. Nothing is added, not even `conversation_id`, so supply whatever the tool needs yourself. |
+
+A tool name matches with or without Spring AI's connection prefix. An unknown name fails and
+lists the registered tools.
+
+### Use the width, and the keyboard
+
+On screens 1500px and wider, the form and the result sit side by side, with the sidebar and form
+pinned, so you can change an argument and read the response without scrolling. The icon at the
+top right cycles the theme (auto → light → dark). The keyboard icon, or <kbd>?</kbd>, lists the
+shortcuts:
+
+| Key | Action |
+|---|---|
+| <kbd>⌘/Ctrl</kbd> + <kbd>Enter</kbd> | Run the selected operation |
+| <kbd>j</kbd> / <kbd>k</kbd> | Next / previous operation |
+| <kbd>/</kbd> | Focus the first field |
+| <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> | Rows / text leaves / raw view |
+| <kbd>h</kbd> | Step back through history, one call per press |
+| <kbd>d</kbd> | Focus the datapack picker |
+| <kbd>t</kbd> | Cycle theme |
+| <kbd>?</kbd> | Show shortcuts |
+| <kbd>Esc</kbd> | Leave a field, or close the shortcut list |
+
+Single-key shortcuts are ignored while a field has focus, so typing a query never triggers them.
 
 ## What this encodes
 

@@ -65,12 +65,12 @@ public class MekoController {
 
     @PostMapping("/memory/update")
     public McpCall updateMemory(@RequestBody Write body) {
-        return meko.updateMemory(body.datapackId(), body.memoryId(), body.text());
+        return meko.updateMemory(body.datapackId(), body.memoryId(), body.text(), body.asAgent());
     }
 
     @PostMapping("/memory/delete")
     public McpCall deleteMemory(@RequestBody Write body) {
-        return meko.deleteMemory(body.datapackId(), body.memoryId());
+        return meko.deleteMemory(body.datapackId(), body.memoryId(), body.asAgent());
     }
 
     /**
@@ -87,20 +87,21 @@ public class MekoController {
             return McpCall.failed("memory_delete_all", Map.of("datapack_id", body.datapackId()),
                     "Not confirmed: confirmDatapackId must equal datapackId. Nothing was deleted.");
         }
-        return meko.deleteAllMemories(body.datapackId());
+        return meko.deleteAllMemories(body.datapackId(), body.asAgent());
     }
 
-    public record DeleteAll(String datapackId, String confirmDatapackId) {}
+    public record DeleteAll(String datapackId, String confirmDatapackId, String asAgent) {}
 
     /** One way, and permission-gated. The UI asks before calling this. */
     @PostMapping("/memory/promote")
     public McpCall promote(@RequestBody Promote body) {
-        return meko.promoteMemories(body.datapackId(), body.memoryIds());
+        return meko.promoteMemories(body.datapackId(), body.memoryIds(), body.asAgent());
     }
 
     @PostMapping("/knowledge/search")
     public McpCall searchKnowledge(@RequestBody Query body) {
-        return meko.searchKnowledge(body.datapackId(), body.query(), body.limitOrDefault());
+        return meko.searchKnowledge(body.datapackId(), body.query(), body.limitOrDefault(),
+                body.asAgent());
     }
 
     // ------------------------------------------------------------------
@@ -116,7 +117,8 @@ public class MekoController {
 
     @PostMapping("/conversation/create")
     public McpCall createConversation(@RequestBody Conversation body) {
-        return meko.createConversation(body.datapackId(), body.title(), body.sessionId());
+        return meko.createConversation(body.datapackId(), body.title(), body.sessionId(),
+                body.asAgent());
     }
 
     @GetMapping("/conversation")
@@ -124,20 +126,23 @@ public class MekoController {
                                    @RequestParam String conversationId,
                                    @RequestParam(defaultValue = "true") boolean includeMessages,
                                    @RequestParam(defaultValue = "50") int limit,
-                                   @RequestParam(defaultValue = "0") int offset) {
-        return meko.getConversation(datapackId, conversationId, includeMessages, limit, offset);
+                                   @RequestParam(defaultValue = "0") int offset,
+                                   @RequestParam(required = false) String asAgent) {
+        return meko.getConversation(datapackId, conversationId, includeMessages, limit, offset,
+                asAgent);
     }
 
     @PostMapping("/conversation/message")
     public McpCall addMessage(@RequestBody Message body) {
         return meko.addMessage(body.datapackId(), body.conversationId(), body.input(),
-                body.output(), body.reasoning(), body.planLines(), body.metadata(), body.seed());
+                body.output(), body.reasoning(), body.planLines(), body.metadata(), body.seed(),
+                body.asAgent());
     }
 
     @PostMapping("/conversation/update")
     public McpCall updateConversation(@RequestBody Conversation body) {
         return meko.updateConversation(body.datapackId(), body.conversationId(),
-                body.title(), body.metadata());
+                body.title(), body.metadata(), body.asAgent());
     }
 
     /** Hard delete, no undo. Confirmed the same way memory_delete_all is. */
@@ -150,7 +155,7 @@ public class MekoController {
                     "Not confirmed: confirmConversationId must equal conversationId. "
                             + "Nothing was deleted.");
         }
-        return meko.deleteConversation(body.datapackId(), body.conversationId());
+        return meko.deleteConversation(body.datapackId(), body.conversationId(), body.asAgent());
     }
 
     /** The conversation this console attaches to every other call. */
@@ -162,10 +167,12 @@ public class MekoController {
     }
 
     public record Conversation(String datapackId, String conversationId, String title,
-                               String sessionId, String metadata, String confirmConversationId) {}
+                               String sessionId, String metadata, String confirmConversationId,
+                               String asAgent) {}
 
     public record Message(String datapackId, String conversationId, String input, String output,
-                          String reasoning, String plan, String metadata, String seed) {
+                          String reasoning, String plan, String metadata, String seed,
+                          String asAgent) {
         /**
          * plan is a real ARRAY of strings on the wire, while metadata is a JSON STRING.
          * Easy to get backwards, and either shape in the other's place is rejected — so the
@@ -191,7 +198,8 @@ public class MekoController {
         return meko.callRaw(body.tool(), body.arguments() == null ? Map.of() : body.arguments());
     }
 
-    public record Query(String datapackId, String query, Integer limit) {
+    /** asAgent is only honoured by knowledgebase_search; memory_search ignores agent_id. */
+    public record Query(String datapackId, String query, Integer limit, String asAgent) {
         int limitOrDefault() {
             return limit == null || limit < 1 ? 10 : limit;
         }
@@ -199,7 +207,7 @@ public class MekoController {
 
     public record Write(String datapackId, String memoryId, String text, String asAgent) {}
 
-    public record Promote(String datapackId, List<String> memoryIds) {}
+    public record Promote(String datapackId, List<String> memoryIds, String asAgent) {}
 
     public record RawCall(String tool, Map<String, Object> arguments) {}
 }

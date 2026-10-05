@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ConversationArgumentTest {
 
     private MekoController.Message message(String plan) {
-        return new MekoController.Message("dp", "conv", "in", "out", null, plan, null, null);
+        return new MekoController.Message("dp", "conv", "in", "out", null, plan, null, null, null);
     }
 
     @Test
@@ -45,7 +45,7 @@ class ConversationArgumentTest {
     @Test
     void deletingWithoutMatchingConfirmationIsRefusedBeforeItLeaves() {
         var controller = new MekoController(null);
-        var body = new MekoController.Conversation("dp", "conv-1", null, null, null, "conv-2");
+        var body = new MekoController.Conversation("dp", "conv-1", null, null, null, "conv-2", null);
 
         var call = controller.deleteConversation(body);
 
@@ -57,7 +57,7 @@ class ConversationArgumentTest {
     @Test
     void deletingWithMatchingConfirmationIsAttempted() {
         var controller = new MekoController(null);
-        var body = new MekoController.Conversation("dp", "conv-1", null, null, null, "conv-1");
+        var body = new MekoController.Conversation("dp", "conv-1", null, null, null, "conv-1", null);
 
         try {
             controller.deleteConversation(body);

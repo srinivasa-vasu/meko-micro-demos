@@ -43,12 +43,26 @@
   .mono,pre,code,input,textarea,.fig{font-family:var(--mono);font-variant-numeric:tabular-nums}
   :focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
 
-  .wrap{max-width:1280px;margin:0 auto;padding:26px 22px 70px}
-  header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:22px}
+  /* Wide screens get a third column: form and result side by side, so changing an argument and
+     reading what came back never needs a scroll. The sidebar and form stay pinned. */
+  .wrap{max-width:2200px;margin:0 auto;padding:22px 22px 70px}
+  header{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:18px}
   h1{font-size:27px;margin:0 0 6px;letter-spacing:-.02em;font-weight:600}
   .lede{color:var(--muted);margin:0;max-width:70ch;font-size:14.5px}
 
-  .grid{display:grid;grid-template-columns:330px 1fr;gap:18px;align-items:start}
+  .grid{display:grid;grid-template-columns:310px minmax(0,1fr);gap:18px;align-items:start}
+  main{min-width:0}
+  @media(min-width:981px){
+    aside{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto;
+          scrollbar-width:thin}
+  }
+  @media(min-width:1500px){
+    main{display:grid;grid-template-columns:minmax(380px,460px) minmax(0,1fr);gap:18px;
+         align-items:start}
+    main > .card:first-child{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}
+    main .opgroup{grid-template-columns:1fr;gap:4px}
+    main .opgrouplabel{padding-top:0}
+  }
   .card{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:17px;
         margin-bottom:14px}
   .card h2{margin:0 0 10px;font-size:15px;font-weight:600}
@@ -95,9 +109,20 @@
           border:1px solid var(--line);background:var(--ground);color:var(--muted)}
   .banner.ok{background:var(--ok-bg);color:var(--ok);border-color:var(--ok-line)}
   .banner.bad{background:var(--bad-bg);color:var(--bad);border-color:var(--bad-line)}
-  .themer{display:flex;gap:2px;border:1px solid var(--line);border-radius:7px;padding:2px;flex:none}
-  .themer button{padding:3px 8px;font-size:12px;color:var(--muted);border-radius:5px}
-  .themer button[aria-pressed="true"]{background:var(--ground);color:var(--ink);font-weight:500}
+  .tools{display:flex;gap:6px;flex:none}
+  .icon{display:inline-grid;place-items:center;width:34px;height:34px;padding:0;
+        border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted)}
+  .icon:hover{color:var(--ink);border-color:var(--line-strong)}
+  .icon svg{width:17px;height:17px}
+
+  dialog{border:1px solid var(--line);border-radius:11px;background:var(--surface);color:var(--ink);
+         padding:18px 20px;width:min(440px,calc(100vw - 32px));box-shadow:0 10px 40px rgba(0,0,0,.25)}
+  dialog::backdrop{background:rgba(10,14,20,.45)}
+  dialog h2{margin:0 0 10px;font-size:15px;font-weight:600}
+  .keys{width:100%;border-collapse:collapse;font-size:13px}
+  .keys td{padding:6px 0;border-bottom:1px solid var(--line)}
+  .keys td:last-child{text-align:right;white-space:nowrap}
+  .keys tr:last-child td{border-bottom:0}
   /* Operations grouped by family. Fifteen flat buttons wrapping over two rows gave no clue
      which ones belonged together, and the list only grows. */
   .opgroup{display:grid;grid-template-columns:104px 1fr;gap:10px;align-items:start}
@@ -145,12 +170,23 @@
       <p class="lede">Call any MCP tool and see exactly what was sent and exactly what came back.
         The typed forms are conveniences; the raw call is the one that answers arguments.</p>
     </div>
-    <div class="themer" role="group" aria-label="Theme">
-      <button id="th-auto" aria-pressed="true" onclick="setTheme('auto')">Auto</button>
-      <button id="th-light" aria-pressed="false" onclick="setTheme('light')">Light</button>
-      <button id="th-dark" aria-pressed="false" onclick="setTheme('dark')">Dark</button>
+    <div class="tools">
+      <button id="themeBtn" class="icon" onclick="cycleTheme()"></button>
+      <button class="icon" onclick="showKeys()" title="Keyboard shortcuts (?)"
+              aria-label="Keyboard shortcuts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/>
+          <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>
+      </button>
     </div>
   </header>
+
+  <dialog id="keys" onclick="if (event.target === this) this.close()">
+    <h2>Keyboard shortcuts</h2>
+    <table class="keys" id="keyTable"></table>
+    <p class="note" style="margin:12px 0 0">Single keys work when no field has focus &mdash;
+      press <kbd>Esc</kbd> to leave one.</p>
+  </dialog>
 
   <div id="status" class="banner">Connecting&hellip;</div>
 
@@ -212,11 +248,31 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, m =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
+const ICON = {
+  auto: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
+  light: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4'
+       + 'M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  dark: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>'
+};
+const THEMES = ['auto', 'light', 'dark'];
+let THEME = 'auto';
+
+/* One icon that shows the current mode and cycles on click. Three labelled buttons cost header
+   width that the panels below can use. */
 function setTheme(mode) {
+  THEME = mode;
   if (mode === 'auto') document.documentElement.removeAttribute('data-theme');
   else document.documentElement.setAttribute('data-theme', mode);
-  ['auto','light','dark'].forEach(m => $('th-' + m).setAttribute('aria-pressed', String(m === mode)));
+  const next = THEMES[(THEMES.indexOf(mode) + 1) % THEMES.length];
+  const btn = $('themeBtn');
+  btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+    stroke-linecap="round" stroke-linejoin="round">${ICON[mode]}</svg>`;
+  btn.title = `Theme: ${mode} — click for ${next} (T)`;
+  btn.setAttribute('aria-label', `Theme: ${mode}. Switch to ${next}`);
   try { localStorage.setItem('meko-console-theme', mode); } catch (e) {}
+}
+function cycleTheme() {
+  setTheme(THEMES[(THEMES.indexOf(THEME) + 1) % THEMES.length]);
 }
 (function () {
   let saved = 'auto';
@@ -225,6 +281,11 @@ function setTheme(mode) {
 })();
 
 const dp = () => $('datapack').value;
+
+/* agent_id FILTERS on these tools, so a row written by another agent is unreachable unless
+   the console acts as that agent. Blank keeps the console's own id. */
+const AS_AGENT = { id: 'asAgent', label: 'Act as agent (blank = this console)', type: 'text',
+                   value: '' };
 
 const OPS = {
   'memory.search': {
@@ -258,16 +319,18 @@ const OPS = {
     note: 'Overwrites the row in place. Use it to keep one record per identity instead of '
         + 'accumulating near-duplicates that crowd the retrieval window.',
     fields: [{ id: 'memoryId', label: 'Memory id', type: 'text', value: '' },
-             { id: 'text', label: 'Replacement text', type: 'textarea', value: '' }],
+             { id: 'text', label: 'Replacement text', type: 'textarea', value: '' }, AS_AGENT],
     run: v => post('/api/meko/memory/update',
-                   { datapackId: dp(), memoryId: v.memoryId, text: v.text })
+                   { datapackId: dp(), memoryId: v.memoryId, text: v.text, asAgent: v.asAgent })
   },
   'memory.delete': {
     label: 'Delete memory',
-    note: 'Permanent.',
+    note: 'Permanent. agent_id must match the agent that wrote the memory — the "Written by" '
+        + 'column in a search or listing.',
     danger: true,
-    fields: [{ id: 'memoryId', label: 'Memory id', type: 'text', value: '' }],
-    run: v => post('/api/meko/memory/delete', { datapackId: dp(), memoryId: v.memoryId })
+    fields: [{ id: 'memoryId', label: 'Memory id', type: 'text', value: '' }, AS_AGENT],
+    run: v => post('/api/meko/memory/delete',
+                   { datapackId: dp(), memoryId: v.memoryId, asAgent: v.asAgent })
   },
   'memory.promote': {
     label: 'Promote to shared',
@@ -275,21 +338,24 @@ const OPS = {
         + 'knowledge base and evicts them from mem0. Requires owner or maintainer rights; a '
         + 'viewer key gets a 403.',
     danger: true,
-    fields: [{ id: 'memoryIds', label: 'Memory ids (one per line)', type: 'textarea', value: '' }],
+    fields: [{ id: 'memoryIds', label: 'Memory ids (one per line)', type: 'textarea', value: '' },
+             AS_AGENT],
     run: v => post('/api/meko/memory/promote', {
-      datapackId: dp(),
+      datapackId: dp(), asAgent: v.asAgent,
       memoryIds: v.memoryIds.split('\n').map(x => x.trim()).filter(Boolean)
     })
   },
   'memory.deleteAll': {
     label: 'Delete ALL memories',
-    note: 'Wipes every memory in this datapack. No undo, and promoted rows are a separate '
+    note: 'Wipes every memory ONE AGENT wrote in this datapack — the agent below, or this console '
+        + 'if blank. Other agents’ memories survive. No undo, and promoted rows are a separate '
         + 'collection so this does not touch them. You must retype the datapack id to confirm — '
         + 'a checkbox is too easy to click past for something with no recovery.',
     danger: true,
-    fields: [{ id: 'confirm', label: 'Retype the datapack id to confirm', type: 'text', value: '' }],
+    fields: [{ id: 'confirm', label: 'Retype the datapack id to confirm', type: 'text', value: '' },
+             AS_AGENT],
     run: v => post('/api/meko/memory/delete-all',
-                   { datapackId: dp(), confirmDatapackId: v.confirm })
+                   { datapackId: dp(), confirmDatapackId: v.confirm, asAgent: v.asAgent })
   },
   'conversation.list': {
     label: 'List conversations',
@@ -307,23 +373,25 @@ const OPS = {
         + 'conversation rather than creating a duplicate. Non-hex seeds are normalised, so the '
         + 'id you get back may differ from the one you sent.',
     fields: [{ id: 'title', label: 'Title', type: 'text', value: 'Console conversation' },
-             { id: 'sessionId', label: 'Session id (blank = new each time)', type: 'text', value: '' }],
+             { id: 'sessionId', label: 'Session id (blank = new each time)', type: 'text', value: '' },
+             AS_AGENT],
     run: v => post('/api/meko/conversation/create',
-                   { datapackId: dp(), title: v.title, sessionId: v.sessionId })
+                   { datapackId: dp(), title: v.title, sessionId: v.sessionId, asAgent: v.asAgent })
   },
   'conversation.get': {
     label: 'Get conversation',
     note: 'agent_id is an OWNERSHIP FILTER here, unlike on memory_search where it only attributes '
         + 'the trace. A conversation created by a different agent returns "not found", which '
-        + 'looks exactly like it never existed. This console acts as the agent shown in the '
-        + 'banner above.',
+        + 'looks exactly like it never existed. Set the agent below to the one that created it '
+        + '(blank = the agent shown in the banner above).',
     fields: [{ id: 'conversationId', label: 'Conversation id', type: 'text', value: '' },
              { id: 'includeMessages', label: 'Messages', type: 'select',
                options: [['true','include full history'], ['false','metadata only']] },
-             { id: 'limit', label: 'Message limit', type: 'number', value: 50 }],
+             { id: 'limit', label: 'Message limit', type: 'number', value: 50 }, AS_AGENT],
     run: v => get(`/api/meko/conversation?datapackId=${encodeURIComponent(dp())}`
                   + `&conversationId=${encodeURIComponent(v.conversationId)}`
-                  + `&includeMessages=${v.includeMessages}&limit=${+v.limit}`)
+                  + `&includeMessages=${v.includeMessages}&limit=${+v.limit}`
+                  + `&asAgent=${encodeURIComponent(v.asAgent)}`)
   },
   'conversation.message': {
     label: 'Add message',
@@ -336,21 +404,24 @@ const OPS = {
              { id: 'output', label: 'Assistant output', type: 'textarea', value: '' },
              { id: 'reasoning', label: 'Reasoning (optional, 1–3 sentences)', type: 'textarea', value: '' },
              { id: 'plan', label: 'Plan (optional, one action per line)', type: 'textarea', value: '' },
-             { id: 'seed', label: 'Seed (optional, for deterministic id)', type: 'text', value: '' }],
+             { id: 'seed', label: 'Seed (optional, for deterministic id)', type: 'text', value: '' },
+             AS_AGENT],
     run: v => post('/api/meko/conversation/message', {
       datapackId: dp(), conversationId: v.conversationId, input: v.input, output: v.output,
-      reasoning: v.reasoning, plan: v.plan, seed: v.seed
+      reasoning: v.reasoning, plan: v.plan, seed: v.seed, asAgent: v.asAgent
     })
   },
   'conversation.update': {
     label: 'Update conversation',
     note: 'Omitted fields are kept; a field you pass replaces what was there. Ownership-filtered '
-        + 'by agent_id, so this only updates conversations this console created.',
+        + 'by agent_id: act as the agent that created the conversation.',
     fields: [{ id: 'conversationId', label: 'Conversation id', type: 'text', value: '' },
              { id: 'title', label: 'New title (blank = keep)', type: 'text', value: '' },
-             { id: 'metadata', label: 'New metadata, JSON string (blank = keep)', type: 'textarea', value: '' }],
+             { id: 'metadata', label: 'New metadata, JSON string (blank = keep)', type: 'textarea', value: '' },
+             AS_AGENT],
     run: v => post('/api/meko/conversation/update', {
-      datapackId: dp(), conversationId: v.conversationId, title: v.title, metadata: v.metadata
+      datapackId: dp(), conversationId: v.conversationId, title: v.title, metadata: v.metadata,
+      asAgent: v.asAgent
     })
   },
   'conversation.delete': {
@@ -359,9 +430,11 @@ const OPS = {
         + 'confirm — this is the second call on the surface with no recovery.',
     danger: true,
     fields: [{ id: 'conversationId', label: 'Conversation id', type: 'text', value: '' },
-             { id: 'confirm', label: 'Retype the conversation id to confirm', type: 'text', value: '' }],
+             { id: 'confirm', label: 'Retype the conversation id to confirm', type: 'text', value: '' },
+             AS_AGENT],
     run: v => post('/api/meko/conversation/delete', {
-      datapackId: dp(), conversationId: v.conversationId, confirmConversationId: v.confirm
+      datapackId: dp(), conversationId: v.conversationId, confirmConversationId: v.confirm,
+      asAgent: v.asAgent
     })
   },
   'knowledge.search': {
@@ -370,8 +443,9 @@ const OPS = {
         + 'rerank_score — genuinely hybrid, and it says so.',
     fields: [{ id: 'q', label: 'Query', type: 'textarea',
                value: 'checkout payment provider timeout rollback' },
-             { id: 'limit', label: 'Limit', type: 'number', value: 5 }],
-    run: v => post('/api/meko/knowledge/search', { datapackId: dp(), query: v.q, limit: +v.limit })
+             { id: 'limit', label: 'Limit', type: 'number', value: 5 }, AS_AGENT],
+    run: v => post('/api/meko/knowledge/search',
+                   { datapackId: dp(), query: v.q, limit: +v.limit, asAgent: v.asAgent })
   },
   'raw': {
     label: 'Raw tool call',
@@ -433,8 +507,7 @@ function selectOp(key) {
       <button class="${op.danger ? 'danger' : 'primary'}" onclick="runOp()">
         ${op.danger ? 'Run (destructive)' : 'Run'}</button>
       <span class="note" style="align-self:center">or press
-        <kbd>${navigator.platform.indexOf('Mac') === 0 ? '⌘' : 'Ctrl'}</kbd> +
-        <kbd>Enter</kbd></span>
+        <kbd>${MOD}</kbd> + <kbd>Enter</kbd> &middot; <kbd>?</kbd> for shortcuts</span>
     </div>`;
   op.fields.forEach(f => {
     const el = $('f-' + f.id);
@@ -476,6 +549,7 @@ async function runOp() {
 }
 
 function remember(opKey, call) {
+  HIST_AT = -1;
   HISTORY.unshift({ at: new Date(), opKey, label: OPS[opKey].label, call });
   HISTORY.splice(25);
   renderHistory();
@@ -677,8 +751,58 @@ async function describe() {
   render(call);
 }
 
+const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+
+/* Operations in the order they are drawn, so j/k walk the buttons as the eye reads them. */
+const ORDER = () => GROUPS.flatMap(([, match]) => Object.keys(OPS).filter(match));
+function stepOp(delta) {
+  const order = ORDER();
+  selectOp(order[(order.indexOf(CURRENT) + delta + order.length) % order.length]);
+}
+function focusForm() {
+  const el = document.querySelector('#form input, #form textarea, #form select');
+  if (el) { el.focus(); el.select?.(); }
+}
+
+const KEYS = [
+  [[MOD, 'Enter'], 'Run the selected operation', () => runOp()],
+  [['j'], 'Next operation', () => stepOp(1)],
+  [['k'], 'Previous operation', () => stepOp(-1)],
+  [['/'], 'Focus the first field', () => focusForm()],
+  [['1'], 'Rows view', () => setView('rows')],
+  [['2'], 'Text leaves view', () => setView('text')],
+  [['3'], 'Raw view', () => setView('raw')],
+  [['h'], 'Show the previous call from history', () => stepHistory()],
+  [['d'], 'Focus the datapack picker', () => $('datapack').focus()],
+  [['t'], 'Cycle theme: auto, light, dark', () => cycleTheme()],
+  [['?'], 'Show this list', () => showKeys()],
+  [['Esc'], 'Leave a field, or close this list', null]
+];
+
+/* h walks back through history one call per press; running anything resets it. */
+let HIST_AT = -1;
+function stepHistory() {
+  if (!HISTORY.length) return setBanner('Nothing in history yet.');
+  HIST_AT = (HIST_AT + 1) % HISTORY.length;
+  replay(HIST_AT);
+  setBanner(`History ${HIST_AT + 1} of ${HISTORY.length}: ${HISTORY[HIST_AT].label}`);
+}
+
+function showKeys() {
+  $('keyTable').innerHTML = KEYS.map(([keys, what]) =>
+    `<tr><td>${esc(what)}</td><td>${keys.map(k => `<kbd>${esc(k)}</kbd>`).join(' + ')}</td></tr>`
+  ).join('');
+  if (!$('keys').open) $('keys').showModal();
+}
+
+const typing = el => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+
 document.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); runOp(); }
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); runOp(); return; }
+  if (e.key === 'Escape' && typing(document.activeElement)) { document.activeElement.blur(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey || typing(e.target) || $('keys').open && e.key !== '?') return;
+  const hit = KEYS.find(([keys, , fn]) => fn && keys.length === 1 && keys[0] === e.key);
+  if (hit) { e.preventDefault(); hit[2](); }
 });
 
 window.addEventListener('DOMContentLoaded', async () => {
