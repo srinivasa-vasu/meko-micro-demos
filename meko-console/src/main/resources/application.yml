@@ -18,12 +18,12 @@ spring:
       indent-output: true
 
 server:
-  port: ${PORT:8080}
+  port: ${PORT:8090}
 
 meko:
   # Must match the connection key above, or the Authorization header is silently never sent.
   connection-name: mekodata
-  api-key: ${MEKO_APIKEY:}
+  api-key: ${MEKO_API_KEY:}
   # Namespaces what this console writes, and seeds the conversation dedup key.
   agent-id: ${MEKO_AGENT_ID:meko-console}
 

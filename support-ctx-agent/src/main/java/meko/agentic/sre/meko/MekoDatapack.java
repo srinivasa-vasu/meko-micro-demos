@@ -82,9 +82,9 @@ public class MekoDatapack {
     private void attempt(String when) {
         if (!meko.available()) {
             diagnosis = "no MCP tool callbacks are registered (" + when
-                    + ") — the Meko connection did not come up. Check spring.ai.mcp.client and MEKO_APIKEY.";
+                    + ") — the Meko connection did not come up. Check spring.ai.mcp.client and MEKO_API_KEY.";
             log.warn("Cannot resolve datapack '{}' {}: no MCP tool callbacks are registered. "
-                    + "Check spring.ai.mcp.client and MEKO_APIKEY.", configuredName, when);
+                    + "Check spring.ai.mcp.client and MEKO_API_KEY.", configuredName, when);
             return;
         }
         var tools = meko.registeredTools();

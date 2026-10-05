@@ -11,7 +11,7 @@ that shows only the parsed result cannot answer the question it exists for.
 ## Run it
 
 ```bash
-export MEKO_APIKEY=...                 # required
+export MEKO_API_KEY=...                 # required
 export MEKO_MCP_URL=https://mcp.mekodata.ai/mcp   # optional, this is the default
 mvn spring-boot:run
 ```

@@ -153,7 +153,7 @@ Memory, knowledge, routing and spend policy are real Meko calls.
 
 ## The web app
 
-`http://localhost:8080/` drives everything:
+`http://localhost:8081/` drives everything:
 
 - **Scenarios.** Each one sets up a known world state in a single call (seed memory, set the
   deployment state) and states a prediction before the run:
@@ -208,7 +208,7 @@ export MEKO_API_KEY=mko_tkn_...
 export MEKO_DATAPACK_ID=...            # or MEKO_DATAPACK_NAME (default: change-risk)
 export OPENROUTER_API_KEY=...
 mvn spring-boot:run
-open http://localhost:8080/
+open http://localhost:8081/
 ```
 
 ### Knowledge base

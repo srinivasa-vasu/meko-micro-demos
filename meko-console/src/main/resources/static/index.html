@@ -632,7 +632,7 @@ async function loadStatus() {
       ? `Connected. ${s.toolCount} tools registered, acting as
          <span class="mono">${esc(s.agentId)}</span> &mdash; which on conversation_get, _update and
          _delete is an <strong>ownership filter</strong>, not just trace attribution.`
-      : 'Not connected. Check MEKO_APIKEY and the MCP url &mdash; no tools are registered.';
+      : 'Not connected. Check MEKO_API_KEY and the MCP url &mdash; no tools are registered.';
     $('tools').innerHTML = s.tools.length
       ? s.tools.map(t => `<div class="mono" style="font-size:11.5px;padding:2px 0">${esc(t)}</div>`).join('')
       : '<p class="empty">None.</p>';
