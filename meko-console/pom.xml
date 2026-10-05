@@ -12,7 +12,7 @@
 
     <groupId>meko.console</groupId>
     <artifactId>meko-console</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
     <name>Meko Console</name>
     <description>A debugging console for Meko's MCP surface: call any tool, see exactly what was
         sent and exactly what came back.</description>
