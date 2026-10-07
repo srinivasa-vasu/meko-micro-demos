@@ -86,15 +86,17 @@ public class CatchUpAgent {
     public ProjectContext recallProjectContext(DiffSummary diff, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(diff.caseId());
         ContextStore store = support.store(diff.store());
-        List<StoreRecord> items = new ArrayList<>();
-        items.addAll(store.searchMemory(diff.caseId(), AGENT_ID, PR + " payment retry decision review request incident INC-1877"));
+        // The two searches do not depend on each other: run them together.
+        var knowledge = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                store.searchKnowledge(diff.caseId(), AGENT_ID, "ADR-194 payment retry idempotency authorization id"));
+        List<StoreRecord> items = new ArrayList<>(store.searchMemory(diff.caseId(), AGENT_ID, PR + " payment retry decision review request incident INC-1877"));
         // This agent's own write-backs from an earlier round of the story are set aside: each round starts from the PR as it was.
         items.removeIf(r -> {
             boolean earlier = AGENT_ID.equals(r.writtenBy()) && r.text().contains(roundTag("")) && !r.text().contains(roundTag(diff.round()));
             if (earlier) support.passedOver(ledger, "memory", r, "written in an earlier round of this story");
             return earlier;
         });
-        items.addAll(store.searchKnowledge(diff.caseId(), AGENT_ID, "ADR-194 payment retry idempotency authorization id"));
+        items.addAll(knowledge.join());
         List<StoreRecord> relevant = items.stream()
                 .filter(r -> r.text().contains(PR) || r.text().contains("INC-1877") || r.text().contains("ADR-194"))
                 .toList();
@@ -231,7 +233,7 @@ public class CatchUpAgent {
             summary = PR + " pushed with " + (context.adrRelevant() ? "ADR-194 compliance and " : "") + "the requested idempotency test: approved on the next review.";
             ledger.step("Catch-up agent", "requestReview", summary, support.effort("catch-up", "request-review"), StoryLedger.Kind.WORK);
             // The result goes back to memory: the request is addressed, so the PR bot, the reviewer and the next catch-up know.
-            store.remember(context.caseId(), AGENT_ID, PR + " review: the reviewer's request for an idempotency regression test "
+            store.rememberLater(context.caseId(), AGENT_ID, PR + " review: the reviewer's request for an idempotency regression test "
                     + ADDRESSED_MARKER + " " + AGENT_ID + " on " + java.time.LocalDate.now() + " (case " + context.caseId() + ") "
                     + roundTag(diff.round()) + "]: test added, review requested.");
         } else if (!pullRequests.requestOpen(diff.store(), PR)) {

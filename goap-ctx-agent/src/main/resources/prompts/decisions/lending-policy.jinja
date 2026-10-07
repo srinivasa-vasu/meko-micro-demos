@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}Which underwriting policy governs this application, given who the borrower is and how their income is shown? Answer with the policy id, or null if none of the policies in the context applies.{% endblock %}
+{% block shape %}{"policy": "policy id, e.g. LEND-UW-05, or null", "reason": "one sentence"}{% endblock %}

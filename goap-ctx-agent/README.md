@@ -1,6 +1,6 @@
 # Meko × Embabel GOAP: Agents That Don't Lose the Plot
 
-Five relatable agent workflows **across system boundaries**, each run by the **same agents, the same Embabel GOAP
+Six relatable agent workflows **across system boundaries**, each run by the **same agents, the same Embabel GOAP
 planner and the same code**, with and without **[Meko](https://mekodata.ai/)**. A toggle (*Show the build-it-yourself
 comparison*) adds a third lane, **your application's own database**, to show what Meko adds over what you would build
 yourself.
@@ -14,17 +14,18 @@ Each story states its boundary on screen:
 | Story | Boundary | Without | Your own database | With Meko |
 |---|---|---|---|---|
 | **Don't Make Me Explain It Again** | A vendor's chatbot (its own store) escalates to your payments specialist; only the CRM ticket crosses | 3 customer re-asks · 56 min | 3 · 56 min | 0 · 19 min |
-| **The Agent Died at 2 AM** | The payments team's on-call agent dies; your platform SRE agent takes over with only the incident id | 2 repeated steps · 80 min | 2 · 80 min | 0 · 50 min |
+| **I Already Sent You My Pay Stubs** | A vendor's loan-origination system (its own store) runs the checks and refers the application to your underwriter; only the referral crosses | 3 borrower re-asks · 2 hard inquiries · 184 min | 3 · 2 hard inquiries · 184 min | 0 · 1 hard inquiry · 39 min |
 | **What Changed Since Last Review?** | Last quarter's review was written by the analyst desk's agent | 5 evidence requests · 166 min | 5 · 166 min | 1 · 41 min |
-| **I Was on Vacation. Catch Me Up.** | Decisions and requests were written by Claude Code, the PR bot, the incident bot | 1 missed requirement · 158 min | 1 · 158 min | 0 · 53 min |
 | **The Organization Learned** | Case 1 is solved by the EU payments-ops team's agent, cases 2-3 by your support app | 3 cases: 264 min | 199 min | 131 min |
+| **The Agent Died at 2 AM** | The payments team's on-call agent dies; your platform SRE agent takes over with only the incident id | 2 repeated steps · 80 min | 2 · 80 min | 0 · 50 min |
+| **I Was on Vacation. Catch Me Up.** | Decisions and requests were written by Claude Code, the PR bot, the incident bot | 1 missed requirement · 158 min | 1 · 158 min | 0 · 53 min |
 
 Counts (re-asks, repeated steps, evidence requests, missed requirements) come from the plans the planner actually
 chose. Minutes are estimates; see [How effort is estimated](#how-effort-is-estimated).
 
 ### Follow-ups: decision traces, read back later
 
-Two stories have a follow-up in which someone accountable, given only an id, reads the case's record back:
+Three stories have a follow-up in which someone accountable, given only an id, reads the case's record back:
 
 * **Audit this transaction** (story 1). A compliance auditor reviews how the dispute was handled. Every party writes to
   the transaction's conversation, keyed by the transaction id, so with Meko one `conversation_get` returns the
@@ -32,6 +33,10 @@ Two stories have a follow-up in which someone accountable, given only an id, rea
 * **Check this review** (story 3). A model-risk reviewer checks the agent's KYC review against the KYC re-review
   standard: which previous review it compared against and what it passed over, the materiality decision, each evidence
   request and the sign-off.
+* **Review this credit call** (the loan story). A fair-lending reviewer checks the underwriter's credit call against
+  the underwriting policy: which checks were verified before the call and by whom, whether the call follows the
+  thresholds in the policy text for the figures on record, how many hard inquiries the borrower's credit file took,
+  and what the borrower had to do again.
 
 Without the record, each piece has to be requested from the party that holds it, and waited for, and what comes back
 is the outcome only: a party's own system keeps what was done, not how an agent's decision was made. Decision traces
@@ -40,6 +45,7 @@ exist only where an agent wrote them: in Meko, or in your own database for your 
 | Follow-up | Without | Your own database | With Meko |
 |---|---|---|---|
 | **Audit this transaction** | 3 records requested · 0 decision traces · 192 min | 2 · 1 decision trace · 162 min | 0 · 2 decision traces · 17 min |
+| **Review this credit call** | 3 records requested · 0 decision traces · 194 min | 2 · 2 decision traces · 164 min | 0 · 3 decision traces · 19 min |
 | **Check this review** | 2 records requested · 0 decision traces · 102 min | 1 · 1 decision trace · 42 min | 0 · 2 decision traces · 22 min |
 
 ## What you see in the app
@@ -79,7 +85,7 @@ The header shows whether Meko and the models are connected, and has two more con
 Meko) and *Simulate Meko outage*.
 
 A slide deck sets the context before the live demo: open [`assets/overview.html`](assets/overview.html) in a browser.
-It covers the five use cases and the audit follow-ups, the agents and how they interact (including the
+It covers the six use cases and the audit follow-ups, the agents and how they interact (including the
 auditor and the model-risk reviewer who read a case back later), the four things a context
 engine provides, and the data infrastructure tax behind each. It is one self-contained file with light and dark themes,
 navigable with the arrow keys, and prints one slide per page.
@@ -91,9 +97,9 @@ that agents and tools wrote, knowledge people uploaded or agents promoted, the r
 traces, each gate decision written into the case's conversation with who made it and on how much context. Retrieval is
 not reuse: each lane names what it passed over and why.
 
-**Distractors.** The seed adds five look-alikes: an outdated 2025 review of the same customer, a review of a
+**Distractors.** The seed adds six look-alikes: an outdated 2025 review of the same customer, a review of a
 near-identical customer id, a superseded early decision on the same pull request, an open request on a different pull
-request, and a look-alike chargeback policy. The agents pick the right item in each case. Choosing among what was
+request, a look-alike chargeback policy, and a look-alike underwriting policy for self-employed borrowers. The agents pick the right item in each case. Choosing among what was
 retrieved is a decision, not a code filter.
 
 **Every story writes its result back.** The payments specialist records its resolution. The incident's conversation
@@ -165,10 +171,11 @@ waiting minutes are reported but not priced as labour.
 | Story | Without Meko | With Meko | Kind of saving |
 |---|---|---|---|
 | Don't Make Me Explain It Again | 56 (13 hands-on, 43 waiting) | 19 (13 hands-on, 6 waiting) | Customer waiting and time to resolution; your specialist's effort is the same |
-| The Agent Died at 2 AM | 80 | 50 | Hands-on: two investigation steps not redone |
+| I Already Sent You My Pay Stubs | 184 (19 hands-on, 165 waiting) | 39 (19 hands-on, 20 waiting) | Borrower waiting and time to the credit call: no documents re-sent, no second credit pull, no second employment check, no policy escalation |
 | What Changed Since Last Review? | 166 | 41 | Hands-on: five full re-verifications replaced by a diff and one targeted request |
-| I Was on Vacation. Catch Me Up. | 158 | 53 | Hands-on: 90 min of digging and a 40-min bounced review |
 | The Organization Learned (3 cases) | 264 | 131 | Hands-on: hypotheses not re-tested on cases 2 and 3 |
+| The Agent Died at 2 AM | 80 | 50 | Hands-on: two investigation steps not redone |
+| I Was on Vacation. Catch Me Up. | 158 | 53 | Hands-on: 90 min of digging and a 40-min bounced review |
 
 A few large estimates carry most of each gap (the 25-min policy escalation, 90 min of digging, a 40-min bounced review,
 5 × 30-min re-verifications); halve them and every story still favours Meko, because the steps themselves disappear
@@ -198,7 +205,7 @@ mvn spring-boot:run
 
 Then:
 
-1. Upload the six documents in `src/main/resources/kb/` to the datapack's knowledge base in the Meko app.
+1. Upload the eight documents in `src/main/resources/kb/` to the datapack's knowledge base in the Meko app.
 2. Press **Seed datapack** in the app header (or `POST /api/meko/seed`). It writes what other agents and tools wrote
    (a prior KYC review in fingerprint form, notes from a coding assistant, a PR review bot and an incident bot) and the
    distractors. It is safe to repeat. It also removes any KYC review stored in the datapack as plain text, and reports any it
@@ -220,6 +227,8 @@ both. The documents are fictional and short:
 | `RB-PAY-12` payment API latency runbook | Organizational context for story 2 |
 | `KYC-STD-04` periodic re-review standard | Your KYC agent's materiality decision, and the review check (story 3) |
 | `ADR-194` payment retry idempotency | Your catch-up agent's brief (story 4) |
+| `LEND-UW-05` salaried personal-loan underwriting policy | Your underwriter chooses it and applies its thresholds, and the fair-lending review checks against it (loan story) |
+| `LEND-UW-09` self-employed personal-loan underwriting policy | The look-alike it must pass over (loan story) |
 
 Upload the documents before seeding. Where a document is missing, the seed promotes a one-line version instead, so the
 stories still work.

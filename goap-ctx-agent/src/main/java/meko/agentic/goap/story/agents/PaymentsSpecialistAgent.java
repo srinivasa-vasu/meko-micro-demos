@@ -158,7 +158,7 @@ public class PaymentsSpecialistAgent {
         String said = file.ticketNote();
         for (Exchange e : file.asked()) {
             support.recordEvent(store, file.caseId(), AGENT_ID, file.transaction(), REASKED,
-                    e.unknown() + " was not in the context the specialist had", said, e.question());
+                    "not in the context the specialist had: " + e.unknown(), said, e.question());
             said = e.answer();
         }
         String reply = "Thank you. I'm checking the settlement now.";
@@ -322,7 +322,7 @@ public class PaymentsSpecialistAgent {
                 facts, gaps,
                 "Thanks for your patience. I've approved a provisional refund of " + file.amount() + " for " + file.transaction()
                         + " while we confirm settlement."));
-        support.store(file.store()).remember(file.caseId(), AGENT_ID, "Support case " + file.caseId() + " resolved: " + resolution);
+        support.store(file.store()).rememberLater(file.caseId(), AGENT_ID, "Support case " + file.caseId() + " resolved: " + resolution);
         support.traceDecisions(support.store(file.store()), file.caseId(), AGENT_ID, file.transaction(), PERSONA);
         support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.transaction(), RESOLUTION, null,
                 "Resolve the dispute on " + file.transaction(), resolution);

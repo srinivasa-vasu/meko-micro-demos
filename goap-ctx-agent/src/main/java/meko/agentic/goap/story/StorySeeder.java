@@ -58,6 +58,14 @@ public class StorySeeder {
             new Seed(CURATOR, "CARD-DISPUTE-03 chargeback policy",
                     "Demo policy CARD-DISPUTE-03: when the customer raises a chargeback through their card issuer, follow the card network's "
                             + "chargeback process. Do not issue a provisional refund from our side while the chargeback is open, to avoid refunding twice.", "CARD-DISPUTE-03"),
+            new Seed(CURATOR, "LEND-UW-05 salaried personal loan underwriting policy",
+                    "Demo policy LEND-UW-05: unsecured personal loans to salaried borrowers. Verify income from two recent pay stubs, employment with the employer, "
+                            + "and assets from two months of bank statements; pull one credit report per application with consent, and reuse checks the origination system completed. "
+                            + "Credit score of at least 680. DTI up to 40% approve; above 40% and up to 45% approve only with at least 3 months of reserves; above 45% decline.", "LEND-UW-05"),
+            // Distractor: a look-alike policy for a different borrower (self-employed).
+            new Seed(CURATOR, "LEND-UW-09 self-employed personal loan underwriting policy",
+                    "Demo policy LEND-UW-09: unsecured personal loans to self-employed borrowers only. Verify income from two years of tax returns and profit and loss statements. "
+                            + "Credit score of at least 700; DTI up to 36% approve; above 36% decline.", "LEND-UW-09"),
             new Seed(CURATOR, "ADR-194 payment retry idempotency decision",
                     "Demo ADR-194: payment retries must be idempotent and keyed by the original authorization id; any change to the retry contract requires architecture review. "
                             + "Related incident INC-1877 was caused by a retry that re-captured an already settled payment.", "ADR-194"));

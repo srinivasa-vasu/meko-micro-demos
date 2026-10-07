@@ -69,8 +69,15 @@ public class SreTakeoverAgent {
         List<StoreRecord> notes = store.recallCase(request.caseId(), AGENT_ID, "incident investigation checkpoint completed next step");
         Optional<String> hash = StorySupport.extract(notes, "artifact ([0-9a-f]{64})");
         Optional<String> checkpoint = hash.flatMap(h -> store.getArtifact(request.caseId(), AGENT_ID, h));
+        // Without the checkpoint (its memory write failed, or the store kept nothing from it), the first investigator's
+        // own records in the incident's conversation, keyed by the incident id, say what it finished.
+        List<ContextStore.Turn> record = checkpoint.isPresent() || store.kind() == ContextStore.Kind.NONE ? List.of()
+                : support.readBack(store, request.caseId(), AGENT_ID, request.caseId(),
+                        turns -> turns.stream().anyMatch(t -> SreInvestigatorAgent.AGENT_ID.equals(t.writtenBy()) && t.event().isPresent()))
+                .stream().filter(t -> SreInvestigatorAgent.AGENT_ID.equals(t.writtenBy()) && t.event().isPresent()).toList();
+        record.forEach(t -> ledger.found("incident conversation", t.output(), t.writtenBy()));
         List<String> findings = checkpoint.map(j -> objectMapper.readTree(j).path("findings").valueStream().map(JsonNode::asString).toList())
-                .orElse(List.of());
+                .orElse(record.stream().map(ContextStore.Turn::output).toList());
         checkpoint.ifPresent(j -> {
             findings.forEach(f -> ledger.found("checkpoint artifact", f, SreInvestigatorAgent.AGENT_ID));
             ledger.found("checkpoint artifact", "Next step: " + objectMapper.readTree(j).path("next").asString(), SreInvestigatorAgent.AGENT_ID);
@@ -78,7 +85,8 @@ public class SreTakeoverAgent {
         // Everything the takeover agent has: the page, plus whatever the context store returned.
         String context = "Alert: payments-api p99 latency 5.4s since 02:03 (incident " + request.caseId() + ").\n"
                 + StorySupport.asContext("Investigation notes", notes)
-                + checkpoint.map(j -> "Checkpoint artifact (JSON): " + j + "\n").orElse("");
+                + checkpoint.map(j -> "Checkpoint artifact (JSON): " + j + "\n").orElse("")
+                + StorySupport.asContext("The first investigator's records in the incident's conversation", record, true);
         Progress progress = decisions.decide(request.caseId(),
                 PERSONA,
                 "decisions/sre-progress",
@@ -88,8 +96,10 @@ public class SreTakeoverAgent {
                 () -> {
                     List<String> completed = checkpoint.map(j -> objectMapper.readTree(j).path("completed").valueStream().map(JsonNode::asString).toList())
                             .orElse(List.of());
-                    return new Progress(completed.contains("correlateDeploy"), completed.contains("ruleOutDatabase"),
-                            completed.isEmpty() ? "correlate the spike with recent deployments" : "verify connection-pool saturation");
+                    boolean deploy = completed.contains("correlateDeploy") || record.stream().anyMatch(t -> t.isEvent(SreInvestigatorAgent.AGENT_ID, SreInvestigatorAgent.DEPLOY_CORRELATED));
+                    boolean database = completed.contains("ruleOutDatabase") || record.stream().anyMatch(t -> t.isEvent(SreInvestigatorAgent.AGENT_ID, SreInvestigatorAgent.DATABASE_RULED_OUT));
+                    return new Progress(deploy, database,
+                            !deploy ? "correlate the spike with recent deployments" : !database ? "check the database" : "verify connection-pool saturation");
                 },
                 ai);
         // The judgement goes on the incident's record, keyed by the incident id, with who made it and on what.
@@ -156,7 +166,7 @@ public class SreTakeoverAgent {
                 "handover note for the next on-call shift",
                 support.render("writer/sre-handover", Map.of()),
                 facts, gaps, "Handover: " + pool.finding() + " " + summary));
-        support.store(state.store()).remember(state.caseId(), AGENT_ID, "Incident " + state.caseId() + " resolved: " + pool.finding() + " " + summary);
+        support.store(state.store()).rememberLater(state.caseId(), AGENT_ID, "Incident " + state.caseId() + " resolved: " + pool.finding() + " " + summary);
         return new IncidentResolved(state.caseId(), summary);
     }
 

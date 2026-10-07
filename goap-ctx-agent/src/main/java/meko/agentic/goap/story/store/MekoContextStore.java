@@ -24,6 +24,19 @@ public class MekoContextStore implements ContextStore {
     private final ReceiptLog receipts;
     private final OutageSwitch outage;
 
+    /*
+     * Writes no agent waits for run in the background: conversation turns (Meko queues them anyway) and results written
+     * back for later cases. Turns of one conversation stay in order: each waits for the one before it. A read of a
+     * conversation waits for its pending turns first; flush(caseId) waits for everything a case wrote.
+     */
+    private final java.util.concurrent.ExecutorService writer = java.util.concurrent.Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "meko-writer");
+        t.setDaemon(true);
+        return t;
+    });
+    private final Map<String, java.util.concurrent.CompletableFuture<Void>> threadTail = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, List<java.util.concurrent.CompletableFuture<Void>>> pendingByCase = new java.util.concurrent.ConcurrentHashMap<>();
+
     public MekoContextStore(MekoMcpClient meko, ReceiptLog receipts, OutageSwitch outage) {
         this.meko = meko;
         this.receipts = receipts;
@@ -35,8 +48,18 @@ public class MekoContextStore implements ContextStore {
         return Kind.MEKO_LIVE;
     }
 
+    /** conversation_add_message is queued: a turn is readable a few seconds after it is written. */
+    @Override
+    public boolean writesAreQueued() {
+        return true;
+    }
+
     @Override
     public void addTurn(String caseId, String agentId, String thread, String input, String output, String reasoning) {
+        background(caseId, thread, () -> writeTurn(caseId, agentId, thread, input, output, reasoning));
+    }
+
+    private void writeTurn(String caseId, String agentId, String thread, String input, String output, String reasoning) {
         call(caseId, agentId, "conversation_add_message", "[" + thread + "] " + abbreviate(reasoning != null ? reasoning : input), () -> {
             meko.callTool("conversation_add_message", meko.args(
                     "conversation_id", thread(thread),
@@ -52,6 +75,9 @@ public class MekoContextStore implements ContextStore {
 
     @Override
     public List<Turn> transcript(String caseId, String agentId, String thread) {
+        // Whatever this application still has queued for the conversation is written before it is read.
+        java.util.concurrent.CompletableFuture<Void> tail = threadTail.get(thread);
+        if (tail != null) tail.join();
         return call(caseId, agentId, "conversation_get", "conversation " + thread, () -> {
             JsonNode conversation = meko.callTool("conversation_get", meko.args(
                     "conversation_id", thread(thread),
@@ -224,6 +250,26 @@ public class MekoContextStore implements ContextStore {
                     : Optional.of(new String(Base64.getDecoder().decode(b64), StandardCharsets.UTF_8));
             return new Result<>(json, json.isPresent() ? 1 : 0);
         }, Optional.empty());
+    }
+
+    @Override
+    public void rememberLater(String caseId, String agentId, String text) {
+        background(caseId, null, () -> remember(caseId, agentId, text));
+    }
+
+    @Override
+    public void flush(String caseId) {
+        List<java.util.concurrent.CompletableFuture<Void>> pending = pendingByCase.remove(caseId);
+        if (pending != null) java.util.concurrent.CompletableFuture.allOf(pending.toArray(java.util.concurrent.CompletableFuture[]::new)).join();
+    }
+
+    /** Runs a write in the background; with a thread, after that conversation's earlier writes. Failures are recorded by call(). */
+    private void background(String caseId, String thread, Runnable write) {
+        java.util.concurrent.CompletableFuture<Void> done = thread == null
+                ? java.util.concurrent.CompletableFuture.runAsync(write, writer)
+                : threadTail.compute(thread, (k, tail) -> (tail == null ? java.util.concurrent.CompletableFuture.<Void>completedFuture(null) : tail)
+                        .exceptionally(e -> null).thenRunAsync(write, writer));
+        pendingByCase.computeIfAbsent(caseId, k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(done.exceptionally(e -> null));
     }
 
     /** The conversation for a case. Any process that knows the case id reconnects the same one. */

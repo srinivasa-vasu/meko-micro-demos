@@ -33,6 +33,11 @@ public interface ContextStore {
 
     Kind kind();
 
+    /** Whether a conversation turn becomes readable only some time after it is written (Meko queues them). */
+    default boolean writesAreQueued() {
+        return false;
+    }
+
     /**
      * Appends a turn to a conversation thread (Meko: conversation_add_message). {@code thread} is the conversation's key,
      * such as a transaction id: any agent, in any process, that knows the key reaches the same conversation.
@@ -67,6 +72,18 @@ public interface ContextStore {
 
     /** Deletes one memory, written by {@code writtenBy} (Meko: memory_delete_by_id); true if it was removed. */
     boolean forget(String caseId, String writtenBy, String memoryId);
+
+    /**
+     * Writes a memory that nothing reads in this run (a result written back for later cases). Where writes are slow
+     * (Meko's fact extraction), it happens in the background; {@link #flush} waits for it. By default, at once.
+     */
+    default void rememberLater(String caseId, String agentId, String text) {
+        remember(caseId, agentId, text);
+    }
+
+    /** Waits for every background write of {@code caseId}, so the run's receipts are complete. By default, nothing to wait for. */
+    default void flush(String caseId) {
+    }
 
     /** Moves memories into the shared knowledge base (Meko: memory_promote). */
     boolean promote(String caseId, String agentId, List<String> memoryIds);

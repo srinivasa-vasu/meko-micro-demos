@@ -139,6 +139,87 @@ class StoryPlanningTest {
     }
 
     @Test
+    void borrowerIsNotAskedAgainWhenTheReferralCarriesTheChecks() {
+        StoryRun without = stories.run("loan-underwriting", ContextStores.Lane.WITHOUT);
+        StoryRun db = stories.run("loan-underwriting", ContextStores.Lane.DATABASE);
+        StoryRun with = stories.run("loan-underwriting", ContextStores.Lane.MEKO);
+        assertCompleted(without, db, with);
+        // Without the origination system's results: documents re-sent, employment re-verified, credit pulled a second time.
+        assertThat(executed(without)).contains("askForPayStubs", "askForBankStatements", "verifyEmployment", "pullCreditAgain", "escalateForPolicy");
+        assertThat(metric(without, "borrowerReasks")).isEqualTo(3);
+        assertThat(metric(without, "hardInquiries")).isEqualTo(2);
+        assertThat(metric(without, "repeatedSteps")).isEqualTo(2);
+        assertThat(without.phases().get(1).plans()).hasSizeGreaterThan(1);
+        // Your own database cannot see what the vendor's system wrote, and holds no policy.
+        assertThat(db.store()).isEqualTo("SHARED_DB");
+        assertThat(metric(db, "borrowerReasks")).isEqualTo(3);
+        // With Meko the checks are reused and the policy is in shared knowledge.
+        assertThat(executed(with)).doesNotContain("askForPayStubs", "askForBankStatements", "verifyEmployment", "pullCreditAgain", "escalateForPolicy");
+        assertThat(metric(with, "borrowerReasks")).isZero();
+        assertThat(metric(with, "hardInquiries")).isEqualTo(1);
+        assertThat(with.found()).anyMatch(f -> f.writtenBy().equals("vendor:loan-origination"));
+        // The look-alike self-employed policy was retrieved and passed over, with the reason.
+        assertThat(with.passedOver()).anyMatch(p -> p.text().contains("LEND-UW-09") && p.reason().contains("self-employed"));
+        // The credit call applies the thresholds of the policy text the underwriter had, in every lane, to the same figures.
+        // 25,000 USD over 36 months at 18.9% APR is 915 a month: DTI (1,850 + 915) / 7,400 = 37.4%, within 40%.
+        assertThat(List.of(without, db, with)).allSatisfy(r -> assertThat(r.outcome()).contains("approve under LEND-UW-05").contains("DTI 37.4%"));
+        // Without the policy in reach, credit risk sends it: a written basis, recorded as such.
+        assertThat(without.outcome()).contains("(sent by credit risk on request)");
+        // Your own database: the record is in order, each re-ask before the check it led to.
+        var record = stores.forLane(ContextStores.Lane.DATABASE).transcript("t", "t",
+                db.found().isEmpty() ? findApplication(db) : findApplication(db));
+        int askIncome = indexOf(record, t -> t.isEvent("lending:underwriter", "re-asked") && t.output().contains("pay stubs"));
+        int income = indexOf(record, t -> t.isEvent("lending:underwriter", "income confirmed"));
+        assertThat(askIncome).isNotNegative().isLessThan(income);
+        // The credit call's record states the thresholds applied and the factors it rested on.
+        assertThat(record).anyMatch(t -> t.isEvent("lending:underwriter", "credit call") && t.output().contains("Thresholds applied: ")
+                && t.output().contains("Factors: credit score 712, DTI 37.4%, reserves 4 months"));
+        assertThat(metric(with, "minutes")).isLessThan(metric(without, "minutes"));
+    }
+
+    private static String findApplication(StoryRun run) {
+        return run.transcript().stream().map(StoryLedger.Line::text).map(t -> java.util.regex.Pattern.compile("(APP-\\d+)").matcher(t))
+                .filter(java.util.regex.Matcher::find).map(m -> m.group(1)).findFirst().orElseThrow();
+    }
+
+    private static int indexOf(List<meko.agentic.goap.story.store.ContextStore.Turn> turns, java.util.function.Predicate<meko.agentic.goap.story.store.ContextStore.Turn> p) {
+        for (int i = 0; i < turns.size(); i++) if (p.test(turns.get(i))) return i;
+        return -1;
+    }
+
+    @Test
+    void theUnderwriterChoosesThePolicyFromTheFileAndReadsTheModelsAnswerSafely() {
+        var salaried = new meko.agentic.goap.story.agents.UnderwriterAgent.ApplicationFile("c", null, "APP-1", "r", 25_000, 915, 7_400, true, "salaried", 4, 712, 1_850, List.of());
+        var selfEmployed = new meko.agentic.goap.story.agents.UnderwriterAgent.ApplicationFile("c", null, "APP-1", "r", 25_000, 915, 7_400, true, "self-employed", 4, 712, 1_850, List.of());
+        var large = new meko.agentic.goap.story.agents.UnderwriterAgent.ApplicationFile("c", null, "APP-1", "r", 60_000, 915, 7_400, true, "salaried", 4, 712, 1_850, List.of());
+        String uw05 = "LEND-UW-05: Unsecured personal loans to salaried borrowers. Use this policy for unsecured personal loans up to 50,000 USD to salaried borrowers.";
+        String uw09 = "LEND-UW-09: Use this policy only for self-employed borrowers: sole traders and contractors.";
+        assertThat(meko.agentic.goap.story.agents.UnderwriterAgent.covers(uw05, salaried)).isTrue();
+        assertThat(meko.agentic.goap.story.agents.UnderwriterAgent.covers(uw09, salaried)).isFalse();
+        assertThat(meko.agentic.goap.story.agents.UnderwriterAgent.covers(uw09, selfEmployed)).isTrue();
+        assertThat(meko.agentic.goap.story.agents.UnderwriterAgent.covers(uw05, large)).as("above the policy's amount limit").isFalse();
+        assertThat(List.of("Approved.", "approve", "APPROVE")).allSatisfy(d -> assertThat(meko.agentic.goap.story.agents.UnderwriterAgent.normalize(d)).isEqualTo("approve"));
+        assertThat(meko.agentic.goap.story.agents.UnderwriterAgent.normalize("Declined")).isEqualTo("decline");
+        assertThat(meko.agentic.goap.story.agents.UnderwriterAgent.normalize("needs a human")).isEqualTo("refer");
+    }
+
+    @Test
+    void theCreditCallFollowsWhateverThresholdsThePolicyTextStates() {
+        String text = "Credit score of at least 680. DTI up to 40% approve; above 40% and up to 45%\n   approve only with at least 3 months of reserves; above 45% decline.";
+        var t = LendingThresholds.parse(text).orElseThrow();
+        assertThat(t.apply(712, 38, 0)).isEqualTo("approve");
+        assertThat(t.apply(712, 43, 4)).isEqualTo("approve");
+        assertThat(t.apply(712, 43, 2)).isEqualTo("decline");
+        assertThat(t.apply(650, 30, 6)).isEqualTo("decline");
+        // DTI is compared exactly: 40.4% is above 40%, so it needs the reserves band, not a straight approval.
+        assertThat(t.apply(712, 40.4, 2)).isEqualTo("decline");
+        assertThat(t.apply(712, 40.0, 0)).isEqualTo("approve");
+        // A stricter policy, the same figures: a different call.
+        assertThat(LendingThresholds.parse("Credit score of at least 700; DTI up to 36% approve; above 36% decline.").orElseThrow().apply(712, 38, 4)).isEqualTo("decline");
+        assertThat(LendingThresholds.parse("No thresholds here.")).isEmpty();
+    }
+
+    @Test
     void takeoverResumesFromTheCheckpoint() {
         StoryRun without = stories.run("agent-died-2am", false);
         StoryRun with = stories.run("agent-died-2am", true);
@@ -290,6 +371,38 @@ class StoryPlanningTest {
     }
 
     @Test
+    void aFairLendingReviewerChecksTheCreditCallFromTheApplicationIdAlone() {
+        for (ContextStores.Lane lane : ContextStores.Lane.values()) stories.run("loan-underwriting", lane);
+        StoryRun without = stories.followUp("loan-underwriting", ContextStores.Lane.WITHOUT, stories.newFollowUpCaseId("loan-underwriting"));
+        StoryRun db = stories.followUp("loan-underwriting", ContextStores.Lane.DATABASE, stories.newFollowUpCaseId("loan-underwriting"));
+        StoryRun with = stories.followUp("loan-underwriting", ContextStores.Lane.MEKO, stories.newFollowUpCaseId("loan-underwriting"));
+        assertCompleted(without, db, with);
+        // With Meko one conversation_get by the application id returns the checks, the policy and the credit call.
+        assertThat(executed(with)).doesNotContain("requestOriginationFile", "requestUnderwritingNotes", "requestPolicy");
+        assertThat(metric(with, "recordsRequested")).isZero();
+        assertThat(with.receipts()).anyMatch(r -> r.tool().equals("conversation_get") && r.hits() > 0);
+        assertThat(with.found()).extracting(StoryLedger.Found::writtenBy).contains("vendor:loan-origination", "lending:underwriter");
+        assertThat(with.found()).anyMatch(f -> f.writtenBy().equals("lending:underwriter") && f.text().startsWith("decision lending-credit-call: "));
+        assertThat(metric(with, "decisionTraces")).isPositive();
+        assertThat(metric(without, "decisionTraces")).isZero();
+        var task = (meko.agentic.goap.story.agents.ResponseWriterAgent.WritingTask) ledgers.forCase(with.caseId()).writingTask();
+        assertThat(task.facts()).contains("Hard inquiries on the borrower's credit file: 1", "Borrower asked to do something again after the referral: 0 times",
+                "Credit call matches the policy's thresholds: yes", "Thresholds and factors recorded with the credit call: yes",
+                "Credit call rests only on factors the policy names: yes", "Principal reasons recorded for a decline: not applicable");
+        assertThat(task.facts()).anyMatch(f -> f.contains("10-day window for the employment verification cannot be checked"));
+        var withoutTask = (meko.agentic.goap.story.agents.ResponseWriterAgent.WritingTask) ledgers.forCase(without.caseId()).writingTask();
+        assertThat(withoutTask.facts()).contains("Hard inquiries on the borrower's credit file: 2", "Borrower asked to do something again after the referral: 3 times");
+        assertThat(without.auditTrail()).anyMatch(e -> e.issue().startsWith("A second hard inquiry"));
+        // Your own database holds your underwriter's records, not the vendor's file or the policy text.
+        assertThat(executed(db)).contains("requestOriginationFile", "requestPolicy").doesNotContain("requestUnderwritingNotes");
+        assertThat(executed(without)).contains("requestOriginationFile", "requestUnderwritingNotes", "requestPolicy");
+        // Every lane reaches the same verdict from the same facts; only the cost differs.
+        assertThat(List.of(without, db, with)).allSatisfy(r -> assertThat(r.outcome()).contains("Credit call made consistently with LEND-UW-05"));
+        assertThat(metric(with, "minutes")).isLessThan(metric(db, "minutes"));
+        assertThat(metric(db, "minutes")).isLessThan(metric(without, "minutes"));
+    }
+
+    @Test
     void aReviewerChecksAKycReviewFromItsDecisionTraces() {
         for (ContextStores.Lane lane : ContextStores.Lane.values()) stories.run("what-changed", lane);
         StoryRun without = stories.followUp("what-changed", ContextStores.Lane.WITHOUT, stories.newFollowUpCaseId("what-changed"));
@@ -350,6 +463,26 @@ class StoryPlanningTest {
                             .anyMatch(r -> r.receipts().stream().anyMatch(x -> x.agent().equals(m.id())));
                 }
             }
+        }
+    }
+
+    @Test
+    void aHandoffSurvivesAFailedMemoryWriteByReadingTheConversation() {
+        outage.failMemoryWrites(true);
+        try {
+            // The origination system's memory write fails; the underwriter reads the checks from the application's conversation.
+            StoryRun loan = stories.run("loan-underwriting", ContextStores.Lane.MEKO);
+            assertThat(loan.steps()).anyMatch(st -> st.text().startsWith("The write of the checks' results to Meko failed: memory_add failed: simulated failure"));
+            assertThat(metric(loan, "borrowerReasks")).isZero();
+            assertThat(metric(loan, "hardInquiries")).isEqualTo(1);
+            assertThat(executed(loan)).doesNotContain("askForPayStubs", "verifyEmployment", "pullCreditAgain");
+            assertThat(loan.found()).anyMatch(f -> f.source().equals("application conversation") && f.writtenBy().equals("vendor:loan-origination"));
+            // The dead investigator's checkpoint memory fails; the takeover reads what it finished from the incident's conversation.
+            StoryRun incident = stories.run("agent-died-2am", true);
+            assertThat(metric(incident, "repeatedSteps")).isZero();
+            assertThat(incident.found()).anyMatch(f -> f.source().equals("incident conversation"));
+        } finally {
+            outage.failMemoryWrites(false);
         }
     }
 

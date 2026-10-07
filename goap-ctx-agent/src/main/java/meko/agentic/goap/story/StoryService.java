@@ -3,6 +3,8 @@ package meko.agentic.goap.story;
 import meko.agentic.goap.model.ModelCallLog;
 import meko.agentic.goap.story.agents.CatchUpAgent;
 import meko.agentic.goap.story.agents.DisputeAuditorAgent;
+import meko.agentic.goap.story.agents.FairLendingReviewAgent;
+import meko.agentic.goap.story.agents.LoanIntakeAgent;
 import meko.agentic.goap.story.agents.KycReviewCheckAgent;
 import meko.agentic.goap.story.agents.ResponseWriterAgent;
 import meko.agentic.goap.story.agents.KycReviewAgent;
@@ -41,6 +43,7 @@ public class StoryService {
     private final double hourlyRateUsd;
     private final AtomicInteger failureCase = new AtomicInteger();
     private final PaymentDisputes disputes;
+    private final LoanApplications loans;
     /** What each story last handled in each lane (story|lane → transaction or review id): what its follow-up looks at. */
     private final Map<String, String> lastSubject = new java.util.concurrent.ConcurrentHashMap<>();
     /** See {@link PaymentFailureAgent.FailureCase#epoch()}. */
@@ -52,9 +55,10 @@ public class StoryService {
     private final PullRequests pullRequests;
 
     public StoryService(StoryCatalog catalog, StoryRunner runner, StoryLedgers ledgers,
-                        ReceiptLog receipts, ContextStores stores, ModelCallLog modelCalls, PaymentDisputes disputes, PullRequests pullRequests,
+                        ReceiptLog receipts, ContextStores stores, ModelCallLog modelCalls, PaymentDisputes disputes, LoanApplications loans, PullRequests pullRequests,
                         @Value("${goap.cost.hourly-rate-usd:60}") double hourlyRateUsd) {
         this.disputes = disputes;
+        this.loans = loans;
         this.pullRequests = pullRequests;
         this.catalog = catalog;
         this.runner = runner;
@@ -85,7 +89,7 @@ public class StoryService {
         boolean meko = lane == ContextStores.Lane.MEKO;
         StoryLedger ledger = ledgers.forCase(caseId);
         List<StoryRunner.Phase> phases = new ArrayList<>();
-        // Stories 1 and 2 hand off across a system boundary. With Meko both sides share the datapack; in the database
+        // Stories 1, 2 and the loan story hand off across a system boundary. With Meko both sides share the datapack; in the database
         // lane the first agent writes to its own system's store and your agent reads your database.
         ContextStore.Kind otherSide = lane == ContextStores.Lane.DATABASE ? ContextStore.Kind.OTHER_SYSTEM_DB : kind;
 
@@ -99,6 +103,17 @@ public class StoryService {
                     // Only the CRM ticket crosses the boundary.
                     phases.add(runner.run("Your payments specialist · new agent process, given only the CRM ticket",
                             "PaymentsSpecialistAgent", ledger, new SupportFrontlineAgent.TicketNote(ticket.caseId(), kind, ticket.note())));
+                }
+            }
+            case "loan-underwriting" -> {
+                lastSubject.put(subjectKey(storyId, lane), loans.open(caseId).applicationId());
+                StoryRunner.Phase intake = runner.run("Loan-origination system · a vendor's product with its own store", "LoanIntakeAgent", ledger,
+                        new LoanIntakeAgent.LoanApplicationStart(caseId, otherSide));
+                phases.add(intake);
+                if (intake.result() instanceof LoanIntakeAgent.Referral referral) {
+                    // Only the referral crosses the boundary.
+                    phases.add(runner.run("Your credit underwriter · new agent process, given only the referral", "UnderwriterAgent", ledger,
+                            new LoanIntakeAgent.Referral(referral.caseId(), kind, referral.applicationId(), referral.note())));
                 }
             }
             case "agent-died-2am" -> {
@@ -138,7 +153,7 @@ public class StoryService {
         return followUp(storyId, lane, caseId, subject);
     }
 
-    /** Runs a story's follow-up on {@code subject}: the transaction id for story 1, the review id for story 3. */
+    /** Runs a story's follow-up on {@code subject}: the transaction id for story 1, the review id for story 3, the application id for the loan story. */
     public StoryRun followUp(String storyId, ContextStores.Lane lane, String caseId, String subject) {
         StoryCatalog.Story story = catalog.get(storyId);
         StoryCatalog.FollowUp followUp = story.followUp();
@@ -147,6 +162,7 @@ public class StoryService {
         Object request = switch (followUp.agent()) {
             case "DisputeAuditorAgent" -> new DisputeAuditorAgent.AuditRequest(caseId, kind, subject);
             case "KycReviewCheckAgent" -> new KycReviewCheckAgent.CheckRequest(caseId, kind, subject);
+            case "FairLendingReviewAgent" -> new FairLendingReviewAgent.ReviewRequest(caseId, kind, subject);
             default -> throw new IllegalStateException("No request shape for " + followUp.agent());
         };
         StoryRunner.Phase phase = runner.run(followUp.who() + " · later, given only " + followUp.subject() + " " + subject,
@@ -358,6 +374,8 @@ public class StoryService {
         if (ledger.writingTask() instanceof ResponseWriterAgent.WritingTask task) {
             phases.add(runner.run("Response writer · model tier chosen by planner cost", "ResponseWriterAgent", ledger, task));
         }
+        // Writes that ran in the background (conversation turns, results written back) finish before the run reports.
+        stores.byKind(kind).flush(caseId);
         List<ReceiptLog.Receipt> calls = receipts.forCase(caseId);
         List<ModelCallLog.ModelCall> models = modelCalls.forCase(caseId);
         Map<String, Object> metrics = new LinkedHashMap<>(ledger.counters());
@@ -407,6 +425,8 @@ public class StoryService {
             case "what-changed" -> "KYC";
             case "vacation-catch-up" -> "PR";
             case "organization-learned" -> "PAY";
+            case "loan-underwriting" -> "LOAN";
+            case "lending-review" -> "FLR";
             case "audit" -> "AUD";
             case "review-check" -> "RVW";
             default -> "CASE";

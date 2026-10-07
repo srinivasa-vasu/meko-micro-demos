@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Meko Context Engine</title>
-<meta name="description" content="Meko as the context engine for agents that work across vendors, teams, tools and time: why shared context is a data infrastructure tax, five use cases, how the right context changes what agents do, and what it means for developers, architects and executives.">
+<meta name="description" content="Meko as the context engine for agents that work across vendors, teams, tools and time: why shared context is a data infrastructure tax, six use cases, how the right context changes what agents do, and what it means for developers, architects and executives.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -104,7 +104,7 @@ section + section { border-top: 1px solid var(--rule); }
 .thread-wrap { width: 100%; max-width: 1200px; overflow-x: auto; }
 .thread-wrap svg { width: 100%; min-width: 760px; height: auto; display: block; }
 .t-wall { fill: var(--wall); }
-.t-wall-label { fill: var(--ink); font: 600 15px var(--body); }
+.t-wall-label { fill: var(--ink); font: 600 13.5px var(--body); }
 .t-seg { fill: none; stroke: var(--thread); stroke-width: 5; stroke-linecap: round; transition: stroke .3s; }
 .t-joint { fill: var(--thread); transition: opacity .3s; }
 .t-gap { opacity: 0; transition: opacity .3s; }
@@ -122,13 +122,13 @@ section + section { border-top: 1px solid var(--rule); }
 .hint { font-size: 14px; color: var(--muted); }
 
 /* ------------------------------------------------------------------ boundaries */
-.bounds { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.bounds { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
 .bound { background: var(--panel); border-radius: 14px; padding: 20px 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
 .bound .ico { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; background: var(--thread-soft); color: var(--thread); }
 .bound h3 { font-size: 22px; }
 .bound p { font-size: 15px; color: var(--muted); }
 .bound .cost { margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--rule); color: var(--loss); font-weight: 700; font-size: 15px; }
-@media (max-width: 1150px) { .bounds { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1150px) { .bounds { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .bounds { grid-template-columns: minmax(0, 1fr); } }
 
 /* ------------------------------------------------------------------ engine picture */
@@ -268,12 +268,12 @@ section + section { border-top: 1px solid var(--rule); }
 .stat b { display: block; font: 800 clamp(44px, 5vw, 80px)/1 var(--display); color: var(--thread); }
 .stat span { font-size: 15px; color: var(--muted); display: block; max-width: 34ch; }
 .stat.est b { color: var(--ink); }
-.proj { display: grid; grid-template-columns: auto repeat(5, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+.proj { display: grid; grid-template-columns: auto repeat(var(--cases, 5), minmax(0, 1fr)); gap: 10px; align-items: stretch; }
 .proj .ph { font-size: 14px; color: var(--muted); align-self: center; max-width: 16ch; }
 .proj .ph b { display: block; color: var(--ink); font-size: 16px; }
 .proj .pc { background: var(--panel); border-radius: 12px; padding: 10px 14px; box-shadow: var(--shadow); }
 .proj .pc b { display: block; font: 800 clamp(20px, 1.8vw, 28px)/1.1 var(--display); color: var(--thread); font-variant-numeric: tabular-nums; }
-.proj .pc span { font-size: 13px; color: var(--muted); }
+.proj .pc span { display: block; font-size: 13px; line-height: 1.35; color: var(--muted); margin-top: 2px; }
 @media (max-width: 1100px) { .proj { grid-template-columns: repeat(2, minmax(0, 1fr)); } .proj .ph { grid-column: 1 / -1; max-width: none; } }
 
 /* ------------------------------------------------------------------ the tax */
@@ -303,7 +303,17 @@ section + section { border-top: 1px solid var(--rule); }
 .rungs p { font-size: 15px; color: var(--muted); }
 .rungs .via { margin-top: auto; padding-top: 8px; border-top: 1px dashed var(--rule); font-size: 13px; font-weight: 700; color: var(--thread); }
 .ladder-table { min-width: 760px; }
-.ladder-table td { font-size: 14.5px; vertical-align: top; }
+.ladder-table { border-spacing: 0 5px; }
+.ladder-table td { font-size: 13px; line-height: 1.35; padding: 7px 12px; vertical-align: top; }
+#ladder, #results, #audit { gap: clamp(12px, 1.7vh, 22px); padding-top: clamp(48px, 6vh, 80px); padding-bottom: clamp(32px, 5vh, 60px); }
+#ladder .lede { font-size: clamp(17px, 1.2vw, 21px); max-width: 70ch; }
+#ladder .rungs > div { padding: 10px 14px; gap: 4px; }
+#ladder .rungs p { font-size: 13.5px; line-height: 1.38; }
+#ladder .quote { font-size: clamp(17px, 1.3vw, 22px); }
+.fu { padding: 9px 14px; } .fu + .fu { margin-top: 8px; } .fu h3 { margin-bottom: 4px; } .fu-row { padding: 2px 0; }
+#results .results { border-spacing: 0 5px; }
+#results .results td { padding: 9px 14px; font-size: 15px; }
+#results .stat b { font-size: clamp(36px, 3.8vw, 60px); }
 .ladder-table td.na { color: var(--muted); }
 @media (max-width: 1100px) { .rungs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .rungs { grid-template-columns: minmax(0, 1fr); } }
@@ -319,7 +329,7 @@ section + section { border-top: 1px solid var(--rule); }
 .fu { background: var(--panel); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
 .fu + .fu { margin-top: 10px; }
 .fu h3 { font-size: 16px; margin-bottom: 8px; }
-.fu-row { display: grid; grid-template-columns: 10.5em minmax(0, 1fr) 13em; gap: 10px; align-items: center; padding: 4px 0; font-size: 13.5px; }
+.fu-row { display: grid; grid-template-columns: 10.5em minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 4px 0; font-size: 13.5px; }
 .fu-row .lbl { color: var(--muted); font-weight: 600; }
 .fu-row.m .lbl { color: var(--thread); }
 .fu-row .track { height: 6px; border-radius: 99px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--rule); overflow: hidden; }
@@ -391,7 +401,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
     <button type="button" class="off" data-hero="lost" aria-pressed="false">Without Meko</button>
     <button type="button" class="on" data-hero="kept" aria-pressed="true">With Meko</button>
   </div>
-  <div class="thread-wrap" id="heroThread"><svg viewBox="0 0 1200 250" role="img" aria-label="One case thread crossing five boundaries: vendor to you, team to team, desk to desk, tools to assistant, team to organization" id="heroSvg"></svg></div>
+  <div class="thread-wrap" id="heroThread"><svg viewBox="0 0 1200 250" role="img" id="heroSvg"></svg></div>
   <p class="hint">Switch to "Without Meko" to see where the thread breaks, and what each break costs.</p>
 </section>
 
@@ -556,7 +566,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
   <div class="eyebrow">The takeaway</div>
   <h1>You focus on the domain. <em>Meko pays the data infrastructure tax.</em></h1>
   <p class="lede">Memory, knowledge, the right context and decision traces: what turns a capable agent into a useful, accountable one. Make them a shared service, not a project every team rebuilds, so your teams spend their time on the domain that moves the business forward.</p>
-  <p class="next"><b>Next, live:</b> the five use cases and the audit, run by the same agents and the same planner, without Meko and with it. Watch the plan change, what each agent passes over, and how every decision is traced.</p>
+  <p class="next"><b>Next, live:</b> the six use cases and the audits, run by the same agents and the same planner, without Meko and with it. Watch the plan change, what each agent passes over, and how every decision is traced.</p>
 </section>
 
 <script>
@@ -577,12 +587,14 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
   const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 
   // ---------------------------------------------------------------- content
+  // One boundary per use case, in the use cases' order: [icon, boundary, what happens, what it costs, what is lost (hero)].
   const BOUNDS = [
-    ['bot', 'Vendor → you', "A vendor's chatbot escalates to your specialist. Only the CRM ticket crosses.", 'The customer repeats everything'],
-    ['team', 'Team → team', "One team's agent dies mid-incident; another team's agent takes over.", 'Finished checks are redone'],
-    ['clock', 'Desk → desk, over time', "Last quarter's review was done by another desk's agent.", 'The whole review is redone'],
-    ['code', 'Tools → your assistant', 'Decisions and requests were written by coding tools and bots.', 'The open request is missed'],
-    ['globe', 'Team → organization', 'Another team solved the failure that keeps reaching you.', 'Every team rediscovers the fix']
+    ['bot', 'Vendor → you', "A vendor's chatbot escalates to your specialist. Only the CRM ticket crosses.", 'The customer repeats everything', 'customer re-asked'],
+    ['bot', 'Vendor system → you', "A vendor's loan-origination system refers the application. Only the referral crosses.", 'The borrower re-sends documents, and gets a second credit pull', 'borrower re-asked'],
+    ['clock', 'Desk → desk, over time', "Last quarter's review was done by another desk's agent.", 'The whole review is redone', 'review redone'],
+    ['globe', 'Team → organization', 'Another team solved the failure that keeps reaching you.', 'Every team rediscovers the fix', 'fix rediscovered'],
+    ['team', 'Team → team', "One team's agent dies mid-incident; another team's agent takes over.", 'Finished checks are redone', 'checks redone'],
+    ['code', 'Tools → your assistant', 'Decisions and requests were written by coding tools and bots.', 'The open request is missed', 'request missed']
   ];
   const CLIENTS_L = [['person', 'Your agents (Embabel)'], ['bot', "A vendor's chatbot"], ['team', "Other teams' agents"]];
   const CLIENTS_R = [['code', 'Claude Code, Cursor'], ['pulse', 'PR and incident bots'], ['plug', 'Any MCP client']];
@@ -610,7 +622,11 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
     'what-changed': {title: 'Check this KYC review', lanes: {
       without: {label: 'Without Meko', requests: 2, traces: 0, min: 102},
       db: {label: 'Your own database', requests: 1, traces: 1, min: 42},
-      with: {label: 'With Meko', requests: 0, traces: 2, min: 22}}}
+      with: {label: 'With Meko', requests: 0, traces: 2, min: 22}}},
+    'loan-underwriting': {title: 'Review this credit call', lanes: {
+      without: {label: 'Without Meko', requests: 3, traces: 0, min: 194},
+      db: {label: 'Your own database', requests: 2, traces: 2, min: 164},
+      with: {label: 'With Meko', requests: 0, traces: 3, min: 19}}}
   };
   // What the record holds, in order: [writer, entry, gate of a decision trace or '']. The writers' order and the gates
   // are checked against a real run's record by DocumentedFiguresTest.
@@ -629,7 +645,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
   // kinds: '' work, 'ctx' context from Meko, 'ask' asking a person, 'rework' repeated or wasted work
   const CASES = [
     {
-      id: 'support', ladder: ["The vendor bot’s handoff facts, recalled by case id; the conversation, keyed by the transaction id", "The dispute policy, an uploaded document", "CARD-DISPUTE-07, not the look-alike chargeback policy CARD-DISPUTE-03", "Each decision in the transaction’s conversation, with who made it; the auditor reads it back by transaction id"], title: "Don't make me explain it again", eyebrow: 'Support handoff', line: 'The customer changed agents. The context didn’t.', story: 'A customer was charged for a card payment that never went through. In a chat with a vendor’s support bot they confirmed the transaction, that the card is still with them, and the troubleshooting they already tried. The bot escalates to your payments specialist, a separate system that receives only the CRM ticket.',
+      id: 'support', ladder: ["The vendor bot’s handoff facts, recalled by case id; the conversation, keyed by the transaction id", "The dispute policy, an uploaded document", "CARD-DISPUTE-07, not the look-alike chargeback policy CARD-DISPUTE-03", "Each decision in the transaction’s conversation, with who made it; the auditor reads it back by transaction id"], title: "Don't make me explain it again", eyebrow: 'BFSI / Payments', line: 'The customer changed agents. The context didn’t.', story: 'A customer was charged for a card payment that never went through. In a chat with a vendor’s support bot they confirmed the transaction, that the card is still with them, and the troubleshooting they already tried. The bot escalates to your payments specialist, a separate system that receives only the CRM ticket.',
       a: {icon: 'bot', name: 'Vendor chatbot', where: "A vendor product, its own store", does: 'Talks to the customer and captures the problem.'},
       b: {icon: 'person', name: 'Your payments specialist', where: 'Your application', does: 'Resolves the dispute and replies.', yours: true},
       later: {icon: 'shield', name: 'Compliance auditor', where: 'Your compliance desk, weeks later', does: 'Reads the whole record back, decisions included, from the transaction id.', crosses: 'The transaction id'},
@@ -641,18 +657,19 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
         num: '0', unit: 'customer re-asks · 19 min', min: 19, wait: 6, why: "Your specialist recalls what the vendor's bot established and the right policy, so the asks never enter the plan."}
     },
     {
-      id: 'incident', ladder: ["The dead agent’s checkpoint and findings, restored from the incident id", "", "",, "The takeover’s judgement of how far the dead agent got, in the incident’s conversation"], title: 'The agent died at 2 AM', eyebrow: 'Incident takeover', line: 'The agent failed. The investigation didn’t.', story: 'At 2 AM payment API latency spikes after a deploy. The payments team’s on-call agent correlates the deploy and checks the database, and then its pod is OOMKilled at 02:41. Your platform SRE agent is paged with nothing but the incident id.',
-      a: {icon: 'pulse', name: "Payments team's on-call agent", where: "The payments team's application", does: 'Investigates, checkpoints, then its pod is OOMKilled.'},
-      b: {icon: 'shield', name: 'Your platform SRE agent', where: 'Your platform team', does: 'Takes over and mitigates.', yours: true},
-      crosses: 'Incident id only', db: {text: '2 steps repeated · 80 min', min: 80},
-      writes: ['Checkpoint artifact', 'Findings and next step'], recalls: ['Steps already done', 'Where to resume'],
-      without: {plan: [['Restore investigation (nothing)', 'miss'], ['Redo deploy correlation', 'rework'], ['Redo database check', 'rework'], ['Verify connection pool', ''], ['Mitigate', '']],
-        num: '2', unit: 'steps repeated · 80 min to mitigate', min: 80, why: 'Nothing survives the dead process, so the planner schedules the finished checks again.'},
-      with: {plan: [['Restore investigation', 'ctx'], ['Verify connection pool', ''], ['Mitigate', '']],
-        num: '0', unit: 'steps repeated · 50 min', min: 50, why: 'The checkpoint is in Meko, not in the dead process. It survives even a server restart.'}
+      id: 'loan', ladder: ["The origination system’s check results, recalled by case id; the conversation, keyed by the application id", "The underwriting policy, an uploaded document whose thresholds the credit call applies", "LEND-UW-05 for a salaried borrower, not the look-alike self-employed policy LEND-UW-09", "Each underwriting decision in the application’s conversation, with who made it; a fair-lending reviewer reads it back by application id"], title: 'I already sent you my pay stubs', eyebrow: 'BFSI / Lending', line: 'The borrower changed systems. The file didn’t.', story: 'A borrower applies for a 25,000 USD personal loan through a vendor’s loan-origination system, which collects pay stubs and bank statements, verifies employment and pulls credit. It refers the application to your underwriter, a separate system that gets only the application id and loan terms.',
+      a: {icon: 'bot', name: 'Loan-origination system', where: 'A vendor product, its own store', does: 'Takes the application and runs the checks.'},
+      b: {icon: 'person', name: 'Your credit underwriter', where: 'Your application', does: 'Makes the credit call and tells the borrower.', yours: true},
+      later: {icon: 'shield', name: 'Fair-lending reviewer', where: 'Your compliance desk, later', does: 'Checks the credit call against the policy, decisions included, from the application id.', crosses: 'The application id'},
+      crosses: 'Referral only', note: 'Hands-on time is 19 min either way: the saving is the borrower’s waiting, 165 → 20 min, and a second hard inquiry.', db: {text: '3 borrower re-asks · 2 hard inquiries · 184 min', min: 184},
+      writes: ['The conversation, keyed by the application id', 'Income, assets, employment and credit results', 'Each decision, with who made it'], recalls: ["This application's check results", 'The right policy (05, not 09)', 'Later, the reviewer: the whole record'],
+      without: {plan: [['Open application file', 'ctx'], ['Ask: pay stubs again', 'ask'], ['Ask: bank statements again', 'ask'], ['Re-verify employment', 'rework'], ['Pull credit again', 'rework'], ['Compute DTI', ''], ['Find policy (none)', 'miss'], ['Escalate to credit risk', 'ask'], ['Credit call', '']],
+        num: '3', unit: 'borrower re-asks · 184 min', min: 184, wait: 165, why: 'Your underwriter only has the referral, so the planner asks the borrower again, re-verifies employment and escalates for the policy.'},
+      with: {plan: [['Open application file', 'ctx'], ['Compute DTI', ''], ['Find policy', 'ctx'], ['Credit call', '']],
+        num: '0', unit: 'borrower re-asks · 39 min', min: 39, wait: 20, why: 'Your underwriter recalls what the origination system verified and applies the right policy’s thresholds: nothing repeated, one hard inquiry.'}
     },
     {
-      id: 'kyc', ladder: ["Last quarter’s review, written by another desk’s agent", "The KYC re-review standard: what counts as a material change", "The 2026 review of CUST-7788, not the 2025 one and not CUST-7789",, "The analyst’s decisions, the review it used and what it passed over, in the review’s conversation; a model-risk reviewer checks them by review id"], title: 'What changed since last review?', eyebrow: 'KYC re-review', line: 'The question isn’t “what do I know?” It’s “what changed?”', story: 'Business customer CUST-7788 is due for its periodic KYC re-review. Another desk’s agent reviewed it last quarter; since then exactly one thing changed: a new beneficiary. Your KYC agent, in a different system, has to decide what evidence to ask for.',
+      id: 'kyc', ladder: ["Last quarter’s review, written by another desk’s agent", "The KYC re-review standard: what counts as a material change", "The 2026 review of CUST-7788, not the 2025 one and not CUST-7789",, "The analyst’s decisions, the review it used and what it passed over, in the review’s conversation; a model-risk reviewer checks them by review id"], title: 'What changed since last review?', eyebrow: 'BFSI / KYC', line: 'The question isn’t “what do I know?” It’s “what changed?”', story: 'Business customer CUST-7788 is due for its periodic KYC re-review. Another desk’s agent reviewed it last quarter; since then exactly one thing changed: a new beneficiary. Your KYC agent, in a different system, has to decide what evidence to ask for.',
       a: {icon: 'team', name: "Analyst desk's agent", where: "Another desk, last quarter", does: 'Reviewed the customer in April.'},
       b: {icon: 'person', name: 'Your KYC agent', where: 'Your review desk, now', does: 'Re-reviews, asks for evidence, writes the result back.', yours: true},
       later: {icon: 'shield', name: 'Model-risk reviewer', where: 'Your model-risk team, later', does: 'Checks the review and how each decision was made against the standard.', crosses: 'The review id'},
@@ -664,18 +681,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
         num: '1', unit: 'evidence request · 41 min', min: 41, why: 'The agent picks the 2026 review of this customer (not the 2025 one, not CUST-7789) and checks only what changed.'}
     },
     {
-      id: 'catchup', ladder: ["Decisions and requests written by Claude Code, the PR bot and the incident bot", "ADR-194, the decision behind the retry contract", "The open request on PR-4821; the superseded draft and PR-4812 are passed over",, "The catch-up agent’s reading of the project context, in the PR case’s conversation"], title: 'I was on vacation. Catch me up.', eyebrow: 'Developer catch-up', line: 'Your coding assistant remembers the project, not just the prompt.', story: 'A developer returns from two weeks off to a payment-retry pull request. Meanwhile a Claude Code session settled the retry design, the PR bot logged a reviewer’s request for a regression test, and the incident bot recorded a related outage. None of it is in the diff.',
-      a: {icon: 'code', name: 'Claude Code, PR bot, incident bot', where: 'Other tools, no shared schema', does: 'Wrote decisions, a review request, a lesson.'},
-      b: {icon: 'person', name: 'Your catch-up agent', where: 'Your coding assistant', does: 'Briefs you and finishes the PR.', yours: true},
-      crosses: 'Nothing: other tools', db: {text: '1 missed requirement · 158 min', min: 158},
-      writes: ['Retry decision', 'Open review request', 'Incident lesson'], recalls: ['All three, with authors', 'Not the superseded draft'],
-      without: {plan: [['Read diff', ''], ['Recall context (nothing)', 'miss'], ['Dig through chat and wiki: 90 min', 'ask'], ['Architecture check', ''], ['Keep existing tests', ''], ['Review bounced', 'rework']],
-        num: '1', unit: 'missed requirement · 158 min', min: 158, why: "The reviewer's request lived in chat, so nothing tells the planner to add the test. The PR bounces."},
-      with: {plan: [['Read diff', ''], ['Recall project context', 'ctx'], ['Architecture check', ''], ['Add the requested test', ''], ['Approved', '']],
-        num: '0', unit: 'missed requirements · 53 min', min: 53, why: 'The open request, written by the PR bot, makes the test a required step before review.'}
-    },
-    {
-      id: 'learned', ladder: ["The EU team’s root cause, written as it closes case 1", "Promoted from memory into shared knowledge for every application", "Checked against each case before reuse; a look-alike case is rejected",, "Each pattern-fit judgement, cited in the resolution note"], title: 'The organization learned', eyebrow: 'Organizational learning', line: 'Every silo pays once. With Meko, the organization pays once.', story: 'The same payment failure keeps arriving from different customers. The EU payments-ops team cracked case 1 after testing three hypotheses. Cases 2 and 3 land in your support app, a different application.',
+      id: 'learned', ladder: ["The EU team’s root cause, written as it closes case 1", "Promoted from memory into shared knowledge for every application", "Checked against each case before reuse; a look-alike case is rejected",, "Each pattern-fit judgement, cited in the resolution note"], title: 'The organization learned', eyebrow: 'BFSI / Payments ops', line: 'Every silo pays once. With Meko, the organization pays once.', story: 'The same payment failure keeps arriving from different customers. The EU payments-ops team cracked case 1 after testing three hypotheses. Cases 2 and 3 land in your support app, a different application.',
       a: {icon: 'globe', name: 'EU payments-ops agent', where: "Another team's application", does: 'Solves case 1 the hard way.'},
       b: {icon: 'person', name: 'Your support agents', where: 'Your support app', does: 'Handle cases 2 and 3.', yours: true},
       crosses: 'Nothing: another team', db: {text: '199 minutes for 3 cases (reuses its own lesson)', min: 199},
@@ -684,6 +690,28 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
         num: '264', unit: 'minutes for 3 cases', min: 264, why: 'Each case is investigated from scratch. What the EU team learned stays with the EU team.'},
       with: {plan: [['Gather signals', ''], ['Look up lessons', 'ctx'], ['Validate the lesson: 8 min', ''], ['Resolve', '']],
         num: '131', unit: 'minutes for 3 cases', min: 131, why: 'From case 2 your app validates the EU lesson instead of investigating. A look-alike case is rejected, not misdiagnosed.'}
+    },
+    {
+      id: 'incident', ladder: ["The dead agent’s checkpoint and findings, restored from the incident id", "", "",, "The takeover’s judgement of how far the dead agent got, in the incident’s conversation"], title: 'The agent died at 2 AM', eyebrow: 'SDLC / Incident response', line: 'The agent failed. The investigation didn’t.', story: 'At 2 AM payment API latency spikes after a deploy. The payments team’s on-call agent correlates the deploy and checks the database, and then its pod is OOMKilled at 02:41. Your platform SRE agent is paged with nothing but the incident id.',
+      a: {icon: 'pulse', name: "Payments team's on-call agent", where: "The payments team's application", does: 'Investigates, checkpoints, then its pod is OOMKilled.'},
+      b: {icon: 'shield', name: 'Your platform SRE agent', where: 'Your platform team', does: 'Takes over and mitigates.', yours: true},
+      crosses: 'Incident id only', db: {text: '2 steps repeated · 80 min', min: 80},
+      writes: ['Checkpoint artifact', 'Findings and next step'], recalls: ['Steps already done', 'Where to resume'],
+      without: {plan: [['Restore investigation (nothing)', 'miss'], ['Redo deploy correlation', 'rework'], ['Redo database check', 'rework'], ['Verify connection pool', ''], ['Mitigate', '']],
+        num: '2', unit: 'steps repeated · 80 min to mitigate', min: 80, why: 'Nothing survives the dead process, so the planner schedules the finished checks again.'},
+      with: {plan: [['Restore investigation', 'ctx'], ['Verify connection pool', ''], ['Mitigate', '']],
+        num: '0', unit: 'steps repeated · 50 min', min: 50, why: 'The checkpoint is in Meko, not in the dead process. It survives even a server restart.'}
+    },
+    {
+      id: 'catchup', ladder: ["Decisions and requests written by Claude Code, the PR bot and the incident bot", "ADR-194, the decision behind the retry contract", "The open request on PR-4821; the superseded draft and PR-4812 are passed over",, "The catch-up agent’s reading of the project context, in the PR case’s conversation"], title: 'I was on vacation. Catch me up.', eyebrow: 'SDLC / Code review', line: 'Your coding assistant remembers the project, not just the prompt.', story: 'A developer returns from two weeks off to a payment-retry pull request. Meanwhile a Claude Code session settled the retry design, the PR bot logged a reviewer’s request for a regression test, and the incident bot recorded a related outage. None of it is in the diff.',
+      a: {icon: 'code', name: 'Claude Code, PR bot, incident bot', where: 'Other tools, no shared schema', does: 'Wrote decisions, a review request, a lesson.'},
+      b: {icon: 'person', name: 'Your catch-up agent', where: 'Your coding assistant', does: 'Briefs you and finishes the PR.', yours: true},
+      crosses: 'Nothing: other tools', db: {text: '1 missed requirement · 158 min', min: 158},
+      writes: ['Retry decision', 'Open review request', 'Incident lesson'], recalls: ['All three, with authors', 'Not the superseded draft'],
+      without: {plan: [['Read diff', ''], ['Recall context (nothing)', 'miss'], ['Dig through chat and wiki: 90 min', 'ask'], ['Architecture check', ''], ['Keep existing tests', ''], ['Review bounced', 'rework']],
+        num: '1', unit: 'missed requirement · 158 min', min: 158, why: "The reviewer's request lived in chat, so nothing tells the planner to add the test. The PR bounces."},
+      with: {plan: [['Read diff', ''], ['Recall project context', 'ctx'], ['Architecture check', ''], ['Add the requested test', ''], ['Approved', '']],
+        num: '0', unit: 'missed requirements · 53 min', min: 53, why: 'The open request, written by the PR bot, makes the test a required step before review.'}
     }
   ];
 
@@ -753,12 +781,13 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
   const counted = CASES.filter(c => c.id !== 'learned');
   const items = mode => counted.reduce((t, c) => t + Number(c[mode].num), 0);
   document.querySelector('#resultsTable tfoot').innerHTML =
-    `<tr><td>All five</td><td>Estimated minutes</td><td class="w">${total.without} min</td><td class="d">${total.db} min</td><td class="m">${total.with} min</td></tr>`;
+    `<tr><td>All six</td><td>Estimated minutes</td><td class="w">${total.without} min</td><td class="d">${total.db} min</td><td class="m">${total.with} min</td></tr>`;
   // Counted per-case differences × a month's volume: the defensible projection (no minutes, no prices).
   const VOLUME = 2000;
-  const PROJ = {support: 'customer re-asks avoided', incident: 'repeated investigation steps avoided', kyc: 'evidence requests avoided',
+  const PROJ = {support: 'customer re-asks avoided', incident: 'repeated investigation steps avoided', kyc: 'evidence requests avoided', loan: 'borrower re-asks avoided',
     catchup: 'missed review requirements avoided', learned: 'hypothesis tests avoided (after the first case)'};
   const perCase = {learned: 3};  // steady state: without Meko 3 hypotheses per case, with Meko 0
+  document.getElementById('projection').style.setProperty('--cases', CASES.length);
   document.getElementById('projection').innerHTML = '<div class="ph"><b>At ' + VOLUME.toLocaleString() + ' cases a month</b>per use case, counted from the plans</div>' +
     CASES.map(c => {
       const d = perCase[c.id] ?? (Number(c.without.num) - Number(c.with.num));
@@ -766,8 +795,8 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
     }).join('');
 
   document.getElementById('stats').innerHTML =
-    `<div class="stat"><b>${items('without')} → ${items('with')}</b><span>customer re-asks, repeated steps, evidence requests and missed requirements, counted from the plans</span></div>` +
-    `<div class="stat est"><b>${total.without} → ${total.with}</b><span>estimated minutes across the five cases (illustrative per-step estimates)</span></div>`;
+    `<div class="stat"><b>${items('without')} → ${items('with')}</b><span>customer and borrower re-asks, repeated steps, evidence requests and missed requirements, counted from the plans</span></div>` +
+    `<div class="stat est"><b>${total.without} → ${total.with}</b><span>estimated minutes across the six cases (illustrative per-step estimates)</span></div>`;
   document.querySelector('#ladderTable tbody').innerHTML = CASES.map(c => '<tr><td>' + esc(c.title) + '</td>' +
     c.ladder.map(x => x ? '<td>' + esc(x) + '</td>' : '<td class="na">Not this story’s focus</td>').join('') + '</tr>').join('');
 
@@ -778,7 +807,10 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.getElementById('heroSvg');
   const add = (parent, tag, attrs, text) => { const n = document.createElementNS(NS, tag); for (const k in attrs) n.setAttribute(k, attrs[k]); if (text != null) n.textContent = text; parent.appendChild(n); return n; };
-  const walls = BOUNDS.map((b, i) => ({x: 240 + i * 200, name: b[1].replace(', over time', ''), lost: ['customer re-asked', 'checks redone', 'review redone', 'request missed', 'fix rediscovered'][i]}));
+  // Walls spaced evenly between the case opening and its resolution, however many boundaries there are.
+  const span = 860, first = 210, step = BOUNDS.length > 1 ? span / (BOUNDS.length - 1) : 0;
+  const walls = BOUNDS.map((b, i) => ({x: Math.round(first + i * step), name: b[1].replace(', over time', ''), lost: b[4]}));
+  svg.setAttribute('aria-label', 'One case thread crossing ' + BOUNDS.length + ' boundaries: ' + BOUNDS.map(b => b[1].replace(', over time', '')).join(', '));
   const y = 125;
   walls.forEach(w => { add(svg, 'rect', {class: 't-wall', x: w.x - 9, y: 40, width: 18, height: 170, rx: 3}); add(svg, 'text', {class: 't-wall-label', x: w.x, y: 28, 'text-anchor': 'middle'}, w.name); });
   add(svg, 'path', {class: 't-seg t-draw', d: `M20 ${y} C 120 ${y - 45}, 170 ${y - 45}, ${walls[0].x - 18} ${y}`});

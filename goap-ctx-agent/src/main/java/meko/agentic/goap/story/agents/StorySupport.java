@@ -1,6 +1,7 @@
 package meko.agentic.goap.story.agents;
 
 import meko.agentic.goap.story.EffortEstimates;
+import meko.agentic.goap.story.LoanApplications;
 import meko.agentic.goap.story.PaymentDisputes;
 import meko.agentic.goap.story.SystemsOfRecord;
 import meko.agentic.goap.story.StoryLedger;
@@ -25,15 +26,19 @@ public class StorySupport {
     private final EffortEstimates efforts;
     private final SystemsOfRecord systemsOfRecord;
     private final PaymentDisputes disputes;
+    private final LoanApplications loans;
+    private final meko.agentic.goap.story.store.ReceiptLog receipts;
 
     public StorySupport(ContextStores stores, StoryLedgers ledgers, TemplateRenderer templates, EffortEstimates efforts,
-                        SystemsOfRecord systemsOfRecord, PaymentDisputes disputes) {
+                        SystemsOfRecord systemsOfRecord, PaymentDisputes disputes, LoanApplications loans, meko.agentic.goap.story.store.ReceiptLog receipts) {
+        this.receipts = receipts;
         this.stores = stores;
         this.ledgers = ledgers;
         this.templates = templates;
         this.efforts = efforts;
         this.systemsOfRecord = systemsOfRecord;
         this.disputes = disputes;
+        this.loans = loans;
     }
 
     /**
@@ -140,9 +145,50 @@ public class StorySupport {
         return t.decisionGate().isPresent() && t.why().contains("failed") ? "The model call failed; the fallback rule decided" : "";
     }
 
+    /**
+     * Reads a conversation back by its key. Where writes are queued (live Meko), a record written moments ago may not
+     * be readable yet: it retries a few times, briefly, until {@code enough} holds. Elsewhere it reads once.
+     */
+    public List<ContextStore.Turn> readBack(ContextStore store, String caseId, String agentId, String thread,
+                                            java.util.function.Predicate<List<ContextStore.Turn>> enough) {
+        List<ContextStore.Turn> turns = store.transcript(caseId, agentId, thread);
+        for (int attempt = 0; attempt < 4 && store.writesAreQueued() && !enough.test(turns); attempt++) {
+            try {
+                Thread.sleep(2_000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+            turns = store.transcript(caseId, agentId, thread);
+        }
+        return turns;
+    }
+
+    /**
+     * What became of a memory write, for the step that made it: saved; the store failed (and why, from its receipt);
+     * the store kept nothing new (Meko's fact extraction can judge a fact already known); or nowhere durable to write.
+     */
+    public String writeOutcome(String caseId, String agentId, ContextStore.Kind kind, boolean saved, String what) {
+        if (saved) return "Saved " + what + " to " + storeName(kind);
+        if (kind == ContextStore.Kind.NONE) return "Nothing durable to save " + what + " to";
+        Optional<meko.agentic.goap.story.store.ReceiptLog.Receipt> last = receipts.forCase(caseId).stream()
+                .filter(r -> r.agent().equals(agentId) && r.tool().contains("memory_add")).reduce((a, b) -> b);
+        if (last.isPresent() && !last.get().ok()) {
+            String detail = last.get().detail();
+            int dash = detail.lastIndexOf(" — ");
+            return "The write of " + what + " to " + storeName(kind) + " failed" + (dash < 0 ? "" : ": " + detail.substring(dash + 3));
+        }
+        return storeName(kind) + " stored nothing new from " + what + " (its memory extraction kept no new fact)";
+    }
+
     /** The simulated customers' disputes (see {@link PaymentDisputes} for who may read them). */
     public PaymentDisputes disputes() {
         return disputes;
+    }
+
+    /** The simulated borrowers' loan applications (see {@link LoanApplications} for who may read them). */
+    public LoanApplications loans() {
+        return loans;
     }
 
     public SystemsOfRecord systemsOfRecord() {

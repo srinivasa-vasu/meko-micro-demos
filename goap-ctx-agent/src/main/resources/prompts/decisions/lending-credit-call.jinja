@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}Apply the credit thresholds stated in the policy text to the figures in the application file. What is the credit call: approve or decline? If the policy text states no thresholds you can apply, answer refer. State the thresholds you applied and the figures you applied them to.{% endblock %}
+{% block shape %}{"decision": "approve, decline or refer", "thresholdsApplied": "the thresholds from the policy text", "reason": "one sentence naming the figures and thresholds"}{% endblock %}

@@ -27,6 +27,8 @@ body{margin:0;background:radial-gradient(circle at 10% 0,#173128 0,#0b1219 35%,#
 /* Story tabs */
 .story-list{display:flex;gap:4px;margin-top:8px;overflow-x:auto;scrollbar-width:thin}
 .story-card{flex:1 0 auto;min-width:180px;border:0;border-bottom:3px solid transparent;background:transparent;border-radius:8px 8px 0 0;padding:7px 12px 8px;cursor:pointer;text-align:left;color:var(--muted);font:inherit}
+.story-group{align-self:center;flex:0 0 auto;font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--muted);writing-mode:vertical-rl;transform:rotate(180deg);padding:4px 2px;border-right:2px solid var(--line)}
+.story-group.next{margin-left:10px}
 .story-card:hover{background:#121d28;color:var(--ink)}
 .story-card.active{border-bottom-color:var(--accent);background:#132028;color:var(--ink)}
 .story-card .k{font-size:10px;text-transform:uppercase;letter-spacing:.1em}
@@ -366,12 +368,15 @@ function metricLabel(key) {
   const labels = {minutes:'Minutes (est.)', repeatedSteps:'Repeated steps', customerQuestions:'Customer re-asked', evidenceRequests:'Evidence requests',
     hypothesesTested:'Hypotheses tested', missedRequirements:'Missed requirements', teammateInterruptions:'Teammate pings',
     actionsExecuted:'Actions run', replans:'Replans', contextCalls:'Meko calls', contextItemsUsed:'Context items used',
-    recordsRequested:'Records requested'};
+    recordsRequested:'Records requested', borrowerReasks:'Borrower re-asked', hardInquiries:'Hard inquiries'};
   return labels[key] || key;
 }
 
 function renderCatalog() {
-  el('storyList').innerHTML = stories.map(s =>
+  // A group label before the first story of each domain (BFSI, SDLC), from the domain's prefix.
+  const group = s => String(s.domain).split(' / ')[0];
+  el('storyList').innerHTML = stories.map((s, i) =>
+    (i === 0 || group(stories[i - 1]) !== group(s) ? '<span class="story-group' + (i ? ' next' : '') + '">' + esc(group(s)) + '</span>' : '') +
     '<button class="story-card ' + (s.id === selected.id ? 'active' : '') + '" data-id="' + esc(s.id) + '" title="' + esc(s.hook) + '"' +
     (s.id === selected.id ? ' aria-current="true"' : '') + '><div class="k">' + esc(s.domain) + '</div><div class="t">' + esc(s.title) + '</div></button>').join('');
   document.querySelectorAll('.story-card').forEach(node => node.onclick = () => {
@@ -635,7 +640,7 @@ function columnHtml(run, other) {
   // Lead with what happened after the handoff: that is where the two runs differ.
   const full = run;
   run = Object.assign({}, run, {transcript: run.transcript.filter(l => l.speaker.indexOf(' · ') < 0)});
-  const handoff = run.transcript.findIndex(l => l.speaker === 'Ticket note');
+  const handoff = run.transcript.findIndex(l => l.speaker === 'Ticket note' || l.speaker === 'Referral');
   const transcript = !run.transcript.length ? '' : handoff < 0
     ? '<div class="transcript">' + run.transcript.map(lineHtml).join('') + '</div>'
     : '<div class="transcript">' + run.transcript.slice(handoff).map(lineHtml).join('') + '</div>' +
@@ -655,7 +660,7 @@ function columnHtml(run, other) {
     slot('<div class="section"><div class="label"><span>What the planner did</span></div>' + run.phases.map(p =>
       '<div class="phase"><div class="phase-title"><span>' + esc(p.label) + '</span>' + phaseBadge(p) + '</div>' + planHtml(p) + '</div>').join('') + '</div>', true) +
     slot('<div class="section"><div class="label"><span>Steps</span><span title="Each step\'s minutes are an estimate from effort/estimates.yml; hover a step for its basis. Which steps ran is what the planner decided.">' + esc(run.metrics.minutes) + ' min, estimated</span></div><div class="steps">' + steps + '</div></div>') +
-    slot(transcript ? '<div class="section"><details' + (selected.id === 'dont-make-me-explain' || selected.id === 'vacation-catch-up' ? ' open' : '') + '><summary>' + (handoff < 0 ? 'Conversation' : 'Conversation after the handoff') + '</summary>' + transcript + '</details></div>' : '') +
+    slot(transcript ? '<div class="section"><details' + (['dont-make-me-explain', 'vacation-catch-up', 'loan-underwriting'].includes(selected.id) ? ' open' : '') + '><summary>' + (handoff < 0 ? 'Conversation' : 'Conversation after the handoff') + '</summary>' + transcript + '</details></div>' : '') +
     slot('<div class="section"><div class="label"><span>Context the agents used, and who wrote it</span><span>' + run.found.length + ' used</span></div>' + found + passed + '</div>') +
     slot(decisionsHtml(full), true) +
     slot(writerHtml(full), true) +
@@ -801,8 +806,14 @@ function summaryHtml(a, b, d) {
     val(a, 'handsOnMinutes') + ' → ' + val(b, 'handsOnMinutes') + ' hands-on min at $' + esc(b.metrics.hourlyRateUsd) + '/h').replace('<div class="sv">', '<div class="sv small">'));
   const models = r => r ? (r.metrics.modelUsd || 0) : 0;
   const sa = modelSplit(a), sb = modelSplit(b);
-  tiles.push(tile('LLM spend per case', models(a), models(b), models(d), 'lower', money,
-    'writer ' + money(sa.writerUsd) + ' → ' + money(sb.writerUsd) + ' · LLM gate decisions ' + money(sa.gatesUsd) + ' (' + sa.gateCalls + ') → ' + money(sb.gatesUsd) + ' (' + sb.gateCalls + ')').replace('<div class="sv">', '<div class="sv small">'));
+  // A difference under a cent per case is not a win or a loss next to hours saved: shown neutral, with what made it.
+  const llmDiff = models(b) - models(a);
+  const gatesBy = r => (r.decisions || []).filter(x => x.byModel).map(x => x.gate);
+  const extraGates = gatesBy(b).filter(g => !gatesBy(a).includes(g));
+  const llmNote = 'writer ' + money(sa.writerUsd) + ' → ' + money(sb.writerUsd) + ' · LLM gate decisions ' + money(sa.gatesUsd) + ' (' + sa.gateCalls + ') → ' + money(sb.gatesUsd) + ' (' + sb.gateCalls + ')'
+    + (extraGates.length ? ' · with Meko the agent also decided ' + extraGates.join(', ') + ' itself' : '');
+  tiles.push(tile('LLM spend per case', models(a), models(b), models(d), Math.abs(llmDiff) < 0.01 ? null : 'lower', money, llmNote)
+    .replace('<div class="sv">', '<div class="sv small">'));
   if (a.metrics.writerModel && b.metrics.writerModel) {
     const short = r => r && r.metrics.writerModel ? String(r.metrics.writerModel).split('/').pop() : '–';
     tiles.push('<div class="score"><div class="sl">Reply written by</div><div class="sv text"><span>' + esc(short(a)) + '</span><span class="arr">→</span><span>' + esc(short(b)) +
@@ -821,7 +832,8 @@ try { projVolume = Number(localStorage.getItem('projVolume')) || 2000; } catch (
 
 /** What one unit of each counted metric is called in a projection ("6,000 customer re-asks avoided"). */
 const PROJ_NOUNS = {customerQuestions: 'customer re-asks', repeatedSteps: 'repeated steps', evidenceRequests: 'evidence requests',
-  missedRequirements: 'missed requirements', hypothesesTested: 'hypothesis tests', recordsRequested: 'records requests'};
+  missedRequirements: 'missed requirements', hypothesesTested: 'hypothesis tests', recordsRequested: 'records requests',
+  borrowerReasks: 'borrower re-asks', hardInquiries: 'hard inquiries'};
 
 /**
  * Per-case difference (without → with Meko) × cases per month. Only differences are shown: a story whose saving is

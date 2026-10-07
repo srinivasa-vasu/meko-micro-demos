@@ -37,7 +37,8 @@ class DocumentedFiguresTest {
             new Documented("agent-died-2am", "The Agent Died at 2 AM", "incident", "repeatedSteps"),
             new Documented("what-changed", "What Changed Since Last Review?", "kyc", "evidenceRequests"),
             new Documented("vacation-catch-up", "I Was on Vacation. Catch Me Up.", "catchup", "missedRequirements"),
-            new Documented("organization-learned", "The Organization Learned", "learned", null));
+            new Documented("organization-learned", "The Organization Learned", "learned", null),
+            new Documented("loan-underwriting", "I Already Sent You My Pay Stubs", "loan", "borrowerReasks"));
 
     static final List<Lane> LANES = List.of(Lane.WITHOUT, Lane.DATABASE, Lane.MEKO);
     static final int SERIES_CASES = 3;
@@ -152,7 +153,7 @@ class DocumentedFiguresTest {
 
     @Test
     void deckAuditTraceMatchesARealRecord() throws IOException {
-        String deck = Files.readString(Path.of("assets/meko-context-engine.html"));
+        String deck = Files.readString(Path.of("assets/overview.html"));
         int start = deck.indexOf("const AUDIT_TRACE = [");
         String block = deck.substring(start, deck.indexOf("];", start));
         List<String> writers = new ArrayList<>(), gates = new ArrayList<>();
@@ -178,7 +179,7 @@ class DocumentedFiguresTest {
 
     @Test
     void deckFollowUpFiguresMatchTheRuns() throws IOException {
-        String deck = Files.readString(Path.of("assets/meko-context-engine.html"));
+        String deck = Files.readString(Path.of("assets/overview.html"));
         Map<String, Lane> keys = Map.of("without", Lane.WITHOUT, "db", Lane.DATABASE, "with", Lane.MEKO);
         followUps.forEach((storyId, lanes) -> {
             int start = deck.indexOf("'" + storyId + "': {title:");
@@ -197,7 +198,7 @@ class DocumentedFiguresTest {
 
     @Test
     void deckFiguresMatchTheRuns() throws IOException {
-        String deck = Files.readString(Path.of("assets/meko-context-engine.html"));
+        String deck = Files.readString(Path.of("assets/overview.html"));
         for (Documented d : STORIES) {
             String block = deckCase(deck, d.deckId());
             Map<Lane, Map<String, Integer>> run = measured.get(d.storyId());
@@ -219,7 +220,7 @@ class DocumentedFiguresTest {
 
     @Test
     void deckStepFiguresMatchTheEstimatesAndRuns() throws IOException {
-        String deck = Files.readString(Path.of("assets/meko-context-engine.html"));
+        String deck = Files.readString(Path.of("assets/overview.html"));
         assertThat(number(deck, "Validate the lesson: (\\d+) min")).isEqualTo(efforts.of("payment-failure", "validate-known-pattern").getMinutes());
         assertThat(number(deck, "Dig through chat and wiki: (\\d+) min")).isEqualTo(efforts.of("catch-up", "reconstruct-manually").getMinutes());
         Map<Lane, Map<String, Integer>> support = measured.get("dont-make-me-explain");

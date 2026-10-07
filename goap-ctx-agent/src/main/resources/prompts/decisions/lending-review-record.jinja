@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}A fair-lending reviewer is checking the credit call on loan application {{ application }}. Does the record below contain (a) the loan-origination system's checks and its referral to underwriting, and (b) the underwriter's credit call?{% endblock %}
+{% block shape %}{"intake": true or false, "creditCall": true or false}{% endblock %}

@@ -76,8 +76,7 @@ public class SupportFrontlineAgent {
         support.recordEvent(store, chat.caseId(), AGENT_ID, chat.transaction(), HANDOFF, null,
                 "Escalate case " + chat.caseId() + " to a payments specialist", facts);
         ledger.step("Vendor chatbot", "escalate",
-                saved ? "Saved the established facts to " + StorySupport.storeName(chat.store()) + " and escalated with a ticket note."
-                        : "Escalated with a ticket note (nothing durable to save the facts to).",
+                support.writeOutcome(chat.caseId(), AGENT_ID, chat.store(), saved, "the established facts") + "; escalated with a ticket note.",
                 support.effort("support-frontline", "escalate"), StoryLedger.Kind.CONTEXT);
         return new TicketNote(chat.caseId(), chat.store(), "Customer says card payment failed but they were charged. Please investigate.");
     }

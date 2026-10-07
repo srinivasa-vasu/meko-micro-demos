@@ -247,6 +247,81 @@ goap:
           minutes: 2
           time: hands-on
           basis: "Review the drafted finding and file it."
+      loan-intake:
+        take-application:
+          minutes: 20
+          time: waiting
+          basis: "The borrower's application in the origination system: uploading pay stubs and statements, giving consent. Same in every lane."
+        refer:
+          minutes: 1
+          time: hands-on
+          basis: "Creating the referral to underwriting."
+      underwriter:
+        open-application-file:
+          minutes: 3
+          time: hands-on
+          basis: "Reading the referral and whatever application history is available."
+        ask-pay-stubs:
+          minutes: 30
+          time: waiting
+          basis: "The borrower finds and re-uploads two recent pay stubs."
+        ask-bank-statements:
+          minutes: 25
+          time: waiting
+          basis: "The borrower downloads and re-uploads two months of bank statements."
+        verify-employment:
+          minutes: 45
+          time: waiting
+          basis: "Waiting on the employer's HR team to answer a verification of employment."
+        pull-credit-again:
+          minutes: 15
+          time: waiting
+          basis: "Asking the borrower for fresh consent to a second hard inquiry, and the bureau's response."
+        assess-affordability:
+          minutes: 8
+          time: hands-on
+          basis: "Compute debt-to-income from income, obligations and the new instalment; note reserves."
+        retrieve-policy:
+          minutes: 1
+          time: hands-on
+          basis: "Reading the retrieved policy. The lookup itself takes milliseconds."
+        escalate-for-policy:
+          minutes: 30
+          time: waiting
+          basis: "Waiting on credit risk to confirm the policy and thresholds: a short queue on a good day."
+        make-credit-call:
+          minutes: 5
+          time: hands-on
+          basis: "Apply the thresholds, record the credit call and its reasons."
+      fair-lending-reviewer:
+        retrieve-record:
+          minutes: 3
+          time: hands-on
+          basis: "Reading the application's conversation and records. The lookup itself takes milliseconds."
+        request-origination-file:
+          minutes: 120
+          time: waiting
+          basis: "Waiting on the loan-origination vendor to export the application file: a couple of hours in their queue."
+        request-underwriting-notes:
+          minutes: 30
+          time: waiting
+          basis: "Waiting on the underwriting team to pull their notes for the application."
+        retrieve-policy:
+          minutes: 1
+          time: hands-on
+          basis: "Reading the retrieved policy. The lookup itself takes milliseconds."
+        request-policy:
+          minutes: 25
+          time: waiting
+          basis: "Waiting on credit risk to send the policy text."
+        check-against-policy:
+          minutes: 12
+          time: hands-on
+          basis: "Check the verifications, the thresholds and the borrower's treatment against the policy."
+        file-finding:
+          minutes: 2
+          time: hands-on
+          basis: "Review the drafted finding and file it."
       response-writer:
         write:
           minutes: 1

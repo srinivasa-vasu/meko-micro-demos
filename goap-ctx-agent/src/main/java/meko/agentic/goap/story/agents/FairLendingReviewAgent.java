@@ -1,0 +1,410 @@
+package meko.agentic.goap.story.agents;
+
+import com.embabel.agent.api.annotation.AchievesGoal;
+import com.embabel.agent.api.annotation.Action;
+import com.embabel.agent.api.annotation.Agent;
+import com.embabel.agent.api.annotation.Condition;
+import com.embabel.agent.api.annotation.Provided;
+import com.embabel.agent.api.common.Ai;
+import com.embabel.agent.api.common.PlannerType;
+import meko.agentic.goap.story.KnowledgeDocuments;
+import meko.agentic.goap.story.LendingThresholds;
+import meko.agentic.goap.story.StoryLedger;
+import meko.agentic.goap.story.store.ContextStore;
+import meko.agentic.goap.story.store.ContextStore.Turn;
+import meko.agentic.goap.story.store.StoreRecord;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * Loan story, follow-up: a fair-lending reviewer checks the credit call later, given only the application id. Was the
+ * call made under the policy that governs the application, on verified figures, consistently with the policy's
+ * thresholds, and with the reasons on record? With Meko it reads the application's conversation (conversation_get by
+ * the application id): the origination system's checks, the underwriter's re-asks and repeated checks, its decisions
+ * and the credit call, each with who wrote it. Whatever the record lacks, the planner has to request from the party
+ * that holds it, and wait.
+ */
+@Agent(planner = PlannerType.GOAP, description = "Fair-lending reviewer that checks a credit call on a loan application, from the application id alone")
+public class FairLendingReviewAgent {
+    public static final String AGENT_ID = "compliance:fair-lending-reviewer";
+    static final String PERSONA = "Fair-lending reviewer";
+    static final String VENDOR = LoanIntakeAgent.AGENT_ID;
+    static final String UNDERWRITER = UnderwriterAgent.AGENT_ID;
+    static final List<String> VERIFICATIONS = List.of(LoanIntakeAgent.INCOME, LoanIntakeAgent.ASSETS, LoanIntakeAgent.EMPLOYMENT, LoanIntakeAgent.CREDIT);
+
+    public record ReviewRequest(String caseId, ContextStore.Kind store, String applicationId) {}
+
+    /**
+     * @param turns     the record so far: the application's conversation, plus whatever other parties handed over
+     * @param requested the parties asked for their records
+     */
+    public record ReviewRecord(String caseId, ContextStore.Kind store, String applicationId, List<Turn> turns,
+                               boolean intake, boolean creditCall, List<String> requested, List<String> origins) {
+        ReviewRecord withRecordsFrom(String party, String team, List<Turn> received) {
+            List<Turn> all = new ArrayList<>(turns);
+            all.addAll(received);
+            List<String> asked = new ArrayList<>(requested);
+            asked.add(party);
+            List<String> from = new ArrayList<>(origins);
+            received.forEach(t -> from.add("requested from " + team));
+            return new ReviewRecord(caseId, store, applicationId, List.copyOf(all), intake || hasIntake(received),
+                    creditCall || hasCreditCall(received), List.copyOf(asked), List.copyOf(from));
+        }
+    }
+
+    /** @param source "knowledge base" when found in shared knowledge, else who provided the text */
+    public record PolicyText(String caseId, String policy, List<StoreRecord> text, String source) {}
+
+    /** The model's reading of what the record contains. */
+    public record RecordReading(Boolean intake, Boolean creditCall) {}
+
+    /** The model's review judgement. */
+    /**
+     * @param thresholdsRecorded the credit call's record states the thresholds applied and the factors, as the policy requires
+     * @param onlyPolicyFactors  the call rests only on factors the policy names (no other basis)
+     * @param declineReasons     a decline records its principal reasons (adverse action); null when the call is not a decline
+     */
+    public record Consistency(String policyApplied, Boolean verifiedBeforeCall, Boolean callMatchesThresholds,
+                              Integer hardInquiries, Integer borrowerReasked, Boolean thresholdsRecorded, Boolean onlyPolicyFactors,
+                              Boolean declineReasons, Boolean consistent, List<String> findings) {}
+
+    public record ReviewChecked(String caseId, Consistency consistency) {}
+
+    public record ReviewFinding(String caseId, String verdict) {}
+
+    private final StorySupport support;
+    private final DecisionService decisions;
+    private final KnowledgeDocuments documents;
+
+    public FairLendingReviewAgent(StorySupport support, DecisionService decisions, KnowledgeDocuments documents) {
+        this.support = support;
+        this.decisions = decisions;
+        this.documents = documents;
+    }
+
+    @Action(description = "Retrieve the application's conversation and records by its id",
+            post = {"recordRetrieved", "intakeKnown", "intakeUnknown", "creditCallKnown", "creditCallUnknown"},
+            cost = 0.02, canRerun = false)
+    public ReviewRecord retrieveRecord(ReviewRequest request, @Provided Ai ai) {
+        StoryLedger ledger = support.ledger(request.caseId());
+        List<Turn> turns = support.store(request.store()).transcript(request.caseId(), AGENT_ID, request.applicationId());
+        turns.forEach(t -> ledger.found("application conversation", StorySupport.describe(t), t.writtenBy()));
+        RecordReading reading = decisions.decide(request.caseId(), PERSONA, "decisions/lending-review-record",
+                Map.of("application", request.applicationId()), StorySupport.asContext("Record for " + request.applicationId(), turns, true),
+                RecordReading.class, () -> new RecordReading(hasIntake(turns), hasCreditCall(turns)), ai);
+        // The review's own decisions go on the same record, so the review can itself be checked.
+        support.traceDecisions(support.store(request.store()), request.caseId(), AGENT_ID, request.applicationId(), PERSONA);
+        ReviewRecord record = new ReviewRecord(request.caseId(), request.store(), request.applicationId(), turns,
+                Boolean.TRUE.equals(reading.intake()), Boolean.TRUE.equals(reading.creditCall()), List.of(),
+                turns.stream().map(t -> StorySupport.conversationIn(request.store())).toList());
+        ledger.step(PERSONA, "retrieveRecord",
+                turns.isEmpty() ? "Nothing on record for " + request.applicationId() + "."
+                        : "Retrieved " + turns.size() + " turns for " + request.applicationId() + ", written by "
+                        + turns.stream().map(Turn::writtenBy).distinct().toList() + ". Origination checks: "
+                        + (record.intake() ? "on record" : "missing") + "; credit call: " + (record.creditCall() ? "on record" : "missing") + ".",
+                support.effort("fair-lending-reviewer", "retrieve-record"), StoryLedger.Kind.CONTEXT);
+        return record;
+    }
+
+    @Action(description = "Request the application file from the loan-origination vendor", pre = {"intakeUnknown"},
+            post = {"intakeKnown"}, cost = 0.40, canRerun = false)
+    public ReviewRecord requestOriginationFile(ReviewRecord record) {
+        return request(record, VENDOR, "the loan-origination vendor", "the application file", "requestOriginationFile", "request-origination-file");
+    }
+
+    @Action(description = "Request the underwriting notes from the underwriting team", pre = {"creditCallUnknown"},
+            post = {"creditCallKnown"}, cost = 0.30, canRerun = false)
+    public ReviewRecord requestUnderwritingNotes(ReviewRecord record) {
+        return request(record, UNDERWRITER, "the underwriting team", "the underwriting notes", "requestUnderwritingNotes", "request-underwriting-notes");
+    }
+
+    /** Asks one party for its own records on the application; they hand over what their system holds. */
+    private ReviewRecord request(ReviewRecord record, String party, String team, String what, String action, String estimate) {
+        StoryLedger ledger = support.ledger(record.caseId());
+        List<Turn> received = support.systemsOfRecord().request(record.applicationId(), party);
+        ledger.say(PERSONA, "Requesting " + what + " for " + record.applicationId() + " from " + team + ".");
+        ledger.say(team.substring(0, 1).toUpperCase() + team.substring(1),
+                received.isEmpty() ? "We have nothing on record for that application." : "Sent " + received.size() + " records.");
+        ledger.step(PERSONA, action, "Requested " + what + " from " + team + ": received " + received.size() + " records.",
+                support.effort("fair-lending-reviewer", estimate), StoryLedger.Kind.ASK);
+        ledger.count("recordsRequested", 1);
+        return record.withRecordsFrom(party, team, received);
+    }
+
+    @Action(description = "Retrieve the text of the underwriting policy applied", pre = {"intakeKnown", "creditCallKnown"},
+            post = {"policyKnown", "policyUnavailable"}, cost = 0.02, canRerun = false)
+    public PolicyText retrievePolicy(ReviewRecord record) {
+        StoryLedger ledger = support.ledger(record.caseId());
+        Optional<String> applied = policyOnRecord(record.turns());
+        List<StoreRecord> policies = support.store(record.store())
+                .searchKnowledge(record.caseId(), AGENT_ID, applied.orElse("") + " unsecured personal loan underwriting policy credit score DTI")
+                .stream().filter(r -> StorySupport.extract(List.of(r), StorySupport.POLICY_ID).filter(id -> id.startsWith("LEND-")).isPresent()).toList();
+        List<StoreRecord> used = applied.map(p -> policies.stream()
+                .filter(r -> StorySupport.extract(List.of(r), StorySupport.POLICY_ID).filter(p::equals).isPresent()).toList()).orElse(List.of());
+        support.found(ledger, "knowledge base", used);
+        policies.stream().filter(r -> !used.contains(r)).forEach(r -> support.passedOver(ledger, "knowledge base", r,
+                StorySupport.extract(List.of(r), StorySupport.POLICY_ID).orElse("another policy") + " is not the policy applied to this application"));
+        ledger.step(PERSONA, "retrievePolicy",
+                applied.isEmpty() ? "The record names no policy." : used.isEmpty() ? "No text of " + applied.get() + " in reach."
+                        : "Found the text of " + applied.get() + " in shared knowledge.",
+                support.effort("fair-lending-reviewer", "retrieve-policy"), StoryLedger.Kind.CONTEXT);
+        return new PolicyText(record.caseId(), applied.orElse(null), used, used.isEmpty() ? null : "knowledge base");
+    }
+
+    @Action(description = "Request the policy text from credit risk, the policy owner", pre = {"policyUnavailable"},
+            post = {"policyKnown"}, cost = 0.30, canRerun = false)
+    public PolicyText requestPolicy(ReviewRecord record, PolicyText missing) {
+        StoryLedger ledger = support.ledger(record.caseId());
+        // Credit risk owns the policy documents and sends the one the record names.
+        List<StoreRecord> text = missing.policy() == null ? List.of() : documents.all().stream()
+                .filter(d -> d.key().equals(missing.policy()))
+                .flatMap(d -> d.chunks().stream().map(c -> new StoreRecord(d.key(), c, UnderwriterAgent.CREDIT_RISK, "", d.filename())))
+                .toList();
+        ledger.say(PERSONA, "Requesting the text of " + (missing.policy() == null ? "the applicable underwriting policy" : missing.policy()) + " from credit risk.");
+        ledger.say("Credit risk", text.isEmpty() ? "We can't tell which policy you mean." : "Attached: " + missing.policy() + ".");
+        ledger.step(PERSONA, "requestPolicy", "Requested the policy text from credit risk: " + (text.isEmpty() ? "not provided." : "received."),
+                support.effort("fair-lending-reviewer", "request-policy"), StoryLedger.Kind.ASK);
+        ledger.count("recordsRequested", 1);
+        return new PolicyText(record.caseId(), missing.policy(), text, UnderwriterAgent.CREDIT_RISK);
+    }
+
+    @Action(description = "Check the credit call against the policy", pre = {"intakeKnown", "creditCallKnown", "policyKnown"},
+            post = {"reviewChecked"}, cost = 0.10, canRerun = false)
+    public ReviewChecked checkAgainstPolicy(ReviewRecord record, PolicyText policy, @Provided Ai ai) {
+        StoryLedger ledger = support.ledger(record.caseId());
+        String context = StorySupport.asContext("Record for " + record.applicationId(), record.turns(), true) + StorySupport.asContext("Policy", policy.text());
+        Consistency consistency = decisions.decide(record.caseId(), PERSONA, "decisions/lending-review-compliance",
+                Map.of("application", record.applicationId()), context, Consistency.class,
+                () -> consistencyByRule(record.turns(), policy), ai);
+        support.traceDecisions(support.store(record.store()), record.caseId(), AGENT_ID, record.applicationId(), PERSONA);
+        // How many of the other agents' decisions the record shows how they were made, not just their outcome.
+        ledger.count("decisionTraces", (int) record.turns().stream()
+                .filter(t -> t.decisionGate().isPresent() && !t.taggedBy().map(AGENT_ID::equals).orElse(false)).count());
+        ledger.step(PERSONA, "checkAgainstPolicy", verdict(consistency) + " " + String.join(" ", findings(consistency)),
+                support.effort("fair-lending-reviewer", "check-against-policy"), StoryLedger.Kind.WORK);
+        return new ReviewChecked(record.caseId(), consistency);
+    }
+
+    @AchievesGoal(description = "The fair-lending review finding is filed")
+    @Action(description = "File the review finding", pre = {"reviewChecked"}, post = {"findingFiled"}, cost = 0.05, canRerun = false)
+    public ReviewFinding fileFinding(ReviewRecord record, PolicyText policy, ReviewChecked checked) {
+        StoryLedger ledger = support.ledger(record.caseId());
+        Consistency c = checked.consistency();
+        String verdict = record.applicationId() + ": " + verdict(c);
+        ledger.step(PERSONA, "fileFinding", "Filed the finding: " + verdict, support.effort("fair-lending-reviewer", "file-finding"), StoryLedger.Kind.WORK);
+        ledger.outcome(verdict);
+        List<String> sources = record.turns().stream().map(Turn::writtenBy).distinct().toList();
+        List<String> facts = new ArrayList<>(List.of(
+                "Application " + record.applicationId(),
+                "Record from " + (record.requested().isEmpty() ? "the application's conversation" : "the application's conversation and records requested from " + record.requested())
+                        + ", written by " + sources,
+                "Policy applied: " + (c.policyApplied() == null ? "not on record" : c.policyApplied())
+                        + (policy.source() == null ? "" : " (policy text from " + policy.source() + ")"),
+                "Figures verified before the credit call: " + yesNo(c.verifiedBeforeCall()),
+                "Credit call matches the policy's thresholds: " + yesNo(c.callMatchesThresholds()),
+                "Thresholds and factors recorded with the credit call: " + yesNo(c.thresholdsRecorded()),
+                "Credit call rests only on factors the policy names: " + yesNo(c.onlyPolicyFactors()),
+                "Principal reasons recorded for a decline: " + (c.declineReasons() == null ? "not applicable" : yesNo(c.declineReasons())),
+                "Hard inquiries on the borrower's credit file: " + (c.hardInquiries() == null ? "unknown" : c.hardInquiries()),
+                "Borrower asked to do something again after the referral: " + (c.borrowerReasked() == null ? "unknown" : c.borrowerReasked() + " times"),
+                "Decision traces on record: " + StorySupport.decisionTraces(record.turns(), UNDERWRITER).size() + " from the underwriter",
+                "Verdict: " + verdict(c)));
+        facts.addAll(findings(c));
+        record.turns().stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.CREDIT_CALL)).forEach(t -> facts.add("Credit call on record: " + t.output()));
+        List<String> gaps = new ArrayList<>();
+        if (!record.intake()) gaps.add("The origination system's checks are not on record");
+        if (!record.creditCall()) gaps.add("The credit call is not on record");
+        if (policy.text().isEmpty()) gaps.add("The text of the policy applied was not available to check against");
+        ledger.auditTrail(auditTrail(record, policy, c, verdict));
+        ledger.handToWriter(new ResponseWriterAgent.WritingTask(record.caseId(), PERSONA, "fair-lending review finding",
+                support.render("writer/lending-review-finding", Map.of()), facts, List.copyOf(gaps), verdict + "."));
+        return new ReviewFinding(record.caseId(), verdict);
+    }
+
+    /** The record entry by entry, with what the review flags on each, then the review's own decisions and its verdict. */
+    private List<StoryLedger.AuditEntry> auditTrail(ReviewRecord record, PolicyText policy, Consistency c, String verdict) {
+        List<Turn> turns = record.turns();
+        List<StoryLedger.AuditEntry> trail = new ArrayList<>(support.auditTrail(record.caseId(), turns, record.origins(),
+                t -> t.event().isEmpty() || t.isEvent(UNDERWRITER, UnderwriterAgent.REASKED),
+                i -> {
+                    Turn t = turns.get(i);
+                    if (t.isEvent(UNDERWRITER, UnderwriterAgent.REASKED)) return "The borrower had to do this again: " + t.why();
+                    if (t.isEvent(UNDERWRITER, LoanIntakeAgent.CREDIT)) return "A second hard inquiry on the borrower's credit file: " + t.why();
+                    if (VERIFICATIONS.stream().anyMatch(v -> t.isEvent(UNDERWRITER, v))) return "Check repeated: " + t.why();
+                    if (t.isEvent(UNDERWRITER, UnderwriterAgent.POLICY)) {
+                        if (t.output().startsWith("none:")) return "No written policy covers this application";
+                        if (policy.text().isEmpty()) return "The policy text was not available to verify this choice";
+                    }
+                    if (t.isEvent(UNDERWRITER, UnderwriterAgent.CREDIT_CALL)) {
+                        if (Boolean.FALSE.equals(c.callMatchesThresholds())) return "The credit call does not follow the policy's thresholds";
+                        if (Boolean.FALSE.equals(c.thresholdsRecorded())) return "The thresholds applied are not recorded, as the policy requires";
+                        if (Boolean.FALSE.equals(c.onlyPolicyFactors())) return "The call rests on a factor the policy does not name";
+                        if (Boolean.FALSE.equals(c.declineReasons())) return "A decline with no principal reasons on record";
+                    }
+                    return StorySupport.decisionIssue(t);
+                }, PERSONA, AGENT_ID));
+        List<String> issues = new ArrayList<>();
+        if (StorySupport.decisionTraces(turns, UNDERWRITER).isEmpty()) issues.add("No decision traces on record: how the credit call was reached cannot be checked");
+        if (!record.intake()) issues.add("The origination system's checks are not on record");
+        trail.add(new StoryLedger.AuditEntry(trail.size() + 1, AGENT_ID, "finding", "Verdict on " + record.applicationId(),
+                "Checked against " + (c.policyApplied() == null ? "no policy" : c.policyApplied())
+                        + (policy.source() == null ? "" : ", text from " + policy.source()), verdict, String.join("; ", issues), "this review"));
+        return trail;
+    }
+
+    // ------------------------------------------------------------------ rules over the record
+
+    static boolean hasIntake(List<Turn> turns) {
+        return turns.stream().anyMatch(t -> t.isEvent(VENDOR, LoanIntakeAgent.REFERRAL));
+    }
+
+    static boolean hasCreditCall(List<Turn> turns) {
+        return turns.stream().anyMatch(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.CREDIT_CALL));
+    }
+
+    static Optional<String> policyOnRecord(List<Turn> turns) {
+        return turns.stream()
+                .filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.POLICY) || t.isEvent(UNDERWRITER, UnderwriterAgent.CREDIT_CALL))
+                .map(t -> StorySupport.extract(List.of(new StoreRecord("", t.output(), t.writtenBy(), "", null)), StorySupport.POLICY_ID))
+                .flatMap(Optional::stream).findFirst();
+    }
+
+    private static final Pattern WORKING = Pattern.compile("DTI ([\\d.]+)% .*score (\\d+); reserves (\\d+) months");
+    /** "credit score 712, DTI 37.4%, reserves 4 months": the factor names before each figure. */
+    private static final Pattern FACTOR = Pattern.compile("([A-Za-z][A-Za-z -]*?) [\\d.]+");
+    private static final Pattern WINDOW = Pattern.compile("within (\\d+) days", Pattern.CASE_INSENSITIVE);
+
+    private static Consistency consistencyByRule(List<Turn> turns, PolicyText policy) {
+        int call = indexOf(turns, UNDERWRITER, UnderwriterAgent.CREDIT_CALL);
+        // The origination system runs its checks before it refers the application, whenever its records were obtained.
+        Boolean verifiedFirst = call < 0 ? null : VERIFICATIONS.stream().allMatch(v ->
+                turns.stream().anyMatch(t -> t.isEvent(VENDOR, v)) || (indexOf(turns, UNDERWRITER, v) >= 0 && indexOf(turns, UNDERWRITER, v) < call));
+        int inquiries = (int) turns.stream().filter(t -> t.isEvent(VENDOR, LoanIntakeAgent.CREDIT) || t.isEvent(UNDERWRITER, LoanIntakeAgent.CREDIT)).count();
+        boolean repullConsented = turns.stream().filter(t -> t.isEvent(UNDERWRITER, LoanIntakeAgent.CREDIT)).allMatch(t -> t.output().contains("consent"));
+        int reasked = (int) turns.stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.REASKED)).count();
+        List<Turn> traces = StorySupport.decisionTraces(turns, UNDERWRITER);
+        String applied = policyOnRecord(turns).orElse(null);
+        // The thresholds as the policy text the reviewer has states them, applied to the figures on record.
+        Optional<LendingThresholds> thresholds = LendingThresholds.parse(String.join("\n\n", policy.text().stream().map(StoreRecord::text).toList()));
+        Optional<Matcher> figures = turns.stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.AFFORDABILITY))
+                .map(t -> WORKING.matcher(t.output())).filter(Matcher::find).findFirst();
+        Optional<String> callOutput = turns.stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.CREDIT_CALL)).map(Turn::output).findFirst();
+        Boolean matches = thresholds.isEmpty() || figures.isEmpty() || callOutput.isEmpty() ? null
+                : callOutput.get().contains(": " + thresholds.get().apply(Integer.parseInt(figures.get().group(2)),
+                        Double.parseDouble(figures.get().group(1)), Integer.parseInt(figures.get().group(3))) + " under");
+        String policyText = String.join("\n\n", policy.text().stream().map(StoreRecord::text).toList());
+        // The policy's record-keeping: the thresholds applied and the factors, stated with the call.
+        Boolean recorded = callOutput.map(o -> after(o, UnderwriterAgent.THRESHOLDS_APPLIED).length() > 1 && o.contains(UnderwriterAgent.FACTORS)).orElse(null);
+        // Fair lending: the call rests only on factors the policy names.
+        List<String> factorNames = callOutput.filter(o -> o.contains(UnderwriterAgent.FACTORS))
+                .map(o -> FACTOR.matcher(after(o, UnderwriterAgent.FACTORS)).results().map(m -> m.group(1).replaceFirst("^[, ]+", "").trim()).toList())
+                .orElse(List.of());
+        Boolean onlyPolicyFactors = policyText.isBlank() || factorNames.isEmpty() ? null
+                : factorNames.stream().allMatch(f -> policyText.toLowerCase().contains(f.toLowerCase()));
+        // Fair lending: a decline records its principal reasons.
+        Boolean declineReasons = callOutput.filter(o -> o.contains(": decline under"))
+                .map(o -> after(after(o, ": decline under"), ". ").replace(UnderwriterAgent.THRESHOLDS_APPLIED, "").trim().length() > 1)
+                .orElse(null);
+        List<String> findings = new ArrayList<>();
+        if (verifiedFirst != null) findings.add(verifiedFirst ? "Income, assets, employment and credit were verified before the credit call."
+                : "The credit call was made before every figure was verified.");
+        if (matches != null) findings.add(matches ? "The credit call follows the policy's thresholds for the figures on record: "
+                + thresholds.get().explain(Integer.parseInt(figures.get().group(2)), Double.parseDouble(figures.get().group(1)), Integer.parseInt(figures.get().group(3))) + "."
+                : "The credit call does not follow the policy's thresholds for the figures on record.");
+        if (recorded != null) findings.add(recorded ? "The thresholds applied and the factors are recorded with the credit call."
+                : "The thresholds applied are not recorded with the credit call, as the policy requires.");
+        if (onlyPolicyFactors != null) findings.add(onlyPolicyFactors ? "The credit call rests only on factors the policy names: " + String.join(", ", factorNames) + "."
+                : "The credit call rests on a factor the policy does not name.");
+        if (declineReasons != null) findings.add(declineReasons ? "The decline records its principal reasons." : "The decline records no principal reasons.");
+        WINDOW.matcher(policyText).results().findFirst().ifPresent(m -> findings.add("The policy's " + m.group(1)
+                + "-day window for the employment verification cannot be checked: the record carries no dates."));
+        findings.add(inquiries <= 1 ? "One hard inquiry on the borrower's credit file."
+                : inquiries + " hard inquiries on the borrower's credit file: the credit report was pulled again"
+                + (repullConsented ? ", with the borrower's fresh consent recorded." : ", with no fresh consent on record."));
+        findings.add(reasked == 0 ? "The borrower was not asked to do anything again after the referral."
+                : "The borrower was asked to do something again " + reasked + " times after the referral.");
+        findings.add(traces.isEmpty() ? "No decision traces from the underwriter are on record."
+                : traces.size() + " decision trace" + (traces.size() == 1 ? "" : "s") + " from the underwriter are on record.");
+        findings.addAll(StorySupport.traceFindings(traces));
+        Boolean consistent = policy.text().isEmpty() || verifiedFirst == null || matches == null ? null
+                : verifiedFirst && matches && repullConsented && Boolean.TRUE.equals(recorded)
+                && !Boolean.FALSE.equals(onlyPolicyFactors) && !Boolean.FALSE.equals(declineReasons);
+        return new Consistency(applied, verifiedFirst, matches, inquiries, reasked, recorded, onlyPolicyFactors, declineReasons, consistent, findings);
+    }
+
+    private static String after(String text, String marker) {
+        int at = text.indexOf(marker);
+        return at < 0 ? "" : text.substring(at + marker.length());
+    }
+
+    private static int indexOf(List<Turn> turns, String agentId, String event) {
+        for (int i = 0; i < turns.size(); i++) if (turns.get(i).isEvent(agentId, event)) return i;
+        return -1;
+    }
+
+    private static String verdict(Consistency c) {
+        String policy = c.policyApplied() == null ? "the applicable policy" : c.policyApplied();
+        return c.consistent() == null ? "Consistency with " + policy + " could not be verified."
+                : c.consistent() ? "Credit call made consistently with " + policy + "." : "Credit call not consistent with " + policy + ".";
+    }
+
+    private static List<String> findings(Consistency c) {
+        return c.findings() == null ? List.of() : c.findings();
+    }
+
+    private static String yesNo(Boolean value) {
+        return value == null ? "unknown" : value ? "yes" : "no";
+    }
+
+    // ------------------------------------------------------------------ conditions
+
+    @Condition(name = "recordRetrieved")
+    public boolean recordRetrieved(ReviewRecord record) {
+        return record != null;
+    }
+
+    @Condition(name = "intakeKnown")
+    public boolean intakeKnown(ReviewRecord record) {
+        return record != null && (record.intake() || record.requested().contains(VENDOR));
+    }
+
+    @Condition(name = "intakeUnknown")
+    public boolean intakeUnknown(ReviewRecord record) {
+        return record != null && !intakeKnown(record);
+    }
+
+    @Condition(name = "creditCallKnown")
+    public boolean creditCallKnown(ReviewRecord record) {
+        return record != null && (record.creditCall() || record.requested().contains(UNDERWRITER));
+    }
+
+    @Condition(name = "creditCallUnknown")
+    public boolean creditCallUnknown(ReviewRecord record) {
+        return record != null && !creditCallKnown(record);
+    }
+
+    @Condition(name = "policyKnown")
+    public boolean policyKnown(PolicyText policy) {
+        return policy != null && (!policy.text().isEmpty() || policy.source() != null);
+    }
+
+    @Condition(name = "policyUnavailable")
+    public boolean policyUnavailable(PolicyText policy) {
+        return policy != null && !policyKnown(policy);
+    }
+
+    @Condition(name = "reviewChecked")
+    public boolean reviewChecked(ReviewChecked checked) {
+        return checked != null;
+    }
+
+    @Condition(name = "findingFiled")
+    public boolean findingFiled(ReviewFinding finding) {
+        return finding != null;
+    }
+}

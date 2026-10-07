@@ -275,7 +275,7 @@ public class PaymentFailureAgent {
                 ? "diagnosed by reusing the learned pattern published by " + lookup.writtenBy() + ", validated against this case (" + diagnosis.evidence() + ")"
                 : (lookup.rejectedReason() != null ? "a learned pattern published by " + lookup.writtenBy() + " was rejected (" + lookup.rejectedReason() + "); " : "")
                 + "diagnosed by testing " + diagnosis.tested().size() + " hypothes" + (diagnosis.tested().size() == 1 ? "is" : "es");
-        store.remember(signals.caseId(), AGENT_ID, "Payment case " + signals.caseId() + " (" + signals.customer() + ", " + signals.transaction()
+        store.rememberLater(signals.caseId(), AGENT_ID, "Payment case " + signals.caseId() + " (" + signals.customer() + ", " + signals.transaction()
                 + ") closed " + java.time.LocalDate.now() + ": root cause " + resolution.rootCause() + "; " + how + ".");
         return new CaseClosed(signals.caseId(), resolution.outcome(), published);
     }

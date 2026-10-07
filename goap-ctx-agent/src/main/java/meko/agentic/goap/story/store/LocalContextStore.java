@@ -111,6 +111,10 @@ public class LocalContextStore implements ContextStore {
     @Override
     public Optional<String> remember(String caseId, String agentId, String text) {
         if (down(caseId, agentId, "memory_add", text)) return Optional.empty();
+        if (outage.memoryWritesFail() && kind == Kind.LOCAL_STAND_IN) {
+            receipts.record(caseId, new ReceiptLog.Receipt(agentId, "memory_add", abbreviate(text) + " — memory_add failed: simulated failure", 0, 0, false, kind().name()));
+            return Optional.empty();
+        }
         String id = UUID.randomUUID().toString();
         memories.add(new Row(id, caseId, text, agentId, Instant.now()));
         log(caseId, agentId, "memory_add", text, 1);
