@@ -26,9 +26,12 @@ public class LoanApplications {
      * @param monthlyIncome  gross monthly income on the pay stubs, USD
      * @param monthlyDebts   monthly obligations on the credit report, USD
      * @param reservesMonths months of instalments plus debts the bank statements cover
+     * @param deposit        the largest single deposit on the bank statements, and what the borrower says it was
+     * @param gap            the longest break in the employment history, and what the borrower says it was
      */
     public record Application(String caseId, String applicationId, int amountUsd, double aprPercent, int termMonths, String purpose,
-                              String employment, int monthlyIncome, int monthlyDebts, int creditScore, int reservesMonths) {
+                              String employment, int monthlyIncome, int monthlyDebts, int creditScore, int reservesMonths,
+                              Deposit deposit, EmploymentGap gap) {
 
         /** The loan amount as the application states it, "25,000 USD". */
         public String amount() {
@@ -42,6 +45,16 @@ public class LoanApplications {
         }
     }
 
+    /**
+     * A single deposit on the bank statements; the borrower's explanation of it and the document behind it.
+     *
+     * @param kind the kind of source, as an underwriter would generalise it ("a vehicle sale")
+     */
+    public record Deposit(int amountUsd, String date, String source, String kind, String evidence) {}
+
+    /** A break in employment; the borrower's explanation of it and the document behind it. */
+    public record EmploymentGap(int days, String period, String reason, String evidence) {}
+
     /** The scenario: a salaried borrower consolidating two credit cards. */
     static final int AMOUNT_USD = 25_000;
     static final double APR_PERCENT = 18.9;
@@ -54,9 +67,27 @@ public class LoanApplications {
 
     /** A new application for a case: a fresh application id, the same borrower figures. */
     public Application open(String caseId) {
-        Application app = new Application(caseId, "APP-" + ThreadLocalRandom.current().nextInt(10_000, 100_000),
-                AMOUNT_USD, APR_PERCENT, TERM_MONTHS, PURPOSE, EMPLOYMENT, 7_400, 1_850, 712, 4);
-        byCase.put(caseId, app);
+        return register(new Application(caseId, newId(), AMOUNT_USD, APR_PERCENT, TERM_MONTHS, PURPOSE, EMPLOYMENT, 7_400, 1_850, 712, 4,
+                new Deposit(8_000, "2026-03-03", "the sale of the borrower's car", "a vehicle sale", "the bill of sale"),
+                new EmploymentGap(92, "June to September 2025", "parental leave with the same employer", "the employer's letter confirming the leave")));
+    }
+
+    /**
+     * A later application in the same case, from a different borrower: a large deposit of the same kind (a vehicle sale,
+     * evidenced by a bill of sale) and only a short break between jobs.
+     */
+    public Application openNext(String caseId) {
+        return register(new Application(caseId, newId(), 15_000, APR_PERCENT, TERM_MONTHS, "a home repair", EMPLOYMENT, 6_200, 1_400, 731, 5,
+                new Deposit(6_500, "2026-04-14", "the sale of the borrower's motorcycle", "a vehicle sale", "the bill of sale"),
+                new EmploymentGap(12, "January 2026", "a move between two salaried jobs", "the new employer's offer letter")));
+    }
+
+    private static String newId() {
+        return "APP-" + ThreadLocalRandom.current().nextInt(10_000, 100_000);
+    }
+
+    private Application register(Application app) {
+        byCase.put(app.caseId(), app);
         byApplication.put(app.applicationId(), app);
         return app;
     }

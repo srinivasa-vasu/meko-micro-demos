@@ -38,7 +38,7 @@ class DocumentedFiguresTest {
             new Documented("what-changed", "What Changed Since Last Review?", "kyc", "evidenceRequests"),
             new Documented("vacation-catch-up", "I Was on Vacation. Catch Me Up.", "catchup", "missedRequirements"),
             new Documented("organization-learned", "The Organization Learned", "learned", null),
-            new Documented("loan-underwriting", "I Already Sent You My Pay Stubs", "loan", "borrowerReasks"));
+            new Documented("loan-underwriting", "I Already Explained This", "loan", "borrowerReexplained"));
 
     static final List<Lane> LANES = List.of(Lane.WITHOUT, Lane.DATABASE, Lane.MEKO);
     static final int SERIES_CASES = 3;
@@ -69,6 +69,7 @@ class DocumentedFiguresTest {
         // The KYC story writes its result back; the documented figures are a review compared with last quarter's.
         stories.reset("what-changed");
         stories.reset("vacation-catch-up");
+        stories.reset("loan-underwriting");
         for (Documented d : STORIES) {
             Map<Lane, Map<String, Integer>> lanes = new LinkedHashMap<>();
             if (d.count() == null) {

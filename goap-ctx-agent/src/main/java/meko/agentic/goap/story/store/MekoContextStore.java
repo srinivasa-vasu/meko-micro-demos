@@ -34,6 +34,8 @@ public class MekoContextStore implements ContextStore {
         t.setDaemon(true);
         return t;
     });
+    /** Set on the writer threads: what they record is background time, not time the agents waited for. */
+    private static final ThreadLocal<Boolean> IN_BACKGROUND = ThreadLocal.withInitial(() -> false);
     private final Map<String, java.util.concurrent.CompletableFuture<Void>> threadTail = new java.util.concurrent.ConcurrentHashMap<>();
     private final Map<String, List<java.util.concurrent.CompletableFuture<Void>>> pendingByCase = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -130,9 +132,24 @@ public class MekoContextStore implements ContextStore {
         return search(caseId, agentId, "memory_search", query, false);
     }
 
+    /**
+     * Knowledge searches already made in a case, by query. Shared knowledge changes in a run only when something is
+     * promoted, which clears the case's entries; a repeated search (the loan story's second application looking up the
+     * same policy) is answered from here and receipted as cached, so no call is hidden.
+     */
+    private final Map<String, List<StoreRecord>> knowledgeCache = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Override
     public List<StoreRecord> searchKnowledge(String caseId, String agentId, String query) {
-        return StoreRecord.onePerDocument(search(caseId, agentId, "knowledgebase_search", query, false));
+        String key = caseId + "\u0000" + query;
+        List<StoreRecord> cached = knowledgeCache.get(key);
+        if (cached != null) {
+            receipts.record(caseId, new ReceiptLog.Receipt(agentId, "knowledgebase_search", "[cached in this run] " + query, cached.size(), 0, true, kind().name()));
+            return cached;
+        }
+        List<StoreRecord> rows = StoreRecord.onePerDocument(search(caseId, agentId, "knowledgebase_search", query, false));
+        if (!rows.isEmpty()) knowledgeCache.put(key, rows);
+        return rows;
     }
 
     private List<StoreRecord> search(String caseId, String agentId, String tool, String query, boolean caseScoped) {
@@ -213,6 +230,8 @@ public class MekoContextStore implements ContextStore {
     @Override
     public boolean promote(String caseId, String agentId, List<String> memoryIds) {
         if (memoryIds.isEmpty()) return false;
+        // Shared knowledge is about to change: searches made earlier in this case no longer stand.
+        knowledgeCache.keySet().removeIf(k -> k.startsWith(caseId + "\u0000"));
         return call(caseId, agentId, "memory_promote", memoryIds.size() + " memory row(s) to the shared knowledge base", () -> {
             meko.callTool("memory_promote", meko.args(
                     "memory_ids", memoryIds,
@@ -259,12 +278,21 @@ public class MekoContextStore implements ContextStore {
 
     @Override
     public void flush(String caseId) {
+        knowledgeCache.keySet().removeIf(k -> k.startsWith(caseId + "\u0000"));
         List<java.util.concurrent.CompletableFuture<Void>> pending = pendingByCase.remove(caseId);
         if (pending != null) java.util.concurrent.CompletableFuture.allOf(pending.toArray(java.util.concurrent.CompletableFuture[]::new)).join();
     }
 
     /** Runs a write in the background; with a thread, after that conversation's earlier writes. Failures are recorded by call(). */
-    private void background(String caseId, String thread, Runnable write) {
+    private void background(String caseId, String thread, Runnable work) {
+        Runnable write = () -> {
+            IN_BACKGROUND.set(true);
+            try {
+                work.run();
+            } finally {
+                IN_BACKGROUND.set(false);
+            }
+        };
         java.util.concurrent.CompletableFuture<Void> done = thread == null
                 ? java.util.concurrent.CompletableFuture.runAsync(write, writer)
                 : threadTail.compute(thread, (k, tail) -> (tail == null ? java.util.concurrent.CompletableFuture.<Void>completedFuture(null) : tail)
@@ -300,12 +328,12 @@ public class MekoContextStore implements ContextStore {
         try {
             if (outage.on()) throw new IllegalStateException("Meko unreachable (simulated outage)");
             Result<T> result = body.run();
-            receipts.record(caseId, new ReceiptLog.Receipt(agentId, tool, detail, result.hits(), millis(start), true, kind().name()));
+            receipts.record(caseId, new ReceiptLog.Receipt(agentId, tool, detail, result.hits(), millis(start), true, kind().name(), IN_BACKGROUND.get()));
             return result.value();
         } catch (Exception e) {
             String error = tool + " failed: " + e.getMessage();
             meko.recordError(error);
-            receipts.record(caseId, new ReceiptLog.Receipt(agentId, tool, detail + " — " + error, 0, millis(start), false, kind().name()));
+            receipts.record(caseId, new ReceiptLog.Receipt(agentId, tool, detail + " — " + error, 0, millis(start), false, kind().name(), IN_BACKGROUND.get()));
             return fallback;
         }
     }

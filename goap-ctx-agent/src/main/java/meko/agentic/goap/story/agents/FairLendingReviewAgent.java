@@ -8,6 +8,7 @@ import com.embabel.agent.api.annotation.Provided;
 import com.embabel.agent.api.common.Ai;
 import com.embabel.agent.api.common.PlannerType;
 import meko.agentic.goap.story.KnowledgeDocuments;
+import meko.agentic.goap.story.LendingConditions;
 import meko.agentic.goap.story.LendingThresholds;
 import meko.agentic.goap.story.StoryLedger;
 import meko.agentic.goap.story.store.ContextStore;
@@ -68,10 +69,12 @@ public class FairLendingReviewAgent {
      * @param thresholdsRecorded the credit call's record states the thresholds applied and the factors, as the policy requires
      * @param onlyPolicyFactors  the call rests only on factors the policy names (no other basis)
      * @param declineReasons     a decline records its principal reasons (adverse action); null when the call is not a decline
+     * @param conditionsDocumented every condition the policy sets on this file was cleared on documented evidence before the call
+     * @param borrowerReexplained  conditions that made the borrower explain again what they had explained at origination
      */
     public record Consistency(String policyApplied, Boolean verifiedBeforeCall, Boolean callMatchesThresholds,
-                              Integer hardInquiries, Integer borrowerReasked, Boolean thresholdsRecorded, Boolean onlyPolicyFactors,
-                              Boolean declineReasons, Boolean consistent, List<String> findings) {}
+                              Integer hardInquiries, Integer borrowerReexplained, Boolean conditionsDocumented, Boolean thresholdsRecorded,
+                              Boolean onlyPolicyFactors, Boolean declineReasons, Boolean consistent, List<String> findings) {}
 
     public record ReviewChecked(String caseId, Consistency consistency) {}
 
@@ -92,11 +95,13 @@ public class FairLendingReviewAgent {
             cost = 0.02, canRerun = false)
     public ReviewRecord retrieveRecord(ReviewRequest request, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(request.caseId());
-        List<Turn> turns = support.store(request.store()).transcript(request.caseId(), AGENT_ID, request.applicationId());
+        // Meko queues turns server-side: a case that has just finished may still be landing, so read until its credit call is there.
+        List<Turn> turns = support.readBack(support.store(request.store()), request.caseId(), AGENT_ID, request.applicationId(), FairLendingReviewAgent::hasCreditCall);
         turns.forEach(t -> ledger.found("application conversation", StorySupport.describe(t), t.writtenBy()));
-        RecordReading reading = decisions.decide(request.caseId(), PERSONA, "decisions/lending-review-record",
+        // Conversation turns come back verbatim with their tags: what is on record is an exact check, not a judgement.
+        RecordReading reading = decisions.decideByRule(request.caseId(), PERSONA, "decisions/lending-review-record",
                 Map.of("application", request.applicationId()), StorySupport.asContext("Record for " + request.applicationId(), turns, true),
-                RecordReading.class, () -> new RecordReading(hasIntake(turns), hasCreditCall(turns)), ai);
+                () -> new RecordReading(hasIntake(turns), hasCreditCall(turns)), "the referral and the credit call, by their tags");
         // The review's own decisions go on the same record, so the review can itself be checked.
         support.traceDecisions(support.store(request.store()), request.caseId(), AGENT_ID, request.applicationId(), PERSONA);
         ReviewRecord record = new ReviewRecord(request.caseId(), request.store(), request.applicationId(), turns,
@@ -178,9 +183,20 @@ public class FairLendingReviewAgent {
     public ReviewChecked checkAgainstPolicy(ReviewRecord record, PolicyText policy, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(record.caseId());
         String context = StorySupport.asContext("Record for " + record.applicationId(), record.turns(), true) + StorySupport.asContext("Policy", policy.text());
-        Consistency consistency = decisions.decide(record.caseId(), PERSONA, "decisions/lending-review-compliance",
+        Consistency byRule = consistencyByRule(record.turns(), policy);
+        String policyText = String.join("\n\n", policy.text().stream().map(StoreRecord::text).toList());
+        // Settled by rule when there is no policy text, or when the policy's thresholds and conditions parse and the record
+        // holds the figures and the credit call: every field is then computed from the record. The model weighs the rest.
+        boolean computable = LendingThresholds.parse(policyText).isPresent() && LendingConditions.parse(policyText).isPresent()
+                && hasCreditCall(record.turns()) && record.turns().stream().anyMatch(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.AFFORDABILITY));
+        Consistency consistency = decisions.decideUnlessClear(record.caseId(), PERSONA, "decisions/lending-review-compliance",
                 Map.of("application", record.applicationId()), context, Consistency.class,
-                () -> consistencyByRule(record.turns(), policy), ai);
+                () -> policy.text().isEmpty() || computable ? Optional.of(byRule) : Optional.empty(),
+                policy.text().isEmpty() ? "no policy text to check against" : "the policy's thresholds and conditions, applied to the figures on record",
+                () -> byRule,
+                // Counts the record settles must agree with it.
+                c -> java.util.Objects.equals(c.hardInquiries(), byRule.hardInquiries()) && java.util.Objects.equals(c.borrowerReexplained(), byRule.borrowerReexplained()),
+                ai);
         support.traceDecisions(support.store(record.store()), record.caseId(), AGENT_ID, record.applicationId(), PERSONA);
         // How many of the other agents' decisions the record shows how they were made, not just their outcome.
         ledger.count("decisionTraces", (int) record.turns().stream()
@@ -197,7 +213,7 @@ public class FairLendingReviewAgent {
         Consistency c = checked.consistency();
         String verdict = record.applicationId() + ": " + verdict(c);
         ledger.step(PERSONA, "fileFinding", "Filed the finding: " + verdict, support.effort("fair-lending-reviewer", "file-finding"), StoryLedger.Kind.WORK);
-        ledger.outcome(verdict);
+        ledger.outcome(ledger.outcome() == null ? verdict : ledger.outcome() + " " + verdict);
         List<String> sources = record.turns().stream().map(Turn::writtenBy).distinct().toList();
         List<String> facts = new ArrayList<>(List.of(
                 "Application " + record.applicationId(),
@@ -211,7 +227,8 @@ public class FairLendingReviewAgent {
                 "Credit call rests only on factors the policy names: " + yesNo(c.onlyPolicyFactors()),
                 "Principal reasons recorded for a decline: " + (c.declineReasons() == null ? "not applicable" : yesNo(c.declineReasons())),
                 "Hard inquiries on the borrower's credit file: " + (c.hardInquiries() == null ? "unknown" : c.hardInquiries()),
-                "Borrower asked to do something again after the referral: " + (c.borrowerReasked() == null ? "unknown" : c.borrowerReasked() + " times"),
+                "Policy conditions cleared on documented evidence before the credit call: " + yesNo(c.conditionsDocumented()),
+                "Borrower asked to explain again what they explained at origination: " + (c.borrowerReexplained() == null ? "unknown" : c.borrowerReexplained() + " times"),
                 "Decision traces on record: " + StorySupport.decisionTraces(record.turns(), UNDERWRITER).size() + " from the underwriter",
                 "Verdict: " + verdict(c)));
         facts.addAll(findings(c));
@@ -221,8 +238,9 @@ public class FairLendingReviewAgent {
         if (!record.creditCall()) gaps.add("The credit call is not on record");
         if (policy.text().isEmpty()) gaps.add("The text of the policy applied was not available to check against");
         ledger.auditTrail(auditTrail(record, policy, c, verdict));
-        ledger.handToWriter(new ResponseWriterAgent.WritingTask(record.caseId(), PERSONA, "fair-lending review finding",
+        ledger.handToWriter(new ResponseWriterAgent.WritingTask(record.caseId(), PERSONA, "fair-lending review finding on " + record.applicationId(),
                 support.render("writer/lending-review-finding", Map.of()), facts, List.copyOf(gaps), verdict + "."));
+        support.fileFinding(support.store(record.store()), record.caseId(), AGENT_ID, record.applicationId(), "Fair-lending review of", verdict(c), findings(c));
         return new ReviewFinding(record.caseId(), verdict);
     }
 
@@ -233,9 +251,8 @@ public class FairLendingReviewAgent {
                 t -> t.event().isEmpty() || t.isEvent(UNDERWRITER, UnderwriterAgent.REASKED),
                 i -> {
                     Turn t = turns.get(i);
-                    if (t.isEvent(UNDERWRITER, UnderwriterAgent.REASKED)) return "The borrower had to do this again: " + t.why();
-                    if (t.isEvent(UNDERWRITER, LoanIntakeAgent.CREDIT)) return "A second hard inquiry on the borrower's credit file: " + t.why();
-                    if (VERIFICATIONS.stream().anyMatch(v -> t.isEvent(UNDERWRITER, v))) return "Check repeated: " + t.why();
+                    if (t.isEvent(UNDERWRITER, UnderwriterAgent.REASKED)) return "The borrower had to explain this again: " + t.why();
+                    if (t.isEvent(UNDERWRITER, UnderwriterAgent.CONDITION_CLEARED) && !documented(t)) return "Condition cleared with no evidence on record";
                     if (t.isEvent(UNDERWRITER, UnderwriterAgent.POLICY)) {
                         if (t.output().startsWith("none:")) return "No written policy covers this application";
                         if (policy.text().isEmpty()) return "The policy text was not available to verify this choice";
@@ -282,11 +299,13 @@ public class FairLendingReviewAgent {
     private static Consistency consistencyByRule(List<Turn> turns, PolicyText policy) {
         int call = indexOf(turns, UNDERWRITER, UnderwriterAgent.CREDIT_CALL);
         // The origination system runs its checks before it refers the application, whenever its records were obtained.
-        Boolean verifiedFirst = call < 0 ? null : VERIFICATIONS.stream().allMatch(v ->
-                turns.stream().anyMatch(t -> t.isEvent(VENDOR, v)) || (indexOf(turns, UNDERWRITER, v) >= 0 && indexOf(turns, UNDERWRITER, v) < call));
+        Boolean verifiedFirst = call < 0 ? null : VERIFICATIONS.stream().allMatch(v -> turns.stream().anyMatch(t -> t.isEvent(VENDOR, v)));
         int inquiries = (int) turns.stream().filter(t -> t.isEvent(VENDOR, LoanIntakeAgent.CREDIT) || t.isEvent(UNDERWRITER, LoanIntakeAgent.CREDIT)).count();
-        boolean repullConsented = turns.stream().filter(t -> t.isEvent(UNDERWRITER, LoanIntakeAgent.CREDIT)).allMatch(t -> t.output().contains("consent"));
-        int reasked = (int) turns.stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.REASKED)).count();
+        // Conditions re-issued for something the borrower had already explained, with evidence, at origination.
+        List<String> explainedAtOrigination = turns.stream().filter(t -> t.isEvent(VENDOR, LoanIntakeAgent.EXPLAINED)).map(t -> t.output().toLowerCase()).toList();
+        List<Turn> reasks = turns.stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.REASKED)).toList();
+        int reexplained = (int) reasks.stream().filter(t -> ITEMS.stream().anyMatch(i -> t.why().toLowerCase().contains(i)
+                && explainedAtOrigination.stream().anyMatch(e -> e.contains(i)))).count();
         List<Turn> traces = StorySupport.decisionTraces(turns, UNDERWRITER);
         String applied = policyOnRecord(turns).orElse(null);
         // The thresholds as the policy text the reviewer has states them, applied to the figures on record.
@@ -310,6 +329,12 @@ public class FairLendingReviewAgent {
         Boolean declineReasons = callOutput.filter(o -> o.contains(": decline under"))
                 .map(o -> after(after(o, ": decline under"), ". ").replace(UnderwriterAgent.THRESHOLDS_APPLIED, "").trim().length() > 1)
                 .orElse(null);
+        // The policy's conditions, applied to the figures the origination system recorded: each must be cleared on evidence before the call.
+        List<String> required = requiredConditions(turns, policyText);
+        List<Turn> cleared = turns.stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.CONDITION_CLEARED)).toList();
+        Boolean conditionsDocumented = policyText.isBlank() || call < 0 || required == null ? null
+                : required.stream().allMatch(item -> cleared.stream().anyMatch(t -> t.input().toLowerCase().contains(item) && documented(t)
+                && turns.indexOf(t) < call));
         List<String> findings = new ArrayList<>();
         if (verifiedFirst != null) findings.add(verifiedFirst ? "Income, assets, employment and credit were verified before the credit call."
                 : "The credit call was made before every figure was verified.");
@@ -323,18 +348,66 @@ public class FairLendingReviewAgent {
         if (declineReasons != null) findings.add(declineReasons ? "The decline records its principal reasons." : "The decline records no principal reasons.");
         WINDOW.matcher(policyText).results().findFirst().ifPresent(m -> findings.add("The policy's " + m.group(1)
                 + "-day window for the employment verification cannot be checked: the record carries no dates."));
-        findings.add(inquiries <= 1 ? "One hard inquiry on the borrower's credit file."
-                : inquiries + " hard inquiries on the borrower's credit file: the credit report was pulled again"
-                + (repullConsented ? ", with the borrower's fresh consent recorded." : ", with no fresh consent on record."));
-        findings.add(reasked == 0 ? "The borrower was not asked to do anything again after the referral."
-                : "The borrower was asked to do something again " + reasked + " times after the referral.");
+        findings.add(inquiries <= 1 ? "One hard inquiry on the borrower's credit file." : inquiries + " hard inquiries on the borrower's credit file.");
+        if (conditionsDocumented != null) {
+            long fromOrigination = cleared.stream().filter(t -> t.output().startsWith(UnderwriterAgent.FROM_ORIGINATION)).count();
+            findings.add(required.isEmpty() ? "The policy's conditions require nothing to be explained for this file."
+                    : "The policy's conditions applied to this file (" + String.join(", ", required) + ") "
+                    + (conditionsDocumented ? "were each cleared on documented evidence before the credit call: " + fromOrigination + " from the borrower's explanation at origination, "
+                    + (cleared.size() - fromOrigination) + " on the borrower's answer to a condition."
+                    : "were not all cleared on documented evidence before the credit call."));
+        }
+        evidenceBases(cleared).forEach(b -> findings.add("Evidence accepted: " + UnderwriterAgent.ruling(b) + "."));
+        turns.stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.RULING)).forEach(t -> findings.add(
+                "A ruling was requested from credit risk for this application, on evidence the policy does not list: " + t.output() + "."));
+        findings.add(reasks.isEmpty() ? "The borrower was not asked to explain anything again after the referral."
+                : reasks.size() + " condition" + (reasks.size() == 1 ? " was" : "s were") + " sent back to the borrower"
+                + (reexplained == 0 ? "." : "; " + reexplained + " asked again for what the borrower had already explained, with evidence, at origination."));
         findings.add(traces.isEmpty() ? "No decision traces from the underwriter are on record."
                 : traces.size() + " decision trace" + (traces.size() == 1 ? "" : "s") + " from the underwriter are on record.");
         findings.addAll(StorySupport.traceFindings(traces));
         Boolean consistent = policy.text().isEmpty() || verifiedFirst == null || matches == null ? null
-                : verifiedFirst && matches && repullConsented && Boolean.TRUE.equals(recorded)
+                : verifiedFirst && matches && Boolean.TRUE.equals(recorded) && !Boolean.FALSE.equals(conditionsDocumented)
                 && !Boolean.FALSE.equals(onlyPolicyFactors) && !Boolean.FALSE.equals(declineReasons);
-        return new Consistency(applied, verifiedFirst, matches, inquiries, reasked, recorded, onlyPolicyFactors, declineReasons, consistent, findings);
+        return new Consistency(applied, verifiedFirst, matches, inquiries, reexplained, conditionsDocumented, recorded, onlyPolicyFactors, declineReasons, consistent, findings);
+    }
+
+    /** The items a policy's conditions can flag, as the underwriter names them. */
+    private static final List<String> ITEMS = List.of("deposit", "employment gap");
+    private static final Pattern INCOME = Pattern.compile("Income ([\\d,]+) USD a month");
+    private static final Pattern DEPOSIT = Pattern.compile(LoanIntakeAgent.LARGEST_DEPOSIT + "([\\d,]+) USD");
+    private static final Pattern GAP = Pattern.compile(LoanIntakeAgent.LONGEST_GAP + "(\\d+) days");
+
+    /**
+     * What the policy text's conditions require explained for this file, from the figures the origination system
+     * recorded: null when the policy states no conditions or the figures are not on record.
+     */
+    static List<String> requiredConditions(List<Turn> turns, String policyText) {
+        Optional<LendingConditions> conditions = LendingConditions.parse(policyText);
+        Optional<Integer> income = figure(turns, LoanIntakeAgent.INCOME, INCOME), deposit = figure(turns, LoanIntakeAgent.ASSETS, DEPOSIT),
+                gap = figure(turns, LoanIntakeAgent.EMPLOYMENT, GAP);
+        if (conditions.isEmpty() || income.isEmpty() || deposit.isEmpty() || gap.isEmpty()) return null;
+        List<String> required = new ArrayList<>();
+        if (conditions.get().depositNeedsSource(deposit.get(), income.get())) required.add("deposit");
+        if (conditions.get().gapNeedsExplanation(gap.get())) required.add("employment gap");
+        return required;
+    }
+
+    private static Optional<Integer> figure(List<Turn> turns, String event, Pattern pattern) {
+        return turns.stream().filter(t -> t.isEvent(VENDOR, event)).map(t -> pattern.matcher(t.output())).filter(Matcher::find)
+                .map(m -> Integer.parseInt(m.group(1).replace(",", ""))).findFirst();
+    }
+
+    /** A cleared condition is documented when it records the evidence it was cleared on, and why that evidence is accepted. */
+    static boolean documented(Turn cleared) {
+        String o = cleared.output();
+        return ((o.startsWith(UnderwriterAgent.FROM_ORIGINATION) && o.contains("evidence received")) || o.startsWith(UnderwriterAgent.FROM_CONDITION))
+                && o.contains(UnderwriterAgent.EVIDENCE_ACCEPTED);
+    }
+
+    /** Why each cleared condition's evidence was accepted: listed in the policy, a ruling on request, or a ruling found as precedent. */
+    static List<String> evidenceBases(List<Turn> cleared) {
+        return cleared.stream().map(t -> after(t.output(), UnderwriterAgent.EVIDENCE_ACCEPTED)).filter(b -> !b.isEmpty()).toList();
     }
 
     private static String after(String text, String marker) {

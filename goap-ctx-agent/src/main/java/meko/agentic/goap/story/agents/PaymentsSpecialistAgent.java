@@ -17,6 +17,7 @@ import meko.agentic.goap.story.store.StoreRecord;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Story 1, phase 2: the payments specialist, a separate agent process that receives only the ticket note.
@@ -78,6 +79,16 @@ public class PaymentsSpecialistAgent {
      * with nothing settled, and no chargeback raised through the card issuer (none was, in this case). The fallback
      * rule for the policy gate, and how payments operations picks from its own documents.
      */
+    private static Optional<String> idOf(StoreRecord r) {
+        return StorySupport.extract(List.of(r), StorySupport.POLICY_ID);
+    }
+
+    /** The one retrieved policy whose scope covers the case; empty if none does, or more than one. */
+    static Optional<String> onlyCovering(List<StoreRecord> policies, SettlementCheck check) {
+        List<String> ids = policies.stream().filter(r -> covers(r.text(), check)).map(PaymentsSpecialistAgent::idOf).flatMap(Optional::stream).distinct().toList();
+        return ids.size() == 1 ? Optional.of(ids.getFirst()) : Optional.empty();
+    }
+
     static boolean covers(String policyText, SettlementCheck check) {
         String text = policyText.toLowerCase();
         boolean captureTimeout = text.matches("(?s).*capture (times|timed) out.*");
@@ -126,18 +137,28 @@ public class PaymentsSpecialistAgent {
         // Everything the specialist has: the ticket note, plus whatever the context store returned.
         StringBuilder context = new StringBuilder("Ticket note: ").append(ticket.note()).append("\n");
         context.append(StorySupport.asContext("Case memory", facts));
-        KnownFacts known = decisions.decide(ticket.caseId(),
+        java.util.function.Supplier<KnownFacts> byRule = () -> new KnownFacts(
+                StorySupport.extract(facts, "(TX-\\d+)").orElse(null),
+                StorySupport.extract(facts, "(\\d+\\.\\d{2}\\s*USD)").orElse(null),
+                StorySupport.extract(facts, "\\d+\\.\\d{2}\\s*USD at ([^.]+)\\.").orElse(null),
+                StorySupport.mentions(facts, "retried|restarted") ? Boolean.TRUE : null,
+                StorySupport.mentions(facts, "possession|not lost") ? Boolean.TRUE : null);
+        String said = context.toString().toLowerCase();
+        KnownFacts known = decisions.decideUnlessClear(ticket.caseId(),
                 PERSONA,
                 "decisions/support-known-facts",
                 Map.of(),
                 context.toString(),
                 KnownFacts.class,
-                () -> new KnownFacts(
-                        StorySupport.extract(facts, "(TX-\\d+)").orElse(null),
-                        StorySupport.extract(facts, "(\\d+\\.\\d{2}\\s*USD)").orElse(null),
-                        StorySupport.extract(facts, "\\d+\\.\\d{2}\\s*USD at ([^.]+)\\.").orElse(null),
-                        StorySupport.mentions(facts, "retried|restarted") ? Boolean.TRUE : null,
-                        StorySupport.mentions(facts, "possession|not lost") ? Boolean.TRUE : null),
+                // Settled without a model when nothing beyond the ticket was recalled, or when every fact parses from the handoff.
+                () -> facts.isEmpty() ? Optional.of(new KnownFacts(null, null, null, null, null))
+                        : Optional.of(byRule.get()).filter(k -> k.transaction() != null && k.amount() != null && k.merchant() != null
+                        && k.troubleshootingDone() != null && k.cardWithCustomer() != null),
+                facts.isEmpty() ? "nothing beyond the ticket note" : "every fact parses from the handoff memory",
+                byRule,
+                // A fact the model reports must be in what the specialist has; a confirmation needs recalled facts behind it.
+                k -> inContext(k.transaction(), said) && inContext(k.amount(), said) && inContext(k.merchant(), said)
+                        && (!Boolean.TRUE.equals(k.troubleshootingDone()) && !Boolean.TRUE.equals(k.cardWithCustomer()) || !facts.isEmpty()),
                 ai);
         CaseFile file = new CaseFile(ticket.caseId(), ticket.store(), ticket.note(),
                 blankToNull(known.transaction()), blankToNull(known.amount()), blankToNull(known.merchant()),
@@ -164,6 +185,12 @@ public class PaymentsSpecialistAgent {
         String reply = "Thank you. I'm checking the settlement now.";
         support.ledger(file.caseId()).say(PERSONA, reply);
         support.record(store, file.caseId(), AGENT_ID, file.transaction(), said, reply);
+    }
+
+    /** A value the model reported is usable only if it is blank or appears in the context it was given. */
+    private static boolean inContext(String value, String context) {
+        String v = blankToNull(value);
+        return v == null || context.contains(v.toLowerCase());
     }
 
     private static String blankToNull(String value) {
@@ -238,19 +265,25 @@ public class PaymentsSpecialistAgent {
                 .searchKnowledge(file.caseId(), AGENT_ID, "failed capture after successful authorization refund policy")
                 .stream().filter(r -> r.text().contains("policy")).toList();
         PolicyChoice choice = policies.isEmpty() ? new PolicyChoice(null, "no policies retrieved")
-                : decisions.decide(file.caseId(),
+                : decisions.decideUnlessClear(file.caseId(),
                 PERSONA,
                 "decisions/support-policy",
                 Map.of(),
                 StorySupport.asContext("Policies", policies),
                 PolicyChoice.class,
+                // Settled by the policies' own scope when exactly one covers what the settlement check found.
+                () -> onlyCovering(policies, check).map(id -> new PolicyChoice(id,
+                        "its scope covers a capture timeout after a successful authorization with no settled capture")),
+                "exactly one policy's scope covers what the settlement check found",
                 () -> policies.stream().filter(r -> covers(r.text(), check)).findFirst()
                         .flatMap(r -> StorySupport.extract(List.of(r), StorySupport.POLICY_ID))
                         .map(id -> new PolicyChoice(id, "its scope covers a capture timeout after a successful authorization with no settled capture"))
                         .orElse(new PolicyChoice(null, "no retrieved policy covers a capture timeout with no settled capture")),
+                // The model's choice must be a retrieved policy whose scope covers the case: never the look-alike.
+                c -> blankToNull(c.policy()) == null || policies.stream().anyMatch(r -> idOf(r).filter(c.policy().trim()::equals).isPresent() && covers(r.text(), check)),
                 ai);
         String chosen = blankToNull(choice.policy());
-        List<StoreRecord> used = chosen == null ? List.of() : policies.stream().filter(r -> r.text().contains(chosen)).toList();
+        List<StoreRecord> used = chosen == null ? List.of() : policies.stream().filter(r -> idOf(r).filter(chosen.trim()::equals).isPresent()).toList();
         support.found(ledger, "knowledge base", used);
         if (chosen != null) {
             policies.stream().filter(r -> !used.contains(r)).forEach(r -> {
@@ -293,9 +326,10 @@ public class PaymentsSpecialistAgent {
     public SupportOutcome resolve(CaseFile file, SettlementCheck check, PolicyLookup lookup) {
         StoryLedger ledger = support.ledger(file.caseId());
         boolean verbal = PAYMENTS_OPS.equals(lookup.writtenBy());
-        String policy = lookup.policy() + (verbal ? " (confirmed by payments ops)" : "");
-        String resolution = "Provisional refund of " + file.amount() + " approved under " + policy
-                + " while settlement is verified.";
+        boolean written = lookup.policy() != null && StorySupport.extract(List.of(new StoreRecord("", lookup.policy(), "", "", null)), StorySupport.POLICY_ID).isPresent();
+        String basis = written ? "under " + lookup.policy() + (verbal ? " (confirmed by payments ops)" : "")
+                : "by payments operations, with no written policy";
+        String resolution = "Provisional refund of " + file.amount() + " approved " + basis + " while settlement is verified.";
         ledger.step("Payments specialist", "resolve", resolution, support.effort("payments-specialist", "resolve"), StoryLedger.Kind.WORK);
         ledger.outcome(resolution);
         int reasked = ledger.counters().getOrDefault("customerQuestions", 0);
@@ -322,7 +356,8 @@ public class PaymentsSpecialistAgent {
                 facts, gaps,
                 "Thanks for your patience. I've approved a provisional refund of " + file.amount() + " for " + file.transaction()
                         + " while we confirm settlement."));
-        support.store(file.store()).rememberLater(file.caseId(), AGENT_ID, "Support case " + file.caseId() + " resolved: " + resolution);
+        support.store(file.store()).rememberLater(file.caseId(), AGENT_ID, "Support case " + file.caseId() + " (" + file.transaction() + ") resolved: " + resolution
+                + " Because: the settlement check found " + check.describe() + "; " + (lookup.policy() == null ? "no policy" : lookup.policy()) + " was applied: " + lookup.reason() + ".");
         support.traceDecisions(support.store(file.store()), file.caseId(), AGENT_ID, file.transaction(), PERSONA);
         support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.transaction(), RESOLUTION, null,
                 "Resolve the dispute on " + file.transaction(), resolution);

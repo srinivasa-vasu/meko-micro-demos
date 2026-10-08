@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}The borrower offered {{ evidence }} as {{ item }} (kind of source: {{ kind }}). The underwriting policy does not list it. Does a credit-risk ruling in the context accept this evidence for this kind of source, under the same policy?{% endblock %}
+{% block shape %}{"accepts": true or false, "reason": "one sentence naming the ruling, or why none applies"}{% endblock %}

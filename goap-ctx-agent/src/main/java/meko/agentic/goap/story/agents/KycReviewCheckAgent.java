@@ -73,11 +73,13 @@ public class KycReviewCheckAgent {
             post = {"recordRetrieved", "workingRecordKnown", "workingRecordUnknown"}, cost = 0.02, canRerun = false)
     public ReviewRecord retrieveRecord(CheckRequest request, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(request.caseId());
-        List<Turn> turns = support.store(request.store()).transcript(request.caseId(), AGENT_ID, request.review());
+        // Meko queues turns server-side: a review that has just finished may still be landing, so read until its sign-off is there.
+        List<Turn> turns = support.readBack(support.store(request.store()), request.caseId(), AGENT_ID, request.review(), t -> !events(t, KycReviewAgent.SIGN_OFF).isEmpty());
         turns.forEach(t -> ledger.found("review conversation", StorySupport.describe(t), t.writtenBy()));
-        RecordReading reading = decisions.decide(request.caseId(), PERSONA, "decisions/kyc-check-record",
+        // Conversation turns come back verbatim with their tags: what is on record is an exact check, not a judgement.
+        RecordReading reading = decisions.decideByRule(request.caseId(), PERSONA, "decisions/kyc-check-record",
                 Map.of("review", request.review()), StorySupport.asContext("Record for " + request.review(), turns, true),
-                RecordReading.class, () -> new RecordReading(hasWorkingRecord(turns)), ai);
+                () -> new RecordReading(hasWorkingRecord(turns)), "the analyst's prior-review and sign-off records, by their tags");
         support.traceDecisions(support.store(request.store()), request.caseId(), AGENT_ID, request.review(), PERSONA);
         ReviewRecord record = new ReviewRecord(request.caseId(), request.store(), request.review(), turns,
                 Boolean.TRUE.equals(reading.workingRecord()), List.of(),
@@ -145,8 +147,18 @@ public class KycReviewCheckAgent {
     public ReviewChecked checkAgainstStandard(ReviewRecord record, StandardText standard, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(record.caseId());
         String context = StorySupport.asContext("Record for " + record.review(), record.turns(), true) + StorySupport.asContext("Standard", standard.text());
-        Check check = decisions.decide(record.caseId(), PERSONA, "decisions/kyc-check-standard",
-                Map.of("review", record.review()), context, Check.class, () -> checkByRule(record.turns(), standard), ai);
+        Check byRule = checkByRule(record.turns(), standard);
+        // Settled by rule when there is no standard text, or when the analyst's records (prior used, material changes,
+        // evidence, sign-off) are all on record: every field is then computed from them. The model weighs the rest.
+        boolean complete = java.util.stream.Stream.of(KycReviewAgent.PRIOR_USED, KycReviewAgent.EVIDENCE, KycReviewAgent.SIGN_OFF)
+                .allMatch(e -> !events(record.turns(), e).isEmpty());
+        Check check = decisions.decideUnlessClear(record.caseId(), PERSONA, "decisions/kyc-check-standard",
+                Map.of("review", record.review()), context, Check.class,
+                () -> standard.text().isEmpty() || complete ? Optional.of(byRule) : Optional.empty(),
+                standard.text().isEmpty() ? "no standard text to check against" : "the analyst's records, checked against the standard",
+                () -> byRule,
+                c -> java.util.Objects.equals(c.signedOff(), byRule.signedOff()),
+                ai);
         support.traceDecisions(support.store(record.store()), record.caseId(), AGENT_ID, record.review(), PERSONA);
         ledger.count("decisionTraces", (int) record.turns().stream()
                 .filter(t -> t.decisionGate().isPresent() && !t.taggedBy().map(AGENT_ID::equals).orElse(false)).count());
@@ -183,6 +195,7 @@ public class KycReviewCheckAgent {
                 "review-check finding for the model-risk file",
                 support.render("writer/kyc-check-finding", Map.of()),
                 facts, List.copyOf(gaps), verdict + "."));
+        support.fileFinding(support.store(record.store()), record.caseId(), AGENT_ID, record.review(), "Model-risk check of", verdict(c, standard), findings(c));
         return new CheckFinding(record.caseId(), verdict);
     }
 

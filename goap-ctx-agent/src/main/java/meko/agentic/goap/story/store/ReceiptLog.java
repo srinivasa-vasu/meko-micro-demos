@@ -12,7 +12,12 @@ import meko.agentic.goap.story.RunEvents;
 @Component
 public class ReceiptLog {
 
-    public record Receipt(String agent, String tool, String detail, int hits, long millis, boolean ok, String store) {}
+    /** @param background a write the agents did not wait for (it ran alongside them, and the run waited only at the end) */
+    public record Receipt(String agent, String tool, String detail, int hits, long millis, boolean ok, String store, boolean background) {
+        public Receipt(String agent, String tool, String detail, int hits, long millis, boolean ok, String store) {
+            this(agent, tool, detail, hits, millis, ok, store, false);
+        }
+    }
 
     private final Map<String, List<Receipt>> receipts = new ConcurrentHashMap<>();
     private final RunEvents events;

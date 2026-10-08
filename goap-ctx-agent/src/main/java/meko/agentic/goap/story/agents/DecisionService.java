@@ -12,6 +12,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -54,6 +56,16 @@ public class DecisionService {
      */
     public <T> T decide(String caseId, String persona, String template, Map<String, Object> vars, String context,
                         Class<T> type, Supplier<T> rule, Ai ai) {
+        return decide(caseId, persona, template, vars, context, type, rule, a -> true, ai);
+    }
+
+    /**
+     * As {@link #decide(String, String, String, Map, String, Class, Supplier, Ai)}, with a check of the model's answer
+     * against the context: an answer that fails it (a fact not in the context, a verdict the record contradicts) is
+     * not used; the rule decides instead, and the decision records why.
+     */
+    public <T> T decide(String caseId, String persona, String template, Map<String, Object> vars, String context,
+                        Class<T> type, Supplier<T> rule, Predicate<T> valid, Ai ai) {
         StoryLedger ledger = support.ledger(caseId);
         String prompt = prompt(templates, caseId, template, vars, context);
         String question = question(prompt);
@@ -64,6 +76,12 @@ public class DecisionService {
             try {
                 String reply = ai.withLlmByRole(DECIDER_TIER).generateText(prompt);
                 T answer = json.readValue(extractJson(reply), type);
+                if (!valid.test(answer)) {
+                    T ruled = rule.get();
+                    ledger.decision(new StoryLedger.Decision(persona, gate, question, json.writeValueAsString(ruled),
+                            "rule (" + model + "'s answer did not match the context: " + abbreviate(json.writeValueAsString(answer)) + ")", contextSummary, true));
+                    return ruled;
+                }
                 ledger.decision(new StoryLedger.Decision(persona, gate, question, json.writeValueAsString(answer), model, contextSummary, true));
                 return answer;
             } catch (RuntimeException e) {
@@ -77,6 +95,36 @@ public class DecisionService {
         ledger.decision(new StoryLedger.Decision(persona, gate, question, json.writeValueAsString(answer),
                 "rule (" + (tiers.enabled() ? tiers.status(DECIDER_TIER).diagnosis() : "model calls disabled") + ")", contextSummary, false));
         return answer;
+    }
+
+    /**
+     * A decision a deterministic check settles: decided by the rule, with no model call, and recorded like any other
+     * decision (the question, the answer and that a rule decided it), so it is traced the same way.
+     */
+    public <T> T decideByRule(String caseId, String persona, String template, Map<String, Object> vars, String context,
+                              Supplier<T> rule, String check) {
+        String prompt = prompt(templates, caseId, template, vars, context);
+        String contextSummary = context.isBlank() ? "no context" : (context.length() / 4) + " tokens of context";
+        T answer = rule.get();
+        support.ledger(caseId).decision(new StoryLedger.Decision(persona, template.substring(template.lastIndexOf('/') + 1), question(prompt),
+                json.writeValueAsString(answer), "rule (" + check + ")", contextSummary, false));
+        return answer;
+    }
+
+    /**
+     * Rule first: when {@code clear} settles the decision it is decided by rule, with no model call; only when it cannot
+     * (an ambiguous case) does the model decide, as in {@link #decide}.
+     */
+    public <T> T decideUnlessClear(String caseId, String persona, String template, Map<String, Object> vars, String context,
+                                   Class<T> type, Supplier<Optional<T>> clear, String check, Supplier<T> rule, Ai ai) {
+        return decideUnlessClear(caseId, persona, template, vars, context, type, clear, check, rule, a -> true, ai);
+    }
+
+    public <T> T decideUnlessClear(String caseId, String persona, String template, Map<String, Object> vars, String context,
+                                   Class<T> type, Supplier<Optional<T>> clear, String check, Supplier<T> rule, Predicate<T> valid, Ai ai) {
+        Optional<T> settled = clear.get();
+        return settled.isPresent() ? decideByRule(caseId, persona, template, vars, context, settled::get, check)
+                : decide(caseId, persona, template, vars, context, type, rule, valid, ai);
     }
 
     static String prompt(TemplateRenderer templates, String caseId, String template, Map<String, Object> vars, String context) {

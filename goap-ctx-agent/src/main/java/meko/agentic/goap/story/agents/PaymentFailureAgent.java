@@ -23,8 +23,20 @@ import java.util.Map;
  */
 @Agent(planner = PlannerType.GOAP, description = "Payments investigator for a recurring card-payment failure")
 public class PaymentFailureAgent {
+    /** Your support app's investigator and curator; the EU payments-ops team's application writes under its own ids. */
     public static final String AGENT_ID = "payments:investigator-agent";
     public static final String CURATOR_ID = "payments:knowledge-curator";
+    public static final String EU_AGENT_ID = "eu-payments-ops:investigator-agent";
+    public static final String EU_CURATOR_ID = "eu-payments-ops:knowledge-curator";
+
+    /** Who investigates for {@code team} ("" for this application's own support team). */
+    static String investigator(String team) {
+        return team == null || team.isBlank() ? AGENT_ID : EU_AGENT_ID;
+    }
+
+    static String curator(String team) {
+        return team == null || team.isBlank() ? CURATOR_ID : EU_CURATOR_ID;
+    }
     public static final String PATTERN_MARKER = "LEARNED PATTERN gateway-capture-timeout";
     static final String CAPTURE_TIMEOUT = "gateway capture timeout after successful authorization";
     static final String DUPLICATE_CAPTURE = "duplicate capture settled twice";
@@ -109,7 +121,7 @@ public class PaymentFailureAgent {
 
     /** Writes one of the investigator's records to the case's conversation, keyed by the case id. */
     private void note(Signals signals, String event, String input, String output) {
-        support.recordEvent(support.store(signals.store()), signals.caseId(), AGENT_ID, signals.caseId(), event, null, input, output);
+        support.recordEvent(support.store(signals.store()), signals.caseId(), investigator(signals.team()), signals.caseId(), event, null, input, output);
     }
 
     @Action(description = "Look for a learned pattern matching these signals in shared knowledge", pre = {"signalsGathered"},
@@ -117,7 +129,7 @@ public class PaymentFailureAgent {
     public PatternLookup lookUpKnownPatterns(Signals signals, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(signals.caseId());
         List<StoreRecord> matches = support.store(signals.store())
-                .searchKnowledge(signals.caseId(), AGENT_ID, PATTERN_MARKER + " " + epochTag(signals.epoch()) + " capture timeout after successful authorization")
+                .searchKnowledge(signals.caseId(), investigator(signals.team()), PATTERN_MARKER + " " + epochTag(signals.epoch()) + " capture timeout after successful authorization")
                 .stream().filter(r -> r.text().contains(PATTERN_MARKER) && r.text().contains(epochTag(signals.epoch()))).toList();
         if (matches.isEmpty()) {
             ledger.step(persona(signals.team()), "lookUpKnownPatterns", "No learned pattern for these signals.", support.effort("payment-failure", "look-up-known-patterns"), StoryLedger.Kind.CONTEXT);
@@ -126,18 +138,18 @@ public class PaymentFailureAgent {
         }
         StoreRecord match = matches.getFirst();
         // Retrieval is not reuse: the agent checks the pattern actually fits this case before relying on it.
-        PatternFit fit = decisions.decide(signals.caseId(),
+        // The signals are structured and the pattern states its conditions: whether it fits is an exact check.
+        PatternFit fit = decisions.decideByRule(signals.caseId(),
                 persona(signals.team()),
                 "decisions/" + PATTERN_FIT,
                 Map.of(),
                 "Case signals: " + signals.description() + ".\n" + StorySupport.asContext("Learned pattern from shared knowledge", List.of(match)),
-                PatternFit.class,
                 () -> fitsPattern(signals)
                         ? new PatternFit(true, "Signals match every condition of the pattern.")
                         : new PatternFit(false, "The pattern requires a capture timeout with no settled capture; here "
                                 + signals.settledCaptures() + " captures settled."),
-                ai);
-        support.traceDecisions(support.store(signals.store()), signals.caseId(), AGENT_ID, signals.caseId(), persona(signals.team()));
+                "the gateway capture timed out and no capture settled, as the pattern states");
+        support.traceDecisions(support.store(signals.store()), signals.caseId(), investigator(signals.team()), signals.caseId(), persona(signals.team()));
         if (!Boolean.TRUE.equals(fit.applies())) {
             ledger.step(persona(signals.team()), "lookUpKnownPatterns",
                     "Meko returned a learned pattern, but it does not fit this case: " + fit.reason(), support.effort("payment-failure", "look-up-known-patterns"), StoryLedger.Kind.CONTEXT);
@@ -235,8 +247,8 @@ public class PaymentFailureAgent {
             String learning = PATTERN_MARKER + ": when card authorization succeeds but the gateway capture times out and no settlement exists, "
                     + "it is not a duplicate charge or a delayed capture. Validate that capture identifiers differ and no capture is settled, "
                     + "then issue a provisional refund and void the capture. Learned on case " + signals.caseId() + " " + epochTag(signals.epoch()) + ".";
-            published = store.remember(signals.caseId(), CURATOR_ID, learning)
-                    .map(id -> store.promote(signals.caseId(), CURATOR_ID, List.of(id)))
+            published = store.remember(signals.caseId(), curator(signals.team()), learning)
+                    .map(id -> store.promote(signals.caseId(), curator(signals.team()), List.of(id)))
                     .orElse(false);
             ledger.step("Knowledge curator", "closeAndShare",
                     published ? "Wrote the root cause as a memory and promoted it into the shared knowledge base."
@@ -275,7 +287,7 @@ public class PaymentFailureAgent {
                 ? "diagnosed by reusing the learned pattern published by " + lookup.writtenBy() + ", validated against this case (" + diagnosis.evidence() + ")"
                 : (lookup.rejectedReason() != null ? "a learned pattern published by " + lookup.writtenBy() + " was rejected (" + lookup.rejectedReason() + "); " : "")
                 + "diagnosed by testing " + diagnosis.tested().size() + " hypothes" + (diagnosis.tested().size() == 1 ? "is" : "es");
-        store.rememberLater(signals.caseId(), AGENT_ID, "Payment case " + signals.caseId() + " (" + signals.customer() + ", " + signals.transaction()
+        store.rememberLater(signals.caseId(), investigator(signals.team()), "Payment case " + signals.caseId() + " (" + signals.transaction()
                 + ") closed " + java.time.LocalDate.now() + ": root cause " + resolution.rootCause() + "; " + how + ".");
         return new CaseClosed(signals.caseId(), resolution.outcome(), published);
     }

@@ -14,6 +14,7 @@ import meko.agentic.goap.story.store.StoreRecord;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Story 4: a developer returns from two weeks away to PR-4821. While they were out, other tools wrote to
@@ -111,18 +112,25 @@ public class CatchUpAgent {
             if (pr != null) support.passedOver(ledger, "memory", r, "a different pull request (" + pr + "), not the one you are finishing");
         });
         current.forEach(r -> ledger.note("Catch-up brief", r.text() + "  (" + r.writtenBy() + ")"));
+        // Settled by rule when every recalled item is recognisable by its own marker (a decision, a review request, its
+        // being addressed, an incident postmortem, a superseded draft); the model reads them only when one is not.
+        boolean recognised = relevant.stream().allMatch(r -> MARKERS.stream().anyMatch(r.text()::contains) || r.text().toLowerCase().contains("superseded"));
         ContextReading reading = relevant.isEmpty() ? new ContextReading(false, null, null)
-                : decisions.decide(diff.caseId(),
+                : decisions.decideUnlessClear(diff.caseId(),
                 "Catch-up agent",
                 "decisions/sdlc-context",
                 Map.of("pr", PR),
                 "Changed files: " + diff.files() + "\n" + StorySupport.asContext("Shared project context", relevant),
                 ContextReading.class,
-                () -> readingByRule(relevant),
+                () -> recognised ? Optional.of(readingByRule(current)) : Optional.empty(),
+                "every recalled item carries its marker",
+                () -> readingByRule(current),
+                // An open request counts only if it is a request on this pull request, as recalled.
+                r -> blankToNull(r.openReviewRequest()) == null || (r.openReviewRequest().contains(PR) && current.stream().anyMatch(c -> c.text().contains(REQUEST_MARKER))),
                 ai);
         support.traceDecisions(store, diff.caseId(), AGENT_ID, diff.caseId(), "Catch-up agent");
         ProjectContext context = new ProjectContext(diff.caseId(), !relevant.isEmpty(), Boolean.TRUE.equals(reading.adrRelevant()),
-                blankToNull(reading.openReviewRequest()), blankToNull(reading.incidentLesson()), relevant);
+                blankToNull(reading.openReviewRequest()), blankToNull(reading.incidentLesson()), current);
         ledger.step("Catch-up agent", "recallProjectContext",
                 relevant.isEmpty() ? "No shared project context to recall."
                         : "Recalled " + current.size() + " current items written by " + current.stream().map(StoreRecord::writtenBy).distinct().toList()
@@ -130,6 +138,9 @@ public class CatchUpAgent {
                 support.effort("catch-up", "recall-project-context"), StoryLedger.Kind.CONTEXT);
         return context;
     }
+
+    /** How each kind of recalled item identifies itself. */
+    private static final List<String> MARKERS = List.of(REQUEST_MARKER, ADDRESSED_MARKER, "INC-1877 postmortem", "ADR-194");
 
     private static String roundTag(String round) {
         return "[round " + round;
@@ -156,21 +167,21 @@ public class CatchUpAgent {
         ledger.say("Developer", "@team what did I miss on " + PR + "? Anything decided while I was out?");
         ledger.say("Teammate", "There was an ADR about retries, it's on the wiki. Not sure about the review, ask the reviewer?");
         ledger.step("Developer", "reconstructManually",
-                "Read PR threads, chat and the wiki and pinged two teammates.", support.effort("catch-up", "reconstruct-manually"), StoryLedger.Kind.ASK);
-        ledger.count("teammateInterruptions", 2);
+                "Read PR threads, chat and the wiki and asked the team.", support.effort("catch-up", "reconstruct-manually"), StoryLedger.Kind.ASK);
+        ledger.count("teammateInterruptions", 1);
         // What a person can actually search: the wiki is indexed, the team chat where the review request lives is not.
         String sources = "Changed files: " + diff.files() + "\n"
                 + "Wiki search for 'payment retry': " + WIKI_ADR + "\n"
                 + "Team chat search: not available (chat is not indexed).\n"
                 + "Teammate: there was an ADR about retries on the wiki; not sure about the review.";
-        ContextReading reading = decisions.decide(diff.caseId(),
+        // What the sources say, read exactly: the wiki names the ADR; the chat where the request lives is not searchable.
+        ContextReading reading = decisions.decideByRule(diff.caseId(),
                 "Developer",
                 "decisions/sdlc-context",
                 Map.of("pr", PR),
                 sources,
-                ContextReading.class,
-                () -> new ContextReading(true, null, null),
-                ai);
+                () -> new ContextReading(sources.contains("ADR-194"), null, null),
+                "what the searchable sources state");
         support.traceDecisions(support.store(diff.store()), diff.caseId(), AGENT_ID, diff.caseId(), "Developer");
         return new ProjectContext(diff.caseId(), true, Boolean.TRUE.equals(reading.adrRelevant()),
                 blankToNull(reading.openReviewRequest()), blankToNull(reading.incidentLesson()), List.of());

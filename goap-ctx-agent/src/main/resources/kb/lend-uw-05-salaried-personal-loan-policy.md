@@ -17,6 +17,16 @@ shown on pay stubs. Self-employed borrowers are underwritten under LEND-UW-09 in
    inquiry on the borrower's credit file: it needs fresh consent and is recorded on the application.
 5. Verifications the loan-origination system already completed are reused, not repeated.
 
+## LEND-UW-05 policy: conditions
+
+1. A single deposit larger than 25% of monthly income must be sourced: a letter of explanation and proof of the source.
+2. An employment gap longer than 30 days in the last two years needs a letter of explanation.
+3. A condition is cleared on the explanation and its documented evidence. Where the borrower already gave both during
+   origination, the condition is cleared from that record; the borrower is not asked again.
+4. Acceptable evidence of a deposit's source: a gift letter, or a statement of the account the money came from.
+   Acceptable evidence for an employment gap: the employer's letter. Any other evidence needs a ruling from credit risk;
+   a ruling applies to later applications with the same kind of evidence.
+
 ## LEND-UW-05 policy: credit thresholds
 
 1. Credit score of at least 680.

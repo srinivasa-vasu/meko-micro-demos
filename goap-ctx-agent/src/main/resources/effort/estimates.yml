@@ -260,23 +260,27 @@ goap:
         open-application-file:
           minutes: 3
           time: hands-on
-          basis: "Reading the referral and whatever application history is available."
-        ask-pay-stubs:
-          minutes: 30
-          time: waiting
-          basis: "The borrower finds and re-uploads two recent pay stubs."
-        ask-bank-statements:
-          minutes: 25
-          time: waiting
-          basis: "The borrower downloads and re-uploads two months of bank statements."
-        verify-employment:
+          basis: "Reading the referral and the application file the origination system sent."
+        review-flags:
+          minutes: 6
+          time: hands-on
+          basis: "Apply the policy's conditions to the file, and read what the borrower already explained."
+        issue-condition:
           minutes: 45
           time: waiting
-          basis: "Waiting on the employer's HR team to answer a verification of employment."
-        pull-credit-again:
-          minutes: 15
+          basis: "The borrower writes a letter of explanation and finds the proof again, then sends both back."
+        accept-evidence:
+          minutes: 5
+          time: hands-on
+          basis: "Read each letter and its proof against the evidence the policy accepts, and clear the conditions."
+        request-ruling:
+          minutes: 30
           time: waiting
-          basis: "Asking the borrower for fresh consent to a second hard inquiry, and the bureau's response."
+          basis: "Waiting on credit risk to rule on evidence the policy does not list: a short queue on a good day."
+        share-precedent:
+          minutes: 2
+          time: hands-on
+          basis: "Write the ruling up so the next underwriter finds it. The write itself takes milliseconds."
         assess-affordability:
           minutes: 8
           time: hands-on

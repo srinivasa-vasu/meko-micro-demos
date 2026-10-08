@@ -1,0 +1,3 @@
+{% extends "decision.jinja" %}
+{% block question %}The underwriting policy says these items in the application file must be explained before the credit call: {{ flags }}. Which of them has the borrower already explained, with evidence received, in the context? An item counts as explained only if the context gives both the explanation and the evidence. Use the item names before the colon.{% endblock %}
+{% block shape %}{"explained": ["item names already explained with evidence"], "unexplained": ["item names still needing a condition"]}{% endblock %}

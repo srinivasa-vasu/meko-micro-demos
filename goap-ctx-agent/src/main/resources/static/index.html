@@ -265,7 +265,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:11px;text-transform:
         <span class="title">Agents that don't lose the plot</span>
         <span class="subtitle"><b>GOAP</b> decides what to do next from what the agent knows. <b>Meko</b> decides what the agent knows.</span>
       </div>
-      <div class="status-row"><div class="pill" id="mekoStatus">Meko: checking…</div><div class="pill" id="llmStatus">Models: checking…</div><div class="pill" title="Five agent workflows across system boundaries. Same agents, same planner, same code, run with and without Meko (and with your application's own database). Counts are measured from what the planner did; minutes are estimates.">Synthetic data</div><button class="btn" id="seedBtn" hidden title="Write the stories' synthetic organizational context into the live datapack. Safe to repeat: entries already there are skipped.">Seed datapack</button><button class="btn danger" id="outageBtn" title="Make every Meko call fail, as if Meko were down">Simulate Meko outage</button></div>
+      <div class="status-row"><div class="pill" id="mekoStatus">Meko: checking…</div><div class="pill" id="llmStatus">Models: checking…</div><div class="pill" title="Six agent workflows across system boundaries. Same agents, same planner, same code, run with and without Meko (and with your application's own database). Counts are measured from what the planner did; minutes are estimates.">Synthetic data</div><button class="btn" id="seedBtn" hidden title="Write the stories' synthetic organizational context into the live datapack. Safe to repeat: entries already there are skipped.">Seed datapack</button><button class="btn danger" id="outageBtn" title="Make every Meko call fail, as if Meko were down">Simulate Meko outage</button></div>
     </div>
     <nav id="storyList" class="story-list" aria-label="Stories"></nav>
   </header>
@@ -289,7 +289,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:11px;text-transform:
         <div class="explain">
           <div class="card"><h3>Without Meko</h3><div id="without"></div></div>
           <div class="card"><h3>With Meko</h3><div id="with"></div><div id="tools" class="tools"></div></div>
-          <div class="card" id="dbCard"><h3>Your own database</h3><div>The same agents on a store your application owns: it holds only what this application's agents wrote, found by case id or keyword. What other tools and systems wrote lives in their systems.</div></div>
+          <div class="card" id="dbCard"><h3>Your own database</h3><div>The same agents on a store your application owns: it holds only what this application's agents wrote, found by case id or keyword. What other tools and systems wrote lives in their systems, and so do the documents other teams own: the dispute and lending policies (payments operations, credit risk) and the KYC standard are uploaded to Meko's shared knowledge, not copied into each application's database, so this lane asks the owning team for them.</div></div>
           <div class="card"><h3>What GOAP does</h3><div id="goap"></div></div>
         </div>
       </details>
@@ -368,7 +368,7 @@ function metricLabel(key) {
   const labels = {minutes:'Minutes (est.)', repeatedSteps:'Repeated steps', customerQuestions:'Customer re-asked', evidenceRequests:'Evidence requests',
     hypothesesTested:'Hypotheses tested', missedRequirements:'Missed requirements', teammateInterruptions:'Teammate pings',
     actionsExecuted:'Actions run', replans:'Replans', contextCalls:'Meko calls', contextItemsUsed:'Context items used',
-    recordsRequested:'Records requested', borrowerReasks:'Borrower re-asked', hardInquiries:'Hard inquiries'};
+    recordsRequested:'Records requested', borrowerReexplained:'Borrower re-explained', rulingsRequested:'Rulings asked of credit risk', hardInquiries:'Hard inquiries'};
   return labels[key] || key;
 }
 
@@ -409,7 +409,8 @@ function renderStory() {
   const buttons = learning ? [['series', 'Run ' + SERIES_CASES + ' cases each way', true]] : [];
   // One run compares the lanes side by side; a follow-up, where the story has one, looks at that case afterwards.
   const step = n => selected.followUp ? n + ' · ' : '';
-  buttons.push(['compare', step(1) + (learning ? 'Run one case' : 'Run the case'), !learning,
+  // A single learning case would not be the story (case 1 is another team's): the series is its only run.
+  if (!learning) buttons.push(['compare', step(1) + 'Run the case', true,
     showDb ? 'Runs the same agents without Meko, on your own database and with Meko, side by side' : 'Runs the same agents without Meko and with Meko, side by side']);
   if (selected.followUp) buttons.push(['followup', step(2) + selected.followUp.label, false,
     'Later, given only the ' + selected.followUp.subject + ' id, in each lane. Run the case first.']);
@@ -446,7 +447,8 @@ function renderStory() {
   if (el('b-mismatch')) el('b-mismatch').onclick = () => streamRun('mismatch', 'Running a case that only looks like the learned pattern…');
   if (el('b-start')) el('b-start').onclick = () => act('Investigator working…', () => post('/api/stories/agent-died-2am/start', {meko: true}), r => {
     lastIncident = r.caseId; renderStory(); renderSingle(r); noteCastRun('with', r, false);
-    el('status').textContent = 'Investigator died on ' + r.caseId + '. Restart the server now if you like, then press Take over.';
+    // Only live Meko keeps the checkpoint outside this process: the in-memory stand-in is lost on a restart.
+    el('status').textContent = 'Investigator died on ' + r.caseId + '. ' + (mekoLive ? 'Restart the server now if you like, then press Take over.' : 'Press Take over (with the in-memory stand-in, a restart would lose the checkpoint).');
   });
   if (el('b-takeover')) el('b-takeover').onclick = () => act('Takeover agent restoring ' + lastIncident + '…',
     () => post('/api/stories/agent-died-2am/takeover', {caseId: lastIncident, meko: true}), r => { renderSingle(r); noteCastRun('with', r, true); });
@@ -483,14 +485,15 @@ async function act(message, call, render) {
   }
 }
 
-/** Where a result's time went, measured: Meko calls and model calls, summed over every run in it. */
+/** Where a result's time went, measured: time waited on Meko and on model calls, summed over every run in it. */
 function timing(result) {
   const runs = [];
   const walk = v => { if (!v) return; if (v.metrics) runs.push(v); else if (Array.isArray(v)) v.forEach(walk); else if (typeof v === 'object') Object.values(v).forEach(walk); };
   walk(result);
   if (!runs.length) return '';
   const sec = k => (runs.reduce((t, r) => t + (r.metrics[k] || 0), 0) / 1000).toFixed(1);
-  return ' (Meko calls ' + sec('contextMillis') + 's, model calls ' + sec('modelMillis') + 's)';
+  const bg = sec('contextBackgroundMillis');
+  return ' (waited on Meko ' + sec('contextMillis') + 's' + (Number(bg) ? ', plus ' + bg + 's of writes in the background' : '') + '; model calls ' + sec('modelMillis') + 's)';
 }
 
 /** Take over needs a dead incident; a follow-up needs the case to have run. */
@@ -775,7 +778,7 @@ function costHtml(run) {
       return (x.writerModel ? 'writer ' + money(x.writerUsd) + ' (' + esc(x.writerModel) + ') + ' : '') + x.gateCalls + ' LLM gate decision' + (x.gateCalls === 1 ? '' : 's') + ' ' + money(x.gatesUsd);
     })() + ' · list price, free plans bill $0</div></div>' +
     '<div class="tieropt"><div>Effort</div><div class="c">' + money(m.effortUsd) + '</div><div class="empty">' + esc(m.handsOnMinutes) + ' hands-on min at $' + esc(m.hourlyRateUsd) + '/h' + (m.waitingMinutes ? ' · ' + esc(m.waitingMinutes) + ' min waiting, not priced' : '') + ' (estimates)</div></div>' +
-    '<div class="tieropt"><div>Meko</div><div class="c">' + esc(m.contextCalls) + ' calls</div><div class="empty">' + esc(m.contextMillis) + ' ms' + (m.contextFailures ? ' · ' + esc(m.contextFailures) + ' failed' : '') + '</div></div>' +
+    '<div class="tieropt"><div>Meko</div><div class="c">' + esc(m.contextCalls) + ' calls</div><div class="empty">' + esc(m.contextMillis) + ' ms waited' + (m.contextBackgroundMillis ? ' · ' + esc(m.contextBackgroundMillis) + ' ms in the background' : '') + (m.contextFailures ? ' · ' + esc(m.contextFailures) + ' failed' : '') + '</div></div>' +
     '</div></div>';
 }
 
@@ -797,19 +800,24 @@ function summaryHtml(a, b, d) {
   };
   const tiles = headlineOf(a).map(h => tile(h[1], val(a, h[0]), val(b, h[0]), val(d, h[0]), h[2], x => x));
   // Where the saving is the customer's (or another team's) waiting rather than your team's work, say so.
+  // Labour is shown only where hands-on time differs; where it does not, the saving is waiting, and the waiting tile says so.
+  const sameHandsOn = [b, d].filter(Boolean).every(r => val(r, 'handsOnMinutes') === val(a, 'handsOnMinutes'));
   if (val(a, 'waitingMinutes') || val(b, 'waitingMinutes')) {
     tiles.push(tile('Waiting minutes (est.)', val(a, 'waitingMinutes'), val(b, 'waitingMinutes'), val(d, 'waitingMinutes'), 'lower', x => x,
-      'customer replies and queues · not priced'));
+      'replies and queues · not priced' + (sameHandsOn ? ' · hands-on ' + esc(val(a, 'handsOnMinutes')) + ' min either way' : '')));
   }
   const cents = v => '$' + Number(v || 0).toFixed(2);
-  tiles.push(tile('Hands-on labour (est.)', val(a, 'effortUsd'), val(b, 'effortUsd'), val(d, 'effortUsd'), 'lower', cents,
-    val(a, 'handsOnMinutes') + ' → ' + val(b, 'handsOnMinutes') + ' hands-on min at $' + esc(b.metrics.hourlyRateUsd) + '/h').replace('<div class="sv">', '<div class="sv small">'));
+  if (!sameHandsOn) {
+    tiles.push(tile('Hands-on labour (est.)', val(a, 'effortUsd'), val(b, 'effortUsd'), val(d, 'effortUsd'), 'lower', cents,
+      val(a, 'handsOnMinutes') + ' → ' + val(b, 'handsOnMinutes') + ' hands-on min at $' + esc(b.metrics.hourlyRateUsd) + '/h').replace('<div class="sv">', '<div class="sv small">'));
+  }
   const models = r => r ? (r.metrics.modelUsd || 0) : 0;
   const sa = modelSplit(a), sb = modelSplit(b);
   // A difference under a cent per case is not a win or a loss next to hours saved: shown neutral, with what made it.
   const llmDiff = models(b) - models(a);
   const gatesBy = r => (r.decisions || []).filter(x => x.byModel).map(x => x.gate);
-  const extraGates = gatesBy(b).filter(g => !gatesBy(a).includes(g));
+  const extraCounts = gatesBy(b).filter(g => !gatesBy(a).includes(g)).reduce((m, g) => m.set(g, (m.get(g) || 0) + 1), new Map());
+  const extraGates = [...extraCounts].map(([g, n]) => n > 1 ? g + ' ×' + n : g);
   const llmNote = 'writer ' + money(sa.writerUsd) + ' → ' + money(sb.writerUsd) + ' · LLM gate decisions ' + money(sa.gatesUsd) + ' (' + sa.gateCalls + ') → ' + money(sb.gatesUsd) + ' (' + sb.gateCalls + ')'
     + (extraGates.length ? ' · with Meko the agent also decided ' + extraGates.join(', ') + ' itself' : '');
   tiles.push(tile('LLM spend per case', models(a), models(b), models(d), Math.abs(llmDiff) < 0.01 ? null : 'lower', money, llmNote)
@@ -833,7 +841,7 @@ try { projVolume = Number(localStorage.getItem('projVolume')) || 2000; } catch (
 /** What one unit of each counted metric is called in a projection ("6,000 customer re-asks avoided"). */
 const PROJ_NOUNS = {customerQuestions: 'customer re-asks', repeatedSteps: 'repeated steps', evidenceRequests: 'evidence requests',
   missedRequirements: 'missed requirements', hypothesesTested: 'hypothesis tests', recordsRequested: 'records requests',
-  borrowerReasks: 'borrower re-asks', hardInquiries: 'hard inquiries'};
+  borrowerReexplained: 'borrower re-explanations', rulingsRequested: 'credit-risk rulings requested'};
 
 /**
  * Per-case difference (without → with Meko) × cases per month. Only differences are shown: a story whose saving is

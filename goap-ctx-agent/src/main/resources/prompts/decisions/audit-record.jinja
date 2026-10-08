@@ -1,3 +1,3 @@
 {% extends "decision.jinja" %}
-{% block question %}An auditor is reviewing the payment dispute for transaction {{ transaction }}. Does the record below contain (a) the customer's own account of the problem, from the frontline conversation or its handoff, and (b) how the case was resolved, including the settlement check and the policy applied?{% endblock %}
+{% block question %}An auditor is reviewing the payment dispute for transaction {{ transaction }}. Does the record below contain (a) the customer's own account of the problem, from the frontline conversation or its handoff, and (b) the payments specialist's resolution of the case?{% endblock %}
 {% block shape %}{"customerAccount": true or false, "resolution": true or false}{% endblock %}

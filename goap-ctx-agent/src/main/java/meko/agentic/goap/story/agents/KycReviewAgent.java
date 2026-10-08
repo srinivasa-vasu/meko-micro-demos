@@ -67,8 +67,15 @@ public class KycReviewAgent {
     public static final String NONE = "none";
     /** How a full re-review request is marked in the record. */
     public static final String FULL_REVIEW = " (full re-review: no prior review to compare against)";
-    /** Monthly volume moving further than this outside the previous band is material (KYC-STD-04). */
-    static final double VOLUME_THRESHOLD_PERCENT = 25;
+    /** "monthly volume more than 25% outside the previous band is material", as the standard's text states it. */
+    private static final java.util.regex.Pattern VOLUME_THRESHOLD = java.util.regex.Pattern.compile(
+            "monthly volume more than (\\d+)% outside the previous band is material", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** The volume threshold the standard in reach states; empty when no standard is in reach or it states none. */
+    static Optional<Double> volumeThreshold(List<StoreRecord> standard) {
+        return standard.stream().map(r -> VOLUME_THRESHOLD.matcher(r.text().replaceAll("\\s+", " "))).filter(java.util.regex.Matcher::find)
+                .map(m -> Double.parseDouble(m.group(1))).findFirst();
+    }
 
     private final StorySupport support;
     private final DecisionService decisions;
@@ -110,12 +117,17 @@ public class KycReviewAgent {
                 rows.add(r);
             }
         }
-        PriorReviewAnswer answer = decisions.decide(profile.caseId(),
+        // Settled by rule when nothing was recalled, or when the reviews parse (the latest of exactly this customer); the
+        // model reads them only when memory came back in a form the rule cannot parse.
+        boolean parses = rows.stream().anyMatch(r -> KycReviewMemory.parse(r.text()).isPresent());
+        PriorReviewAnswer answer = decisions.decideUnlessClear(profile.caseId(),
                 PERSONA,
                 "decisions/kyc-prior-review",
                 Map.of("customer", CUSTOMER),
                 StorySupport.asContext("Memories", rows),
                 PriorReviewAnswer.class,
+                () -> rows.isEmpty() || parses ? Optional.of(priorReviewByRule(rows)) : Optional.empty(),
+                rows.isEmpty() ? "no review recalled" : "the latest parsed review of exactly this customer",
                 () -> priorReviewByRule(rows),
                 ai);
         support.traceDecisions(support.store(profile.store()), profile.caseId(), AGENT_ID, profile.caseId(), PERSONA);
@@ -128,19 +140,25 @@ public class KycReviewAgent {
                         .filter(m -> m.customer().equals(CUSTOMER) && m.date().equals(answer.date())).isPresent())
                 .findFirst().orElse(null);
         if (row != null) support.found(ledger, "memory", List.of(row));
+        // What the comparison uses comes from the review as stored, not from a copy of it.
+        Optional<KycReviewMemory> stored = row == null ? Optional.empty() : KycReviewMemory.parse(row.text());
         // The right context is one review: the latest of exactly this customer. Say why each other review was not it,
         // by reference only: nothing from another review, least of all another customer's, is copied into this record.
         rows.stream().filter(r -> r != row).forEach(r -> KycReviewMemory.parse(r.text()).ifPresent(other -> {
             String reason = !other.customer().equals(CUSTOMER)
                     ? "a different customer, though the reviews look alike"
-                    : "outdated: the " + other.date() + " review of the same customer, superseded by the " + answer.date() + " one";
+                    : answer.date() != null && other.date().compareTo(answer.date()) < 0
+                    ? "outdated: the " + other.date() + " review of the same customer, superseded by the " + answer.date() + " one"
+                    : "the " + other.date() + " review of the same customer, not the one compared against";
             support.passedOver(ledger, "memory", r, reason);
             note(profile.store(), profile.caseId(), PASSED_OVER, reference(r) + " — " + reason);
         }));
         PriorReview prior = new PriorReview(profile.caseId(), true, answer.date() == null ? "unknown date" : answer.date(),
                 row == null ? "unknown" : row.writtenBy(), row == null ? null : row.id(),
-                answer.riskClass() == null || answer.riskClass().isBlank() ? null : answer.riskClass().toUpperCase(),
-                answer.address(), answer.ownership(), answer.beneficiaries() == null ? List.of() : answer.beneficiaries(), answer.volumeBand());
+                stored.map(KycReviewMemory::riskClass).orElse(answer.riskClass() == null || answer.riskClass().isBlank() ? null : answer.riskClass().toUpperCase()),
+                stored.map(KycReviewMemory::address).orElse(answer.address()), stored.map(KycReviewMemory::ownership).orElse(answer.ownership()),
+                stored.map(KycReviewMemory::beneficiaries).orElse(answer.beneficiaries() == null ? List.of() : answer.beneficiaries()),
+                stored.map(KycReviewMemory::volumeBand).orElse(answer.volumeBand()));
         note(profile.store(), profile.caseId(), PRIOR_USED, "the " + prior.date() + " review of " + CUSTOMER + ", written by " + prior.writtenBy()
                 + (prior.memoryId() == null ? "" : " (memory " + prior.memoryId() + ")"));
         ledger.step(PERSONA, "retrievePriorReview",
@@ -198,16 +216,25 @@ public class KycReviewAgent {
                 + ", " + diff.removedBeneficiaries() + " removed\n"
                 + "- monthly volume " + (prior.volumeBand() == null ? "not on record before" : String.format("%.0f%% outside the previous band %s USD", diff.volumeOutsidePercent(), prior.volumeBand())) + "\n"
                 + StorySupport.asContext("Review standards", standard);
-        Materiality materiality = decisions.decide(profile.caseId(),
+        Optional<Double> threshold = volumeThreshold(standard);
+        Materiality byRule = materialityByRule(diff, prior, threshold);
+        // Settled by rule when address and ownership are unchanged and volume stayed in its band: the standard states
+        // outright that a new beneficiary is material and unchanged details are not. The model weighs anything else.
+        Materiality materiality = decisions.decideUnlessClear(profile.caseId(),
                 PERSONA,
                 "decisions/kyc-materiality",
                 Map.of(),
                 context,
                 Materiality.class,
-                () -> materialityByRule(diff, prior),
+                () -> !diff.addressChanged() && !diff.ownershipChanged() && diff.volumeOutsidePercent() == 0 ? Optional.of(byRule) : Optional.empty(),
+                "address and ownership unchanged, volume within its band; new beneficiaries are material by the standard",
+                () -> byRule,
+                // Every new beneficiary is material, and nothing unchanged is.
+                m -> m.material() != null && diff.newBeneficiaries().stream().allMatch(b -> m.material().stream().anyMatch(x -> x.contains(b)))
+                        && m.material().stream().noneMatch(x -> x.toLowerCase().contains("unchanged")),
                 ai);
-        List<String> material = materiality.material() == null ? List.of() : materiality.material();
-        List<String> immaterial = materiality.notMaterial() == null ? List.of() : materiality.notMaterial();
+        List<String> material = materiality.material() == null ? List.of() : materiality.material().stream().map(x -> x.replace(';', ',')).toList();
+        List<String> immaterial = materiality.notMaterial() == null ? List.of() : materiality.notMaterial().stream().map(x -> x.replace(';', ',')).toList();
         support.traceDecisions(support.store(profile.store()), profile.caseId(), AGENT_ID, profile.caseId(), PERSONA);
         // Which standard the judgement was made against, as named in the standards the analyst actually read.
         List<String> standardIds = standard.stream().map(r -> StorySupport.extract(List.of(r), StorySupport.POLICY_ID)).flatMap(Optional::stream).distinct().toList();
@@ -233,15 +260,19 @@ public class KycReviewAgent {
                 prior.volumeBand() == null ? 0 : ProfileFingerprints.percentOutside(prior.volumeBand(), profile.monthlyVolume()));
     }
 
-    private static Materiality materialityByRule(Diff diff, PriorReview prior) {
+    private static Materiality materialityByRule(Diff diff, PriorReview prior, Optional<Double> threshold) {
         List<String> material = new ArrayList<>();
         List<String> immaterial = new ArrayList<>();
         (diff.addressChanged() ? material : immaterial).add("address " + (diff.addressChanged() ? "changed" : "unchanged"));
         (diff.ownershipChanged() ? material : immaterial).add("ownership " + (diff.ownershipChanged() ? "changed" : "unchanged"));
         diff.newBeneficiaries().forEach(b -> material.add("new beneficiary " + b));
         if (prior.volumeBand() != null) {
-            (diff.volumeOutsidePercent() >= VOLUME_THRESHOLD_PERCENT ? material : immaterial).add(String.format(
-                    "monthly volume %.0f%% outside the previous band (threshold %.0f%%)", diff.volumeOutsidePercent(), VOLUME_THRESHOLD_PERCENT));
+            if (threshold.isPresent()) {
+                (diff.volumeOutsidePercent() > threshold.get() ? material : immaterial).add(String.format(
+                        "monthly volume %.0f%% outside the previous band (threshold %.0f%%)", diff.volumeOutsidePercent(), threshold.get()));
+            } else {
+                immaterial.add(String.format("monthly volume %.0f%% outside the previous band (no written threshold in reach to judge it)", diff.volumeOutsidePercent()));
+            }
         }
         return new Materiality(material, immaterial);
     }

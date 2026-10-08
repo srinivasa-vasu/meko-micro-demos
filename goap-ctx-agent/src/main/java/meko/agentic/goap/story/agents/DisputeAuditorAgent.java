@@ -80,11 +80,13 @@ public class DisputeAuditorAgent {
             cost = 0.02, canRerun = false)
     public AuditRecord retrieveRecord(AuditRequest request, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(request.caseId());
-        List<Turn> turns = support.store(request.store()).transcript(request.caseId(), AGENT_ID, request.transaction());
+        // Meko queues turns server-side: a case that has just finished may still be landing, so read until its resolution is there.
+        List<Turn> turns = support.readBack(support.store(request.store()), request.caseId(), AGENT_ID, request.transaction(), DisputeAuditorAgent::hasResolution);
         turns.forEach(t -> ledger.found("transaction conversation", StorySupport.describe(t), t.writtenBy()));
-        RecordReading reading = decisions.decide(request.caseId(), PERSONA, "decisions/audit-record",
+        // Conversation turns come back verbatim with their tags: what is on record is an exact check, not a judgement.
+        RecordReading reading = decisions.decideByRule(request.caseId(), PERSONA, "decisions/audit-record",
                 Map.of("transaction", request.transaction()), StorySupport.asContext("Record for " + request.transaction(), turns, true),
-                RecordReading.class, () -> new RecordReading(hasAccount(turns), hasResolution(turns)), ai);
+                () -> new RecordReading(hasAccount(turns), hasResolution(turns)), "the vendor's handoff and the specialist's resolution, by their tags");
         // The audit's own decisions go on the same record, so the audit can itself be audited.
         support.traceDecisions(support.store(request.store()), request.caseId(), AGENT_ID, request.transaction(), PERSONA);
         AuditRecord record = new AuditRecord(request.caseId(), request.store(), request.transaction(), turns,
@@ -165,9 +167,20 @@ public class DisputeAuditorAgent {
     public AuditChecked checkAgainstPolicy(AuditRecord record, PolicyText policy, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(record.caseId());
         String context = StorySupport.asContext("Record for " + record.transaction(), record.turns(), true) + StorySupport.asContext("Policy", policy.text());
-        Compliance compliance = decisions.decide(record.caseId(), PERSONA, "decisions/audit-compliance",
+        Compliance byRule = complianceByRule(record.turns(), policy);
+        // Settled by rule when there is no policy text to check against, or when the record holds the settlement check,
+        // the policy applied and the resolution: every field is then computed from the record. The model weighs the rest.
+        boolean complete = indexOf(record.turns(), PaymentsSpecialistAgent.SETTLEMENT) >= 0 && indexOf(record.turns(), PaymentsSpecialistAgent.RESOLUTION) >= 0
+                && policyOnRecord(record.turns()).isPresent();
+        Compliance compliance = decisions.decideUnlessClear(record.caseId(), PERSONA, "decisions/audit-compliance",
                 Map.of("transaction", record.transaction()), context, Compliance.class,
-                () -> complianceByRule(record.turns(), policy), ai);
+                () -> policy.text().isEmpty() || complete ? Optional.of(byRule) : Optional.empty(),
+                policy.text().isEmpty() ? "no policy text to check against" : "the record holds the settlement check, the policy applied and the resolution",
+                () -> byRule,
+                // Counts and orderings the record settles must agree with it.
+                c -> java.util.Objects.equals(c.customerReasked(), byRule.customerReasked())
+                        && (byRule.settlementVerifiedBeforeRefund() == null || byRule.settlementVerifiedBeforeRefund().equals(c.settlementVerifiedBeforeRefund())),
+                ai);
         support.traceDecisions(support.store(record.store()), record.caseId(), AGENT_ID, record.transaction(), PERSONA);
         // How many of the other agents' decisions the record shows how they were made, not just their outcome.
         ledger.count("decisionTraces", (int) record.turns().stream()
@@ -208,6 +221,7 @@ public class DisputeAuditorAgent {
                 "audit finding for the compliance file",
                 support.render("writer/audit-finding", Map.of()),
                 facts, List.copyOf(gaps), verdict + "."));
+        support.fileFinding(support.store(record.store()), record.caseId(), AGENT_ID, record.transaction(), "Compliance audit of", verdict(c), findings(c));
         return new AuditFinding(record.caseId(), verdict);
     }
 
@@ -273,7 +287,13 @@ public class DisputeAuditorAgent {
         findings.add(traces.isEmpty() ? "No decision traces from the payments specialist are on record."
                 : traces.size() + " decision trace" + (traces.size() == 1 ? "" : "s") + " from the payments specialist are on record.");
         findings.addAll(StorySupport.traceFindings(traces));
-        Boolean compliant = policy.text().isEmpty() || settlementFirst == null ? null : settlementFirst && noSettledCapture;
+        // The policy applied must be one whose scope covers what the settlement check found (never the chargeback look-alike).
+        String policyText = String.join("\n\n", policy.text().stream().map(StoreRecord::text).toList());
+        boolean policyCovers = settlement >= 0 && PaymentsSpecialistAgent.covers(policyText,
+                new PaymentsSpecialistAgent.SettlementCheck("", turns.get(settlement).output().contains("authorization accepted"),
+                        !turns.get(settlement).output().contains("capture timed out"), !noSettledCapture));
+        if (!policy.text().isEmpty() && settlement >= 0 && !policyCovers) findings.add("The policy applied does not cover what the settlement check found.");
+        Boolean compliant = policy.text().isEmpty() || settlementFirst == null ? null : settlementFirst && noSettledCapture && policyCovers;
         return new Compliance(applied, settlementFirst, reasked, compliant, findings);
     }
 

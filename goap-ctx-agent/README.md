@@ -14,7 +14,7 @@ Each story states its boundary on screen:
 | Story | Boundary | Without | Your own database | With Meko |
 |---|---|---|---|---|
 | **Don't Make Me Explain It Again** | A vendor's chatbot (its own store) escalates to your payments specialist; only the CRM ticket crosses | 3 customer re-asks · 56 min | 3 · 56 min | 0 · 19 min |
-| **I Already Sent You My Pay Stubs** | A vendor's loan-origination system (its own store) runs the checks and refers the application to your underwriter; only the referral crosses | 3 borrower re-asks · 2 hard inquiries · 184 min | 3 · 2 hard inquiries · 184 min | 0 · 1 hard inquiry · 39 min |
+| **I Already Explained This** | A vendor's loan-origination system (its own store) refers two applications, each with its file, to your underwriter; the borrowers' explanations do not cross, and a credit-risk ruling on the first is promoted to shared knowledge | 3 things re-explained · 2 rulings requested · 359 min | 3 · 1 ruling · 327 min | 0 · 1 ruling · 132 min |
 | **What Changed Since Last Review?** | Last quarter's review was written by the analyst desk's agent | 5 evidence requests · 166 min | 5 · 166 min | 1 · 41 min |
 | **The Organization Learned** | Case 1 is solved by the EU payments-ops team's agent, cases 2-3 by your support app | 3 cases: 264 min | 199 min | 131 min |
 | **The Agent Died at 2 AM** | The payments team's on-call agent dies; your platform SRE agent takes over with only the incident id | 2 repeated steps · 80 min | 2 · 80 min | 0 · 50 min |
@@ -27,16 +27,18 @@ chose. Minutes are estimates; see [How effort is estimated](#how-effort-is-estim
 
 Three stories have a follow-up in which someone accountable, given only an id, reads the case's record back:
 
-* **Audit this transaction** (story 1). A compliance auditor reviews how the dispute was handled. Every party writes to
+* **Audit this transaction** (*Don't Make Me Explain It Again*). A compliance auditor reviews how the dispute was handled. Every party writes to
   the transaction's conversation, keyed by the transaction id, so with Meko one `conversation_get` returns the
   customer's account, the handoff, every re-ask, the settlement check, each decision and the resolution.
-* **Check this review** (story 3). A model-risk reviewer checks the agent's KYC review against the KYC re-review
+* **Check this review** (*What Changed Since Last Review?*). A model-risk reviewer checks the agent's KYC review against the KYC re-review
   standard: which previous review it compared against and what it passed over, the materiality decision, each evidence
   request and the sign-off.
-* **Review this credit call** (the loan story). A fair-lending reviewer checks the underwriter's credit call against
-  the underwriting policy: which checks were verified before the call and by whom, whether the call follows the
-  thresholds in the policy text for the figures on record, how many hard inquiries the borrower's credit file took,
-  and what the borrower had to do again.
+* **Review this credit call** (*I Already Explained This*). A fair-lending reviewer checks both applications' credit calls against
+  the underwriting policy: which checks were verified before the call and by whom, whether each condition the policy
+  sets on the file (a large deposit sourced, an employment gap explained) was cleared on documented evidence and why
+  that evidence was accepted (listed in the policy, or a credit-risk ruling), whether
+  the call follows the thresholds in the policy text for the figures on record, and what the borrower had to explain
+  again.
 
 Without the record, each piece has to be requested from the party that holds it, and waited for, and what comes back
 is the outcome only: a party's own system keeps what was done, not how an agent's decision was made. Decision traces
@@ -45,7 +47,7 @@ exist only where an agent wrote them: in Meko, or in your own database for your 
 | Follow-up | Without | Your own database | With Meko |
 |---|---|---|---|
 | **Audit this transaction** | 3 records requested · 0 decision traces · 192 min | 2 · 1 decision trace · 162 min | 0 · 2 decision traces · 17 min |
-| **Review this credit call** | 3 records requested · 0 decision traces · 194 min | 2 · 2 decision traces · 164 min | 0 · 3 decision traces · 19 min |
+| **Review this credit call** (both applications) | 6 records requested · 0 decision traces · 388 min | 4 · 6 decision traces · 328 min | 0 · 8 decision traces · 38 min |
 | **Check this review** | 2 records requested · 0 decision traces · 102 min | 1 · 1 decision trace · 42 min | 0 · 2 decision traces · 22 min |
 
 ## What you see in the app
@@ -63,9 +65,12 @@ Open `http://localhost:8080` and pick a story from the bar at the top.
 * **Run the case** runs the same agents without Meko and with Meko, live and side by side (and in your own database
   too, with the build-it-yourself comparison switched on). The button that started the run stays highlighted while it
   runs and afterwards, so it is clear which action produced the results on screen.
-* **The follow-up** (*Audit this transaction*, *Check this review*) becomes available once the case has run.
-* **Resets** start a story over where a run changes what the next run sees: *Reset learning* (story 5), *Start a new
-  review cycle* (story 3), *Reopen the review request* (story 4). Each says what it did.
+* **The follow-up** (*Audit this transaction*, *Check this review*, *Review this credit call*) becomes available once
+  the case has run.
+* **Resets** start a story over where a run changes what the next run sees: *Reset learning* (*The Organization
+  Learned*), *Start a new review cycle* (*What Changed Since Last Review?*), *Reopen the review request* (*I Was on
+  Vacation. Catch Me Up.*), *Reset precedents* (*I Already Explained This*: a promoted credit-risk ruling stays
+  precedent for later runs until then). Each says what it did.
 * **Story / Full detail.** *Story* (the default) shows the outcome, the steps, the context used and the cost. *Full
   detail* adds the planner's plans and replans, the decisions at each gate, which model wrote the reply and why, and
   every Meko call with its latency.
@@ -117,8 +122,8 @@ The models see the same fingerprints and counts, never the profile, and the revi
 date and id only.
 
 **Your own database.** If all your agents live in one application you own, your own database can do the job: within one
-application it keeps its own handoffs, checkpoints and lessons (in story 5 it reuses the lesson it rediscovered itself
-from case 3). It never sees what another system wrote. The moment agents cross a boundary (a team, a vendor, a
+application it keeps its own handoffs, checkpoints and lessons (in *The Organization Learned* it learns the lesson again
+on case 2, then reuses it on case 3). It never sees what another system wrote. The moment agents cross a boundary (a team, a vendor, a
 framework, a tool) you need a shared context layer: build it, or use Meko. The right context needs **reach** (what
 other teams, vendors and tools wrote), **meaning** (found without shared keys), **provenance** (who wrote it and when)
 and **promotion** (lessons becoming organizational knowledge), for every team. That is the data infrastructure tax Meko
@@ -128,7 +133,7 @@ takes on. Every silo pays once; with Meko the organization pays once.
 rationale, a catch-up brief, a resolution note, an audit finding). Which model writes it is a planning decision: rich
 context has no gaps and the planner picks the small model; gaps make a larger model the cheapest safe choice.
 
-**Trust.** *A case the pattern doesn't fit* (story 5): Meko retrieves the learned pattern, the agent checks it against
+**Trust.** *A case the pattern doesn't fit* (*The Organization Learned*): Meko retrieves the learned pattern, the agent checks it against
 the case's signals and rejects it, and the planner investigates instead of misdiagnosing. *Simulate Meko outage*: every
 context-store call fails, "with Meko" runs degrade to the path an agent without memory takes, and every failed call is
 visible.
@@ -171,15 +176,14 @@ waiting minutes are reported but not priced as labour.
 | Story | Without Meko | With Meko | Kind of saving |
 |---|---|---|---|
 | Don't Make Me Explain It Again | 56 (13 hands-on, 43 waiting) | 19 (13 hands-on, 6 waiting) | Customer waiting and time to resolution; your specialist's effort is the same |
-| I Already Sent You My Pay Stubs | 184 (19 hands-on, 165 waiting) | 39 (19 hands-on, 20 waiting) | Borrower waiting and time to the credit call: no documents re-sent, no second credit pull, no second employment check, no policy escalation |
-| What Changed Since Last Review? | 166 | 41 | Hands-on: five full re-verifications replaced by a diff and one targeted request |
+| I Already Explained This (2 applications) | 359 (64 hands-on, 295 waiting) | 132 (62 hands-on, 70 waiting) | Borrower waiting and time to the credit calls: no conditions sent back for what the borrowers already explained, no policy escalation, and no second ruling once the first is precedent |
+| What Changed Since Last Review? | 166 | 41 | Hands-on: full re-verifications replaced by a diff and targeted requests |
 | The Organization Learned (3 cases) | 264 | 131 | Hands-on: hypotheses not re-tested on cases 2 and 3 |
-| The Agent Died at 2 AM | 80 | 50 | Hands-on: two investigation steps not redone |
-| I Was on Vacation. Catch Me Up. | 158 | 53 | Hands-on: 90 min of digging and a 40-min bounced review |
+| The Agent Died at 2 AM | 80 | 50 | Hands-on: finished investigation steps not redone |
+| I Was on Vacation. Catch Me Up. | 158 | 53 | Hands-on: manual digging and a bounced review |
 
-A few large estimates carry most of each gap (the 25-min policy escalation, 90 min of digging, a 40-min bounced review,
-5 × 30-min re-verifications); halve them and every story still favours Meko, because the steps themselves disappear
-from the plan. To use your own numbers, edit the file, or override one at startup, for example
+Most of each gap is a few steps that disappear from the plan with Meko (policy escalations, manual digging, a bounced
+review, full re-verifications); each one's estimate and basis is in the file. To use your own numbers, edit the file, or override one at startup, for example
 `--goap.effort.estimates.payments-specialist.escalate-for-policy.minutes=10`.
 
 ## Run
@@ -216,17 +220,18 @@ The header shows the datapack and how many documents its knowledge base holds.
 #### Knowledge base documents
 
 Meko's shared knowledge has two sources, and the demo uses both: **documents** people upload through the Meko app, and
-**lessons** agents promote from memory (the root cause the EU team's agent promotes in story 5). Knowledge search covers
+**lessons** agents promote from memory (the root cause the EU team's agent promotes in *The Organization Learned*, and the
+credit-risk ruling the underwriter promotes in *I Already Explained This*). Knowledge search covers
 both. The documents are fictional and short:
 
 | Document | Used by |
 |---|---|
-| `CARD-DISPUTE-07` failed-capture dispute policy | Your payments specialist chooses it (story 1) |
-| `CARD-DISPUTE-03` chargeback policy | The look-alike it must pass over (story 1) |
-| `SUPPORT-STD-02` payments support handoff standard | Organizational context for story 1 |
-| `RB-PAY-12` payment API latency runbook | Organizational context for story 2 |
-| `KYC-STD-04` periodic re-review standard | Your KYC agent's materiality decision, and the review check (story 3) |
-| `ADR-194` payment retry idempotency | Your catch-up agent's brief (story 4) |
+| `CARD-DISPUTE-07` failed-capture dispute policy | Your payments specialist chooses it (*Don't Make Me Explain It Again*) |
+| `CARD-DISPUTE-03` chargeback policy | The look-alike it must pass over (*Don't Make Me Explain It Again*) |
+| `SUPPORT-STD-02` payments support handoff standard | Organizational context for *Don't Make Me Explain It Again* |
+| `RB-PAY-12` payment API latency runbook | Organizational context for *The Agent Died at 2 AM* |
+| `KYC-STD-04` periodic re-review standard | Your KYC agent's materiality decision, and the review check (*What Changed Since Last Review?*) |
+| `ADR-194` payment retry idempotency | Your catch-up agent's brief (*I Was on Vacation. Catch Me Up.*) |
 | `LEND-UW-05` salaried personal-loan underwriting policy | Your underwriter chooses it and applies its thresholds, and the fair-lending review checks against it (loan story) |
 | `LEND-UW-09` self-employed personal-loan underwriting policy | The look-alike it must pass over (loan story) |
 
@@ -241,11 +246,16 @@ would take.
 Without Meko configured, "With Meko" runs use an in-memory stand-in with the same behaviour (cross-agent memory,
 case-scoped recall, promotion into shared knowledge, conversations, artifacts), keyword search instead of semantic
 search, and nothing kept across restarts. The app labels these runs as a stand-in. The "your own database" lane uses
-the same kind of store with nothing seeded: it holds only what this application's agents wrote.
+the same kind of store with nothing seeded: it holds only what this application's agents wrote. The documents other
+teams own (the dispute and lending policies, the KYC standard) are in shared knowledge, not copied into each
+application's database, so that lane asks the owning team for them.
 
 ### Model tiers
 
-The response writer has three tiers, and the small tier also makes the gate decisions. The provider is a Spring
+The response writer has three tiers, and the small tier also makes the gate decisions that need judgement. A decision
+the context settles exactly (a tagged record is there or not, a policy's scope covers the case, a threshold is met) is
+decided by rule, with no model call, and traced the same way; a model's answer that contradicts the context falls back
+to the rule. The provider is a Spring
 profile:
 
 | Profile | Key | Start with |

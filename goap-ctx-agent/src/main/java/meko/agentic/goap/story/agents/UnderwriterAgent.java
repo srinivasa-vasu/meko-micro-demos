@@ -8,6 +8,7 @@ import com.embabel.agent.api.annotation.Provided;
 import com.embabel.agent.api.common.Ai;
 import com.embabel.agent.api.common.PlannerType;
 import meko.agentic.goap.story.KnowledgeDocuments;
+import meko.agentic.goap.story.LendingConditions;
 import meko.agentic.goap.story.LendingThresholds;
 import meko.agentic.goap.story.LoanApplications;
 import meko.agentic.goap.story.StoryLedger;
@@ -21,13 +22,14 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Loan story, phase 2: your credit underwriter, a separate agent process that receives only the referral (the
- * application id and the loan terms).
+ * Loan story, phase 2: your credit underwriter, a separate agent process that receives the referral with the whole
+ * application file. The figures are all there; what the file does not say is what the borrower already explained.
  * <p>
- * {@code openApplicationFile} posts every "known"/"unknown" condition, so the first plan optimistically assumes the
- * checks' results will be there. After it runs, the planner replans against what was actually recovered: each result
- * still unknown makes asking the borrower again, or redoing a check, necessary. The credit call is a gate decision over
- * the figures in the file and the thresholds in the policy text the underwriter has; nothing about the outcome is fixed.
+ * The policy sets conditions: a large deposit must be sourced, an employment gap explained. {@code reviewFlags} posts both
+ * "cleared" and "conditions needed", so the first plan optimistically assumes the explanations will be in reach. After it
+ * runs, the planner replans against what was actually found: each flag still unexplained becomes a condition sent back
+ * to the borrower, who explains again. The credit call is then a gate decision over the file's figures and the
+ * thresholds in the policy text; nothing about the outcome is fixed.
  */
 @Agent(planner = PlannerType.GOAP, description = "Credit underwriter that makes the credit call on a referred personal-loan application")
 public class UnderwriterAgent {
@@ -35,39 +37,61 @@ public class UnderwriterAgent {
     static final String PERSONA = "Credit underwriter";
 
     /**
-     * One thing the borrower had to do again after the referral.
+     * Something in the file the policy says must be explained.
      *
-     * @param unknown what the underwriter did not know, which is why it asked
+     * @param id          "deposit" or "employment gap"
+     * @param condition   the condition the policy sets for it, as it would be sent to the borrower
+     * @param explained   the explanation and its evidence, and where it came from, once in hand (null before)
+     * @param kind        the kind of source the explanation gives ("a vehicle sale"), if it names one
+     * @param evidence    the document offered as evidence, once in hand
+     * @param clearedFrom how the condition was cleared (the explanation, and why its evidence is accepted), or null while open
      */
-    public record Exchange(String question, String answer, String unknown) {}
-
-    /**
-     * @param referral what crossed the boundary from the origination system
-     * @param asked    what the borrower had to do again after the referral, in order
-     */
-    /**
-     * @param amountUsd  the loan amount, a term the referral carries
-     * @param employment the borrower's employment type as the employment verification recorded it, e.g. "salaried"
-     */
-    public record ApplicationFile(String caseId, ContextStore.Kind store, String applicationId, String referral, Integer amountUsd,
-                                  Integer instalment, Integer monthlyIncome, Boolean employmentConfirmed, String employment,
-                                  Integer reservesMonths, Integer creditScore, Integer monthlyDebts, List<Exchange> asked) {
-        ApplicationFile withIncome(int income, Exchange e) { return new ApplicationFile(caseId, store, applicationId, referral, amountUsd, instalment, income, employmentConfirmed, employment, reservesMonths, creditScore, monthlyDebts, plus(e)); }
-        ApplicationFile withReserves(int months, Exchange e) { return new ApplicationFile(caseId, store, applicationId, referral, amountUsd, instalment, monthlyIncome, employmentConfirmed, employment, months, creditScore, monthlyDebts, plus(e)); }
-        ApplicationFile withEmployment(String type) { return new ApplicationFile(caseId, store, applicationId, referral, amountUsd, instalment, monthlyIncome, true, type, reservesMonths, creditScore, monthlyDebts, asked); }
-        ApplicationFile withCredit(int score, int debts, Exchange e) { return new ApplicationFile(caseId, store, applicationId, referral, amountUsd, instalment, monthlyIncome, employmentConfirmed, employment, reservesMonths, score, debts, plus(e)); }
-        private List<Exchange> plus(Exchange e) { List<Exchange> all = new ArrayList<>(asked); all.add(e); return List.copyOf(all); }
-
-        /** What the borrower said last: the referral before any re-ask, then their latest answer. */
-        String lastSaid() { return asked.isEmpty() ? referral : asked.getLast().answer(); }
+    public record Flag(String id, String description, String condition, String explained, String kind, String evidence, String clearedFrom) {
+        Flag(String id, String description, String condition) { this(id, description, condition, null, null, null, null); }
+        boolean inHand() { return explained != null; }
+        boolean open() { return clearedFrom == null; }
+        Flag explainedBy(String how, String k, String e) { return new Flag(id, description, condition, how, k, e, null); }
+        Flag cleared(String how) { return new Flag(id, description, condition, explained, kind, evidence, how); }
     }
 
-    /** How a re-ask is marked in the conversation (see {@link ContextStore.Turn#event}). */
+    /**
+     * @param referral   what crossed the boundary from the origination system: the terms and the application file
+     * @param flags      what the policy says needs explaining, once reviewed (null before)
+     * @param conditions the conditions sent back to the borrower, with their answers, in order
+     * @param precedents the set of credit-risk rulings that count as precedent (see {@link #precedentTag})
+     * @param evidenceChecked whether the evidence behind each explanation was checked against the policy and precedent
+     */
+    public record ApplicationFile(String caseId, ContextStore.Kind store, String applicationId, String referral, int amountUsd,
+                                  int instalment, int monthlyIncome, String employment, int reservesMonths, int creditScore,
+                                  int monthlyDebts, int depositUsd, String depositDate, int gapDays, String gapPeriod,
+                                  List<Flag> flags, List<Exchange> conditions, String precedents, boolean evidenceChecked) {
+        ApplicationFile withFlags(List<Flag> f) { return new ApplicationFile(caseId, store, applicationId, referral, amountUsd, instalment, monthlyIncome, employment, reservesMonths, creditScore, monthlyDebts, depositUsd, depositDate, gapDays, gapPeriod, List.copyOf(f), conditions, precedents, evidenceChecked); }
+        ApplicationFile withConditions(List<Flag> f, List<Exchange> c) { return new ApplicationFile(caseId, store, applicationId, referral, amountUsd, instalment, monthlyIncome, employment, reservesMonths, creditScore, monthlyDebts, depositUsd, depositDate, gapDays, gapPeriod, List.copyOf(f), List.copyOf(c), precedents, evidenceChecked); }
+        ApplicationFile withEvidenceChecked(List<Flag> f) { return new ApplicationFile(caseId, store, applicationId, referral, amountUsd, instalment, monthlyIncome, employment, reservesMonths, creditScore, monthlyDebts, depositUsd, depositDate, gapDays, gapPeriod, List.copyOf(f), conditions, precedents, true); }
+
+        /** What the borrower said last: the referral before any condition, then their latest answer. */
+        String lastSaid() { return conditions.isEmpty() ? referral : conditions.getLast().answer(); }
+    }
+
+    /** One condition sent back to the borrower, and their answer. */
+    public record Exchange(String question, String answer, String unknown) {}
+
+    /** How a condition the borrower had to answer again is marked in the conversation (see {@link ContextStore.Turn#event}). */
     public static final String REASKED = "re-asked";
     /** Event names of the underwriter's records in the application's conversation. */
+    public static final String CONDITION_CLEARED = "condition cleared";
     public static final String AFFORDABILITY = "affordability";
     public static final String POLICY = "policy applied";
     public static final String CREDIT_CALL = "credit call";
+    /** How a cleared condition says where its explanation came from. */
+    public static final String FROM_ORIGINATION = "cleared from the borrower's explanation at origination";
+    public static final String FROM_CONDITION = "cleared on the borrower's answer to the condition";
+    /** How a cleared condition says why its evidence is accepted, and how a credit-risk ruling is recorded and found again. */
+    public static final String EVIDENCE_ACCEPTED = "evidence accepted: ";
+    public static final String RULING = "credit-risk ruling";
+    public static final String RULING_MARKER = "Credit-risk ruling under ";
+    public static final String PRECEDENT_FROM = "a credit-risk ruling in shared knowledge, written by ";
+    public static final String RULED_ON_REQUEST = "ruled by credit risk on request";
 
     /** Who answers when the underwriter escalates for a policy, and how a policy it sent on request is recorded. */
     static final String CREDIT_RISK = "credit-risk";
@@ -85,18 +109,23 @@ public class UnderwriterAgent {
     }
 
     /**
-     * @param text   the policy text the underwriter has: retrieved from knowledge, or what credit risk read out
-     * @param reason why this policy governs the application, as the agent judged it (or who confirmed it)
+     * @param text   the policy text the underwriter has: retrieved from knowledge, or what credit risk sent
+     * @param reason why this policy governs the application, as the agent judged it (or who sent it)
      */
     public record PolicyLookup(String caseId, String policy, List<StoreRecord> text, String writtenBy, String reason) {}
 
     public record CreditCall(String caseId, String applicationId, String decision, String reason) {}
 
-    /** The model's reading of which checks' results the underwriter already has. */
-    public record KnownFacts(Integer monthlyIncome, Boolean employmentConfirmed, String employmentType, Integer reservesMonths,
-                             Integer creditScore, Integer monthlyDebts, Integer instalment) {}
-
     public record PolicyChoice(String policy, String reason) {}
+
+    /** The model's reading of which flagged items the borrower already explained, with evidence. */
+    public record FlagReading(List<String> explained, List<String> unexplained) {}
+
+    /** The model's reading of whether a ruling in shared knowledge accepts this evidence. */
+    public record PrecedentFit(Boolean accepts, String reason) {}
+
+    /** The model's judgement on whether a ruling is general enough to share as precedent. */
+    public record ShareJudgement(Boolean share, String reason) {}
 
     /** The model's credit call over the file's figures and the policy text. */
     public record CallJudgement(String decision, String thresholdsApplied, String reason) {}
@@ -111,163 +140,44 @@ public class UnderwriterAgent {
         this.documents = documents;
     }
 
-    @Action(description = "Open the application file from whatever context is available beyond the referral",
-            post = {"fileOpen", "incomeKnown", "incomeUnknown", "assetsKnown", "assetsUnknown", "employmentKnown",
-                    "employmentUnknown", "creditKnown", "creditUnknown"},
-            cost = 0.02, canRerun = false)
-    public ApplicationFile openApplicationFile(Referral referral, @Provided Ai ai) {
+    @Action(description = "Open the application file the origination system sent", post = {"fileOpen"}, cost = 0.02, canRerun = false)
+    public ApplicationFile openApplicationFile(Referral referral) {
         StoryLedger ledger = support.ledger(referral.caseId());
-        ContextStore store = support.store(referral.store());
         ledger.note("Referral", referral.note());
-        List<StoreRecord> facts = store.recallCase(referral.caseId(), AGENT_ID, "loan application intake income pay stubs bank statements employment credit report score");
-        support.found(ledger, "case memory", facts);
-        if (facts.isEmpty() && store.kind() != ContextStore.Kind.NONE) {
-            // Nothing in case memory (a write that failed, or one the store's extraction kept nothing from). The
-            // origination system also recorded each check, verbatim, in the application's conversation, keyed by the
-            // application id the referral carries: read the checks from there.
-            List<ContextStore.Turn> record = support.readBack(store, referral.caseId(), AGENT_ID, referral.applicationId(),
-                    turns -> turns.stream().anyMatch(t -> t.isEvent(LoanIntakeAgent.AGENT_ID, LoanIntakeAgent.REFERRAL)));
-            facts = record.stream().filter(t -> t.event().isPresent() && LoanIntakeAgent.AGENT_ID.equals(t.writtenBy()))
-                    .map(t -> new StoreRecord("", t.output(), t.writtenBy(), "", null)).toList();
-            support.found(ledger, "application conversation", facts);
-        }
-        String context = "Referral: " + referral.note() + "\n" + StorySupport.asContext("Case memory", facts);
-        String all = referral.note() + "\n" + String.join("\n", facts.stream().map(StoreRecord::text).toList());
-        KnownFacts known = decisions.decide(referral.caseId(), PERSONA, "decisions/lending-known-facts", Map.of(), context,
-                KnownFacts.class, () -> new KnownFacts(
-                        amount(all, "Income ([\\d,]+) USD a month"),
-                        StorySupport.mentions(rows(all), "employment confirmed") ? Boolean.TRUE : null,
-                        StorySupport.extract(rows(all), LoanIntakeAgent.EMPLOYMENT_TYPE + "([\\w-]+)").orElse(null),
-                        amount(all, "reserves cover (\\d+) months"),
-                        amount(all, "score (\\d{3})"),
-                        amount(all, "monthly obligations ([\\d,]+) USD"),
-                        amount(all, "instalment ([\\d,]+) USD a month")), ai);
+        // The file crossed with the referral: read its figures as the origination system recorded them.
+        String all = referral.note() + "\n" + String.join("\n", referral.file());
         ApplicationFile file = new ApplicationFile(referral.caseId(), referral.store(), referral.applicationId(), referral.note(),
-                // The amount and the instalment are loan terms the referral itself carries.
-                amount(referral.note(), "([\\d,]+) USD unsecured personal loan"),
-                Optional.ofNullable(positive(known.instalment())).orElse(amount(referral.note(), "instalment ([\\d,]+) USD a month")),
-                positive(known.monthlyIncome()), Boolean.TRUE.equals(known.employmentConfirmed()) ? Boolean.TRUE : null,
-                blankToNull(known.employmentType()), positive(known.reservesMonths()), positive(known.creditScore()), positive(known.monthlyDebts()), List.of());
-        // The judgement goes on the application's record now: the application id is known from the referral.
-        support.traceDecisions(store, referral.caseId(), AGENT_ID, referral.applicationId(), PERSONA);
-        int count = (incomeKnown(file) ? 1 : 0) + (assetsKnown(file) ? 1 : 0) + (employmentKnown(file) ? 1 : 0) + (creditKnown(file) ? 1 : 0);
-        ledger.step(PERSONA, "openApplicationFile", "Opened the application file: " + count + " of 4 checks' results recovered beyond the referral.",
-                support.effort("underwriter", "open-application-file"), StoryLedger.Kind.CONTEXT);
+                amount(all, "([\\d,]+) USD unsecured personal loan"), amount(all, "instalment ([\\d,]+) USD a month"),
+                amount(all, "Income ([\\d,]+) USD a month"),
+                StorySupport.extract(rows(all), LoanIntakeAgent.EMPLOYMENT_TYPE + "([\\w-]+)").orElse("unknown"),
+                amount(all, "reserves cover (\\d+) months"), amount(all, "score (\\d{3})"), amount(all, "monthly obligations ([\\d,]+) USD"),
+                amount(all, LoanIntakeAgent.LARGEST_DEPOSIT + "([\\d,]+) USD"),
+                StorySupport.extract(rows(all), LoanIntakeAgent.LARGEST_DEPOSIT + "[\\d,]+ USD on (\\d{4}-\\d{2}-\\d{2})").orElse(""),
+                amount(all, LoanIntakeAgent.LONGEST_GAP + "(\\d+) days"),
+                StorySupport.extract(rows(all), LoanIntakeAgent.LONGEST_GAP + "\\d+ days \\(([^)]+)\\)").orElse(""),
+                null, List.of(), referral.precedents(), false);
+        ledger.step(PERSONA, "openApplicationFile", "Opened the application file the origination system sent: income, assets, employment and credit, "
+                        + "with no document to ask for again.", support.effort("underwriter", "open-application-file"), StoryLedger.Kind.WORK);
         return file;
     }
 
-    @Action(description = "Ask the borrower to send their pay stubs again", pre = {"incomeUnknown"}, post = {"incomeKnown"}, cost = 0.30, canRerun = false)
-    public ApplicationFile askForPayStubs(ApplicationFile file) {
-        StoryLedger ledger = support.ledger(file.caseId());
-        // The simulated borrower re-sends the same documents they gave the origination system.
-        LoanApplications.Application app = support.loans().forCase(file.caseId());
-        String question = "Could you send your two most recent pay stubs?";
-        String answer = "I uploaded them with the application... sending them again.";
-        ledger.say(PERSONA, question);
-        ledger.say("Borrower", answer);
-        ledger.step(PERSONA, "askForPayStubs", "Asked the borrower to send their pay stubs again.", support.effort("underwriter", "ask-pay-stubs"), StoryLedger.Kind.ASK);
-        ledger.count("borrowerReasks", 1);
-        Exchange exchange = new Exchange(question, answer, "the borrower's income");
-        reask(file, exchange);
-        recordCheck(file, LoanIntakeAgent.INCOME, exchange.unknown(), "Confirm monthly income from the two pay stubs",
-                "Income " + String.format("%,d", app.monthlyIncome()) + " USD a month, confirmed from two pay stubs re-sent by the borrower");
-        return file.withIncome(app.monthlyIncome(), exchange);
-    }
-
-    @Action(description = "Ask the borrower to send their bank statements again", pre = {"assetsUnknown"}, post = {"assetsKnown"}, cost = 0.25, canRerun = false)
-    public ApplicationFile askForBankStatements(ApplicationFile file) {
-        StoryLedger ledger = support.ledger(file.caseId());
-        LoanApplications.Application app = support.loans().forCase(file.caseId());
-        String question = "Could you also send two months of bank statements?";
-        String answer = "Those were uploaded too. Fine, here they are again.";
-        ledger.say(PERSONA, question);
-        ledger.say("Borrower", answer);
-        ledger.step(PERSONA, "askForBankStatements", "Asked the borrower to send their bank statements again.", support.effort("underwriter", "ask-bank-statements"), StoryLedger.Kind.ASK);
-        ledger.count("borrowerReasks", 1);
-        Exchange exchange = new Exchange(question, answer, "the borrower's reserves");
-        reask(file, exchange);
-        recordCheck(file, LoanIntakeAgent.ASSETS, exchange.unknown(), "Confirm assets from two months of bank statements",
-                "Bank statements for two months re-sent by the borrower: reserves cover " + app.reservesMonths() + " months");
-        return file.withReserves(app.reservesMonths(), exchange);
-    }
-
-    @Action(description = "Verify employment with the employer", pre = {"employmentUnknown"}, post = {"employmentKnown"}, cost = 0.30, canRerun = false)
-    public ApplicationFile verifyEmployment(ApplicationFile file) {
-        StoryLedger ledger = support.ledger(file.caseId());
-        // The origination system verified employment in every lane: doing it again is rework, whoever knows it.
-        ledger.say(PERSONA, "Calling the employer's HR team to verify employment.");
-        ledger.say("Employer HR", "We confirmed this for the lender's origination team already. Confirmed again.");
-        ledger.step(PERSONA, "verifyEmployment", "Verified employment with the employer: the origination system's verification was not in the context it had.",
-                support.effort("underwriter", "verify-employment"), StoryLedger.Kind.REWORK);
-        // The simulated employer answers for the borrower's actual employment.
-        LoanApplications.Application app = support.loans().forCase(file.caseId());
-        recordCheck(file, LoanIntakeAgent.EMPLOYMENT, "the employment verification", "Verify employment with the employer (VOE)",
-                "Employment confirmed by the employer's HR team, a second time; " + LoanIntakeAgent.EMPLOYMENT_TYPE + app.employment());
-        return file.withEmployment(app.employment());
-    }
-
-    @Action(description = "Ask the borrower to consent to another credit pull, and pull the report", pre = {"creditUnknown"}, post = {"creditKnown"}, cost = 0.35, canRerun = false)
-    public ApplicationFile pullCreditAgain(ApplicationFile file) {
-        StoryLedger ledger = support.ledger(file.caseId());
-        LoanApplications.Application app = support.loans().forCase(file.caseId());
-        String question = "To finish underwriting I need to pull your credit report. Do you consent? It is a hard inquiry.";
-        String answer = "You already pulled it last week. Another hard inquiry? ...Fine, I consent.";
-        ledger.say(PERSONA, question);
-        ledger.say("Borrower", answer);
-        ledger.step(PERSONA, "pullCreditAgain", "Asked the borrower to consent to a second hard inquiry, and pulled the credit report again.",
-                support.effort("underwriter", "pull-credit-again"), StoryLedger.Kind.ASK);
-        ledger.count("borrowerReasks", 1);
-        ledger.count("repeatedSteps", 1);
-        ledger.count("hardInquiries", 1);
-        Exchange exchange = new Exchange(question, answer, "the credit report");
-        reask(file, exchange);
-        recordCheck(file, LoanIntakeAgent.CREDIT, exchange.unknown(), "Pull the credit report, with the borrower's fresh consent",
-                "Credit report pulled again with the borrower's fresh consent (a second hard inquiry): score " + app.creditScore()
-                        + ", monthly obligations " + String.format("%,d", app.monthlyDebts()) + " USD");
-        return file.withCredit(app.creditScore(), app.monthlyDebts(), exchange);
-    }
-
-    /** A re-ask, written to the application's conversation as it happens: what the borrower said last, then the question. */
-    private void reask(ApplicationFile file, Exchange e) {
-        support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.applicationId(), REASKED,
-                "not in the context the underwriter had: " + e.unknown(), file.lastSaid(), e.question());
-    }
-
-    /** A check the underwriter had to run itself, recorded in the application's conversation with why. */
-    private void recordCheck(ApplicationFile file, String event, String unknown, String input, String output) {
-        support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.applicationId(), event,
-                "not in the context the underwriter had: " + unknown, input, output);
-    }
-
-    @Action(description = "Compute debt-to-income from the file's figures",
-            pre = {"incomeKnown", "assetsKnown", "employmentKnown", "creditKnown"}, post = {"affordabilityAssessed"}, cost = 0.10, canRerun = false)
-    public Affordability assessAffordability(ApplicationFile file) {
-        ContextStore store = support.store(file.store());
-        // The borrower's last answer gets its reply; each re-ask was recorded as it happened.
-        if (!file.asked().isEmpty()) support.record(store, file.caseId(), AGENT_ID, file.applicationId(), file.lastSaid(), "Thank you. I have what I need to make the credit call.");
-        int obligations = file.monthlyDebts() + file.instalment();
-        double dti = obligations * 100.0 / file.monthlyIncome();
-        String working = "DTI " + String.format("%.1f", dti) + "% = (" + String.format("%,d", file.monthlyDebts()) + " obligations + " + String.format("%,d", file.instalment())
-                + " instalment) / " + String.format("%,d", file.monthlyIncome()) + " income; score " + file.creditScore() + "; reserves " + file.reservesMonths() + " months";
-        support.recordEvent(store, file.caseId(), AGENT_ID, file.applicationId(), AFFORDABILITY, null,
-                "Compute debt-to-income for " + file.applicationId(), working);
-        support.ledger(file.caseId()).step(PERSONA, "assessAffordability", working + ".", support.effort("underwriter", "assess-affordability"), StoryLedger.Kind.WORK);
-        return new Affordability(file.caseId(), dti, file.creditScore(), file.reservesMonths(), working);
-    }
-
-    @Action(description = "Retrieve the underwriting policy for this application", pre = {"affordabilityAssessed"},
+    @Action(description = "Retrieve the underwriting policy for this application", pre = {"fileOpen"},
             post = {"policyKnown", "policyUnavailable"}, cost = 0.02, canRerun = false)
     public PolicyLookup retrievePolicy(ApplicationFile file, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(file.caseId());
         List<StoreRecord> policies = support.store(file.store())
-                .searchKnowledge(file.caseId(), AGENT_ID, "unsecured personal loan underwriting policy salaried borrowers pay stubs credit score DTI")
+                .searchKnowledge(file.caseId(), AGENT_ID, "unsecured personal loan underwriting policy " + file.employment() + " borrowers conditions credit score DTI")
                 .stream().filter(r -> StorySupport.extract(List.of(r), StorySupport.POLICY_ID).filter(id -> id.startsWith("LEND-")).isPresent()).toList();
         // The situation as the file establishes it: the loan's terms from the referral, the employment type as verified.
         String situation = "Unsecured personal loan of " + String.format("%,d", file.amountUsd()) + " USD; the borrower is "
                 + file.employment() + " (from the employment verification). " + file.referral();
         PolicyChoice choice = policies.isEmpty() ? new PolicyChoice(null, "no underwriting policies retrieved")
-                : decisions.decide(file.caseId(), PERSONA, "decisions/lending-policy", Map.of(),
+                : decisions.decideUnlessClear(file.caseId(), PERSONA, "decisions/lending-policy", Map.of(),
                 "Application: " + situation + "\n" + StorySupport.asContext("Policies", policies), PolicyChoice.class,
+                // Settled by the policies' own scope when exactly one covers this borrower and amount; otherwise the model weighs them.
+                () -> onlyCovering(policies, file).map(id -> new PolicyChoice(id, "its scope covers a " + file.employment() + " borrower and a loan of "
+                        + String.format("%,d", file.amountUsd()) + " USD")),
+                "exactly one policy's scope covers the application",
                 () -> policies.stream().filter(r -> covers(r.text(), file)).findFirst()
                         .flatMap(r -> StorySupport.extract(List.of(r), StorySupport.POLICY_ID))
                         .map(id -> new PolicyChoice(id, "its scope covers a " + file.employment() + " borrower and a loan of "
@@ -296,26 +206,289 @@ public class UnderwriterAgent {
                 : new PolicyLookup(file.caseId(), chosen, used, used.getFirst().writtenBy(), choice.reason());
     }
 
-    @Action(description = "Escalate to credit risk to confirm which policy applies and its thresholds", pre = {"policyUnavailable"},
+    @Action(description = "Escalate to credit risk for the policy that applies", pre = {"policyUnavailable"},
             post = {"policyKnown"}, cost = 0.40, canRerun = false)
     public PolicyLookup escalateForPolicy(ApplicationFile file, PolicyLookup lookup) {
         StoryLedger ledger = support.ledger(file.caseId());
-        ledger.say(PERSONA, "I need credit risk to confirm the policy and thresholds for this application.");
-        ledger.step(PERSONA, "escalateForPolicy", "Waited on credit risk to confirm the applicable policy and its thresholds.",
+        ledger.say(PERSONA, "I need credit risk to send the policy for this application.");
+        ledger.step(PERSONA, "escalateForPolicy", "Waited on credit risk to send the applicable policy.",
                 support.effort("underwriter", "escalate-for-policy"), StoryLedger.Kind.ASK);
         // The simulated credit-risk team owns the policy documents and sends the one that covers the application.
         Optional<KnowledgeDocuments.Document> doc = documents.all().stream().filter(d -> covers(d.markdown(), file)).findFirst();
-        List<StoreRecord> said = doc.map(d -> d.chunks().stream().map(c -> new StoreRecord(d.key(), c, CREDIT_RISK, "", d.filename())).toList()).orElse(List.of());
+        List<StoreRecord> sent = doc.map(d -> d.chunks().stream().map(c -> new StoreRecord(d.key(), c, CREDIT_RISK, "", d.filename())).toList()).orElse(List.of());
         String policy = doc.map(KnowledgeDocuments.Document::key).orElse(null);
         ledger.say("Credit risk", policy == null ? "There is no written policy for this; refer it to a human underwriter." : "Attached: " + policy + ".");
-        PolicyLookup confirmed = new PolicyLookup(file.caseId(), policy, said, CREDIT_RISK, policy == null ? "no written policy covers this application" : SENT_ON_REQUEST);
+        PolicyLookup confirmed = new PolicyLookup(file.caseId(), policy, sent, CREDIT_RISK, policy == null ? "no written policy covers this application" : SENT_ON_REQUEST);
         support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.applicationId(), POLICY, null,
                 "Apply the underwriting policy for " + file.applicationId(), (policy == null ? "none" : policy) + ": " + confirmed.reason());
         return confirmed;
     }
 
+    @Action(description = "Check the file against the policy's conditions, and what the borrower already explained",
+            pre = {"fileOpen", "policyKnown"}, post = {"flagsReviewed", "explanationsInHand", "conditionsNeeded"}, cost = 0.05, canRerun = false)
+    public ApplicationFile reviewFlags(ApplicationFile file, PolicyLookup lookup, @Provided Ai ai) {
+        StoryLedger ledger = support.ledger(file.caseId());
+        ContextStore store = support.store(file.store());
+        // What needs explaining, by the conditions the policy text states, applied to the file's figures.
+        Optional<LendingConditions> conditions = LendingConditions.parse(policyText(lookup));
+        List<Flag> flags = new ArrayList<>();
+        conditions.ifPresent(c -> {
+            if (c.depositNeedsSource(file.depositUsd(), file.monthlyIncome())) flags.add(new Flag("deposit",
+                    "the " + String.format("%,d", file.depositUsd()) + " USD deposit on " + file.depositDate() + " (" + Math.round(file.depositUsd() * 100.0 / file.monthlyIncome())
+                            + "% of monthly income, above " + c.depositPercent() + "%)",
+                    "a letter of explanation and proof of the source of the " + String.format("%,d", file.depositUsd()) + " USD deposit on " + file.depositDate()));
+            if (c.gapNeedsExplanation(file.gapDays())) flags.add(new Flag("employment gap",
+                    "the " + file.gapDays() + "-day employment gap (" + file.gapPeriod() + "; above " + c.gapDays() + " days)",
+                    "a letter of explanation for the employment gap from " + file.gapPeriod()));
+        });
+        // What the borrower already said about this application: case memory, or the origination system's records in the
+        // application's conversation where memory has nothing for an item.
+        List<StoreRecord> recalled = flags.isEmpty() ? List.of()
+                : store.recallCase(file.caseId(), AGENT_ID, "loan application " + file.applicationId() + " borrower explanations deposit source employment gap evidence")
+                .stream().filter(r -> r.text().contains(file.applicationId())).toList();
+        List<StoreRecord> said = recalled;
+        String source = "case memory";
+        if (!flags.isEmpty() && flags.stream().anyMatch(f -> explanation(recalled, f.id()).isEmpty()) && store.kind() != ContextStore.Kind.NONE) {
+            said = support.readBack(store, file.caseId(), AGENT_ID, file.applicationId(),
+                            // Ready once every flagged item's explanation is readable: those turns are written before the referral.
+                            turns -> flags.stream().allMatch(f -> explanation(turns.stream().filter(t -> t.isEvent(LoanIntakeAgent.AGENT_ID, LoanIntakeAgent.EXPLAINED))
+                                    .map(t -> new StoreRecord("", t.output(), t.writtenBy(), "", null)).toList(), f.id()).isPresent()))
+                    .stream().filter(t -> t.isEvent(LoanIntakeAgent.AGENT_ID, LoanIntakeAgent.EXPLAINED))
+                    .map(t -> new StoreRecord("", t.output(), t.writtenBy(), "", null)).toList();
+            source = "application conversation";
+        }
+        support.found(ledger, source, said);
+        List<StoreRecord> explanations = said;
+        FlagReading reading = flags.isEmpty() ? new FlagReading(List.of(), List.of())
+                // Each explanation is read from the origination system's own record of it, which states the explanation and
+                // the evidence received: whether an item is explained is an exact check, not a judgement.
+                : decisions.decideByRule(file.caseId(), PERSONA, "decisions/lending-flags",
+                Map.of("flags", String.join("; ", flags.stream().map(f -> f.id() + ": " + f.description()).toList())),
+                StorySupport.asContext("What the borrower already explained", explanations),
+                () -> {
+                    List<String> explained = flags.stream().map(Flag::id).filter(id -> explanation(explanations, id).isPresent()).toList();
+                    return new FlagReading(explained, flags.stream().map(Flag::id).filter(id -> !explained.contains(id)).toList());
+                }, "the explanation and its evidence are on record for the item");
+        support.traceDecisions(store, file.caseId(), AGENT_ID, file.applicationId(), PERSONA);
+        List<String> explained = reading.explained() == null ? List.of() : reading.explained().stream().map(String::toLowerCase).toList();
+        List<Flag> reviewed = new ArrayList<>();
+        for (Flag f : flags) {
+            Optional<Explanation> why = explained.contains(f.id()) ? explanation(explanations, f.id()) : Optional.empty();
+            reviewed.add(why.map(e -> f.explainedBy(FROM_ORIGINATION + ": " + e.text() + " (written by " + e.writtenBy() + ")", e.kind(), e.evidence())).orElse(f));
+        }
+        long open = reviewed.stream().filter(f -> !f.inHand()).count();
+        ledger.step(PERSONA, "reviewFlags", flags.isEmpty() ? "Nothing in the file needs explaining under the policy's conditions."
+                        : flags.size() + (flags.size() == 1 ? " item needs" : " items need") + " explaining under the policy: " + (reviewed.size() - open)
+                        + " already explained, with evidence, at origination; " + open + " still open.",
+                support.effort("underwriter", "review-flags"), StoryLedger.Kind.CONTEXT);
+        return file.withFlags(reviewed);
+    }
+
+    /** A borrower's explanation of a flagged item, as recorded: the source, its kind and the evidence. */
+    record Explanation(String text, String kind, String evidence, String writtenBy) {}
+
+    /** "Deposit: the sale of the borrower's car (a vehicle sale); evidence received: the bill of sale" */
+    private static final java.util.regex.Pattern EXPLAINED_ITEM = java.util.regex.Pattern.compile(
+            "(Deposit|Employment gap): ([^;]+?)(?: \\(([^)]+)\\))?; evidence received: ([^.;]+)");
+
+    /** The borrower's explanation of a flagged item, with its evidence, among what was said: none if it is not there. */
+    static Optional<Explanation> explanation(List<StoreRecord> said, String flagId) {
+        for (StoreRecord r : said) {
+            java.util.regex.Matcher m = EXPLAINED_ITEM.matcher(r.text());
+            while (m.find()) {
+                if (m.group(1).equalsIgnoreCase(flagId)) {
+                    return Optional.of(new Explanation(m.group(), m.group(3), m.group(4).trim(), r.writtenBy()));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    @Action(description = "Send the open conditions back to the borrower and take the answers", pre = {"conditionsNeeded"},
+            post = {"explanationsInHand"}, cost = 0.50, canRerun = false)
+    public ApplicationFile issueConditions(ApplicationFile file) {
+        StoryLedger ledger = support.ledger(file.caseId());
+        ContextStore store = support.store(file.store());
+        // The simulated borrower answers with what they already told the origination system, and sends the proof again.
+        LoanApplications.Application app = support.loans().forApplication(file.applicationId()).orElseThrow();
+        List<Flag> flags = new ArrayList<>(file.flags());
+        List<Exchange> asked = new ArrayList<>(file.conditions());
+        for (int i = 0; i < flags.size(); i++) {
+            Flag f = flags.get(i);
+            if (f.inHand()) continue;
+            boolean deposit = f.id().equals("deposit");
+            String question = "Condition: please send " + f.condition() + ".";
+            String answer = deposit
+                    ? "I already explained this when I applied: it's from " + app.deposit().source() + ". Sending " + app.deposit().evidence() + " again."
+                    : "I told your loan officer: it was " + app.gap().reason() + ". Here is " + app.gap().evidence() + " again.";
+            ledger.say(PERSONA, question);
+            ledger.say("Borrower", answer);
+            support.recordEvent(store, file.caseId(), AGENT_ID, file.applicationId(), REASKED,
+                    "not in the context the underwriter had: the borrower's explanation of " + f.description(), lastSaid(file.referral(), asked), question);
+            asked.add(new Exchange(question, answer, f.description()));
+            ledger.step(PERSONA, "issueConditions", "Condition sent to the borrower: " + f.condition() + ". Waited for the letter and the proof.",
+                    support.effort("underwriter", "issue-condition"), StoryLedger.Kind.ASK);
+            ledger.count("conditionsIssued", 1);
+            ledger.count("borrowerReexplained", 1);
+            // The underwriter's own reading of the answer: the source, its kind and the evidence received.
+            String kind = deposit ? app.deposit().kind() : null;
+            String evidence = deposit ? app.deposit().evidence() : app.gap().evidence();
+            flags.set(i, f.explainedBy(FROM_CONDITION + ": " + answer, kind, evidence));
+        }
+        support.record(store, file.caseId(), AGENT_ID, file.applicationId(), lastSaid(file.referral(), asked), "Thank you. We have your letters and proof.");
+        return file.withConditions(flags, asked);
+    }
+
+    private static String lastSaid(String referral, List<Exchange> asked) {
+        return asked.isEmpty() ? referral : asked.getLast().answer();
+    }
+
+    @Action(description = "Accept the evidence behind each explanation: listed in the policy, or covered by a credit-risk ruling",
+            pre = {"explanationsInHand"}, post = {"evidenceAccepted", "rulingNeeded"}, cost = 0.05, canRerun = false)
+    public ApplicationFile acceptEvidence(ApplicationFile file, PolicyLookup lookup) {
+        StoryLedger ledger = support.ledger(file.caseId());
+        ContextStore store = support.store(file.store());
+        Optional<LendingConditions> conditions = LendingConditions.parse(policyText(lookup));
+        List<Flag> flags = new ArrayList<>(file.flags());
+        List<String> notes = new ArrayList<>();
+        for (int i = 0; i < flags.size(); i++) {
+            Flag f = flags.get(i);
+            if (conditions.map(c -> c.listsEvidence(f.id(), f.evidence())).orElse(false)) {
+                flags.set(i, clear(file, f, f.evidence() + " is listed as acceptable in " + lookup.policy()));
+                notes.add(f.evidence() + " for the " + f.id() + ": listed in " + lookup.policy());
+                continue;
+            }
+            // Not listed: a ruling from credit risk on this kind of evidence, shared as precedent, would cover it.
+            List<StoreRecord> rulings = store.searchKnowledge(file.caseId(), AGENT_ID, RULING_MARKER + lookup.policy() + " acceptable "
+                            + ITEM_PHRASE.get(f.id()) + " " + f.evidence() + " " + (f.kind() == null ? "" : f.kind()) + " " + precedentTag(file.precedents()))
+                    .stream().filter(r -> r.text().contains(RULING_MARKER) && r.text().contains(precedentTag(file.precedents()))).toList();
+            if (rulings.isEmpty()) {
+                notes.add(f.evidence() + " for the " + f.id() + ": not listed in " + lookup.policy() + ", and no credit-risk ruling covers it");
+                continue;
+            }
+            PrecedentFit fit = decisions.decideByRule(file.caseId(), PERSONA, "decisions/lending-precedent",
+                    Map.of("evidence", f.evidence(), "item", ITEM_PHRASE.get(f.id()), "kind", f.kind() == null ? "not stated" : f.kind()),
+                    StorySupport.asContext("Credit-risk rulings", rulings),
+                    () -> rulings.stream().filter(r -> covers(r.text(), lookup.policy(), f)).findFirst()
+                            .map(r -> new PrecedentFit(true, "the ruling accepts " + f.evidence() + " as " + ITEM_PHRASE.get(f.id()) + (f.kind() == null ? "" : " for " + f.kind())))
+                            .orElse(new PrecedentFit(false, "no ruling accepts " + f.evidence() + " for this")),
+                    "the ruling names the same policy, evidence and kind of source");
+            Optional<StoreRecord> used = Boolean.TRUE.equals(fit.accepts()) ? rulings.stream().filter(r -> covers(r.text(), lookup.policy(), f)).findFirst() : Optional.empty();
+            if (used.isPresent()) {
+                support.found(ledger, "knowledge base", List.of(used.get()));
+                flags.set(i, clear(file, f, f.evidence() + " is accepted under " + PRECEDENT_FROM + used.get().writtenBy() + ": " + ruling(used.get().text())));
+                notes.add(f.evidence() + " for the " + f.id() + ": accepted under a credit-risk ruling in shared knowledge");
+            } else {
+                rulings.forEach(r -> support.passedOver(ledger, "knowledge base", r, fit.reason() == null ? "does not cover this evidence" : fit.reason()));
+                notes.add(f.evidence() + " for the " + f.id() + ": not covered by the rulings found");
+            }
+        }
+        support.traceDecisions(store, file.caseId(), AGENT_ID, file.applicationId(), PERSONA);
+        ledger.step(PERSONA, "acceptEvidence", notes.isEmpty() ? "No evidence to check." : "Checked the evidence: " + String.join("; ", notes) + ".",
+                support.effort("underwriter", "accept-evidence"), StoryLedger.Kind.CONTEXT);
+        return file.withEvidenceChecked(flags);
+    }
+
+    @Action(description = "Ask credit risk to rule on evidence the policy does not list, and share the ruling as precedent",
+            pre = {"rulingNeeded"}, post = {"evidenceAccepted"}, cost = 0.40, canRerun = false)
+    public ApplicationFile requestRuling(ApplicationFile file, PolicyLookup lookup) {
+        StoryLedger ledger = support.ledger(file.caseId());
+        ContextStore store = support.store(file.store());
+        List<Flag> flags = new ArrayList<>(file.flags());
+        for (int i = 0; i < flags.size(); i++) {
+            Flag f = flags.get(i);
+            if (!f.open()) continue;
+            String question = "Is " + f.evidence() + " acceptable " + ITEM_PHRASE.get(f.id()) + (f.kind() == null ? "" : " for " + f.kind())
+                    + " under " + lookup.policy() + "? The policy does not list it.";
+            ledger.say(PERSONA, question);
+            ledger.step(PERSONA, "requestRuling", "Waited on credit risk to rule on " + f.evidence() + " as " + ITEM_PHRASE.get(f.id()) + ".",
+                    support.effort("underwriter", "request-ruling"), StoryLedger.Kind.ASK);
+            ledger.count("rulingsRequested", 1);
+            // The simulated credit-risk team rules on the kind of evidence, not on the borrower: no application, no amounts.
+            String ruling = RULING_MARKER + lookup.policy() + ": " + f.evidence() + " is acceptable " + ITEM_PHRASE.get(f.id())
+                    + (f.kind() == null ? "" : " for " + f.kind()) + ". " + precedentTag(file.precedents());
+            ledger.say("Credit risk", "Yes: " + f.evidence() + " is acceptable " + ITEM_PHRASE.get(f.id()) + (f.kind() == null ? "" : " for " + f.kind()) + ". It applies to later applications too.");
+            support.recordEvent(store, file.caseId(), AGENT_ID, file.applicationId(), RULING, null, question, ruling(ruling) + " (" + RULED_ON_REQUEST + ")");
+            flags.set(i, clear(file, f, f.evidence() + " is accepted under a " + RULING + " (" + RULED_ON_REQUEST + "): " + ruling(ruling)));
+            share(file, ledger, store, ruling);
+        }
+        return file.withEvidenceChecked(flags);
+    }
+
+    /**
+     * Shares a ruling as precedent: written as the underwriter's memory, then, if it is general enough to apply beyond
+     * this application, promoted into the shared knowledge base, where any agent's knowledge search finds it.
+     */
+    private void share(ApplicationFile file, StoryLedger ledger, ContextStore store, String ruling) {
+        if (store.kind() == ContextStore.Kind.NONE) {
+            ledger.step(PERSONA, "requestRuling", "The ruling stays in this application's correspondence: there is nowhere to share it.",
+                    support.effort("underwriter", "share-precedent"), StoryLedger.Kind.CONTEXT);
+            return;
+        }
+        // What may leave this application is a privacy check: a deterministic one, not a model's judgement.
+        ShareJudgement judgement = decisions.decideByRule(file.caseId(), PERSONA, "decisions/lending-share-ruling", Map.of(),
+                StorySupport.asContext("Ruling", List.of(new StoreRecord("", ruling, CREDIT_RISK, "", null))),
+                () -> APPLICATION_OR_AMOUNT.matcher(ruling).find() ? new ShareJudgement(false, "it names an application or an amount")
+                        : new ShareJudgement(true, "it rules on a kind of evidence, with no borrower, application or amount in it"),
+                "no application id or amount in the ruling");
+        support.traceDecisions(store, file.caseId(), AGENT_ID, file.applicationId(), PERSONA);
+        Optional<String> id = store.remember(file.caseId(), AGENT_ID, ruling);
+        boolean promoted = Boolean.TRUE.equals(judgement.share()) && id.map(m -> store.promote(file.caseId(), AGENT_ID, List.of(m))).orElse(false);
+        if (promoted) ledger.count("rulingsShared", 1);
+        ledger.step(PERSONA, "requestRuling", id.isEmpty() ? support.writeOutcome(file.caseId(), AGENT_ID, file.store(), false, "the ruling")
+                        : promoted ? "Wrote the ruling as a memory and promoted it into the shared knowledge base: " + judgement.reason() + "."
+                        : Boolean.TRUE.equals(judgement.share()) ? "Wrote the ruling as a memory; promoting it into shared knowledge failed."
+                        : "Wrote the ruling as a memory, not shared: " + judgement.reason() + ".",
+                support.effort("underwriter", "share-precedent"), StoryLedger.Kind.CONTEXT);
+    }
+
+    private Flag clear(ApplicationFile file, Flag f, String accepted) {
+        String how = f.explained() + "; " + EVIDENCE_ACCEPTED + accepted;
+        support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.applicationId(), CONDITION_CLEARED, null,
+                "Clear the condition on " + f.description(), how);
+        return f.cleared(how);
+    }
+
+    /** The phrase a ruling uses for each flagged item. */
+    static final Map<String, String> ITEM_PHRASE = Map.of("deposit", "evidence of a deposit's source", "employment gap", "evidence for an employment gap");
+    private static final java.util.regex.Pattern APPLICATION_OR_AMOUNT = java.util.regex.Pattern.compile("APP-\\d+|\\d[\\d,]* USD");
+
+    /** How a ruling is tagged with the set of rulings it belongs to: rulings outside the current set are not precedent. */
+    public static String precedentTag(String precedents) {
+        return "[precedent set " + (precedents == null ? "none" : precedents) + "]";
+    }
+
+    /** Whether a ruling's text accepts this flag's evidence (and kind of source) under the policy. */
+    static boolean covers(String rulingText, String policy, Flag f) {
+        String t = rulingText.toLowerCase();
+        return t.contains(RULING_MARKER.toLowerCase() + String.valueOf(policy).toLowerCase()) && t.contains(f.evidence().toLowerCase())
+                && t.contains(ITEM_PHRASE.get(f.id()).toLowerCase()) && (f.kind() == null || t.contains(f.kind().toLowerCase()));
+    }
+
+    /** A ruling's text without its precedent-set tag. */
+    public static String ruling(String text) {
+        return text.replaceAll("\\s*\\[precedent set [^]]*]", "").trim();
+    }
+
+    private static String policyText(PolicyLookup lookup) {
+        return String.join("\n\n", lookup.text().stream().map(StoreRecord::text).toList());
+    }
+
+    @Action(description = "Compute debt-to-income from the file's figures", pre = {"evidenceAccepted"}, post = {"affordabilityAssessed"}, cost = 0.10, canRerun = false)
+    public Affordability assessAffordability(ApplicationFile file) {
+        ContextStore store = support.store(file.store());
+        int obligations = file.monthlyDebts() + file.instalment();
+        double dti = obligations * 100.0 / file.monthlyIncome();
+        String working = "DTI " + String.format("%.1f", dti) + "% = (" + String.format("%,d", file.monthlyDebts()) + " obligations + " + String.format("%,d", file.instalment())
+                + " instalment) / " + String.format("%,d", file.monthlyIncome()) + " income; score " + file.creditScore() + "; reserves " + file.reservesMonths() + " months";
+        support.recordEvent(store, file.caseId(), AGENT_ID, file.applicationId(), AFFORDABILITY, null,
+                "Compute debt-to-income for " + file.applicationId(), working);
+        support.ledger(file.caseId()).step(PERSONA, "assessAffordability", working + ".", support.effort("underwriter", "assess-affordability"), StoryLedger.Kind.WORK);
+        return new Affordability(file.caseId(), dti, file.creditScore(), file.reservesMonths(), working);
+    }
+
     @AchievesGoal(description = "The credit call is made")
-    @Action(description = "Make the credit call against the policy's thresholds", pre = {"policyKnown"}, post = {"creditCallMade"},
+    @Action(description = "Make the credit call against the policy's thresholds", pre = {"affordabilityAssessed", "policyKnown"}, post = {"creditCallMade"},
             cost = 0.05, canRerun = false)
     public CreditCall makeCreditCall(ApplicationFile file, Affordability affordability, PolicyLookup lookup, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(file.caseId());
@@ -323,12 +496,17 @@ public class UnderwriterAgent {
         String policyText = String.join("\n\n", lookup.text().stream().map(StoreRecord::text).toList());
         Optional<LendingThresholds> thresholds = LendingThresholds.parse(policyText);
         String context = "Figures in the application file: " + affordability.working() + ".\n" + StorySupport.asContext("Policy " + lookup.policy(), lookup.text());
-        CallJudgement judgement = decisions.decide(file.caseId(), PERSONA, "decisions/lending-credit-call", Map.of(), context, CallJudgement.class,
-                () -> thresholds.map(t -> new CallJudgement(t.apply(affordability.creditScore(), affordability.dtiPercent(), affordability.reservesMonths()),
-                                lookup.policy() + ": " + t.describe(),
-                                t.explain(affordability.creditScore(), affordability.dtiPercent(), affordability.reservesMonths())))
-                        .orElse(new CallJudgement("refer", "none: the policy text states no thresholds the underwriter could apply",
-                                "no thresholds to apply; refer to a human underwriter")), ai);
+        java.util.function.Supplier<CallJudgement> byRule = () -> thresholds.map(t -> new CallJudgement(t.apply(affordability.creditScore(), affordability.dtiPercent(), affordability.reservesMonths()),
+                        lookup.policy() + ": " + t.describe(),
+                        t.explain(affordability.creditScore(), affordability.dtiPercent(), affordability.reservesMonths())))
+                .orElse(new CallJudgement("refer", "none: the policy text states no thresholds the underwriter could apply",
+                        "no thresholds to apply; refer to a human underwriter"));
+        // Settled by rule when there is no policy (the call is refer) or the policy's thresholds parse (an exact comparison);
+        // the model reads the policy only when it states thresholds in a form the rule cannot apply.
+        CallJudgement judgement = decisions.decideUnlessClear(file.caseId(), PERSONA, "decisions/lending-credit-call", Map.of(), context, CallJudgement.class,
+                () -> lookup.policy() == null || thresholds.isPresent() ? Optional.of(byRule.get()) : Optional.empty(),
+                lookup.policy() == null ? "no written policy: the call is refer" : "the policy's thresholds, compared exactly with the file's figures",
+                byRule, ai);
         String decision = lookup.policy() == null ? "refer" : normalize(judgement.decision());
         boolean sent = CREDIT_RISK.equals(lookup.writtenBy());
         String outcome = file.applicationId() + ": " + decision + " under " + (lookup.policy() == null ? "no written policy" : lookup.policy())
@@ -338,23 +516,21 @@ public class UnderwriterAgent {
         support.recordEvent(store, file.caseId(), AGENT_ID, file.applicationId(), CREDIT_CALL, null,
                 "Make the credit call on " + file.applicationId(), outcome + " " + THRESHOLDS_APPLIED + judgement.thresholdsApplied()
                         + ". " + FACTORS + affordability.factors() + ".");
-        store.rememberLater(file.caseId(), AGENT_ID, "Loan application " + file.applicationId() + " underwritten: " + outcome);
+        store.rememberLater(file.caseId(), AGENT_ID, "Loan application " + file.applicationId() + " underwritten: " + outcome.substring(outcome.indexOf(": ") + 2));
         ledger.step(PERSONA, "makeCreditCall", outcome, support.effort("underwriter", "make-credit-call"), StoryLedger.Kind.WORK);
-        ledger.outcome(outcome);
-        List<String> asked = ledger.steps().stream()
-                .filter(st -> st.kind() == StoryLedger.Kind.ASK && st.persona().equals(PERSONA) && !st.action().equals("escalateForPolicy"))
-                .map(StoryLedger.Step::text).toList();
+        ledger.outcome(ledger.outcome() == null ? outcome : ledger.outcome() + " " + outcome);
         List<String> facts = new ArrayList<>(List.of(
                 file.referral(),
                 "Figures: " + affordability.working(),
                 "Policy: " + lookup.policy() + " (" + lookup.reason() + ")",
                 "Credit call: " + decision + ". " + judgement.reason()));
-        facts.add(asked.isEmpty() ? "The borrower was not asked to do anything again after the referral"
-                : "After the referral the borrower had to be asked " + asked.size() + " times: " + String.join(" ", asked));
+        (file.flags() == null ? List.<Flag>of() : file.flags()).forEach(f -> facts.add("Condition on " + f.description() + ": " + f.clearedFrom()));
+        int reexplained = ledger.counters().getOrDefault("borrowerReexplained", 0);
+        facts.add(reexplained == 0 ? "The borrower was not asked to explain anything again after the referral"
+                : "After the referral the borrower had to explain " + reexplained + " thing" + (reexplained == 1 ? "" : "s") + " again, with the proof");
         List<String> gaps = lookup.policy() == null ? List.of("No written underwriting policy covers this application") : List.of();
-        int reasked = ledger.counters().getOrDefault("borrowerReasks", 0);
-        ledger.handToWriter(new ResponseWriterAgent.WritingTask(file.caseId(), PERSONA, "message to the borrower",
-                support.render("writer/borrower-credit-call", Map.of("reasked", reasked, "decision", decision)), facts, gaps,
+        ledger.handToWriter(new ResponseWriterAgent.WritingTask(file.caseId(), PERSONA, "message to the borrower of " + file.applicationId(),
+                support.render("writer/borrower-credit-call", Map.of("reexplained", reexplained, "decision", decision)), facts, gaps,
                 "Your application " + file.applicationId() + " has been reviewed: " + decision + "."));
         return new CreditCall(file.caseId(), file.applicationId(), decision, judgement.reason());
     }
@@ -369,7 +545,14 @@ public class UnderwriterAgent {
         String text = policyText.toLowerCase();
         if (file.employment() == null || !text.matches("(?s).*\\b(to|for) " + java.util.regex.Pattern.quote(file.employment().toLowerCase()) + " borrowers.*")) return false;
         Optional<Integer> limit = StorySupport.extract(rows(policyText), "up to ([\\d,]+) USD").map(s -> Integer.valueOf(s.replace(",", "")));
-        return limit.isEmpty() || file.amountUsd() == null || file.amountUsd() <= limit.get();
+        return limit.isEmpty() || file.amountUsd() <= limit.get();
+    }
+
+    /** The one policy among those retrieved whose scope covers the application; empty if none does, or more than one. */
+    static Optional<String> onlyCovering(List<StoreRecord> policies, ApplicationFile file) {
+        List<String> ids = policies.stream().filter(r -> covers(r.text(), file))
+                .map(r -> StorySupport.extract(List.of(r), StorySupport.POLICY_ID)).flatMap(Optional::stream).distinct().toList();
+        return ids.size() == 1 ? Optional.of(ids.getFirst()) : Optional.empty();
     }
 
     /** A credit-call answer as approve, decline or refer, however the model worded it ("Approved.", "DECLINE"). */
@@ -384,12 +567,8 @@ public class UnderwriterAgent {
         return List.of(new StoreRecord("", text, "", "", null));
     }
 
-    private static Integer amount(String text, String regex) {
-        return StorySupport.extract(rows(text), regex).map(s -> Integer.valueOf(s.replace(",", ""))).orElse(null);
-    }
-
-    private static Integer positive(Integer value) {
-        return value == null || value <= 0 ? null : value;
+    private static int amount(String text, String regex) {
+        return StorySupport.extract(rows(text), regex).map(s -> Integer.parseInt(s.replace(",", ""))).orElse(0);
     }
 
     private static String blankToNull(String value) {
@@ -403,44 +582,29 @@ public class UnderwriterAgent {
         return file != null;
     }
 
-    @Condition(name = "incomeKnown")
-    public boolean incomeKnown(ApplicationFile file) {
-        return file != null && file.monthlyIncome() != null;
+    @Condition(name = "flagsReviewed")
+    public boolean flagsReviewed(ApplicationFile file) {
+        return file != null && file.flags() != null;
     }
 
-    @Condition(name = "incomeUnknown")
-    public boolean incomeUnknown(ApplicationFile file) {
-        return file != null && file.monthlyIncome() == null;
+    @Condition(name = "explanationsInHand")
+    public boolean explanationsInHand(ApplicationFile file) {
+        return flagsReviewed(file) && file.flags().stream().allMatch(Flag::inHand);
     }
 
-    @Condition(name = "assetsKnown")
-    public boolean assetsKnown(ApplicationFile file) {
-        return file != null && file.reservesMonths() != null;
+    @Condition(name = "conditionsNeeded")
+    public boolean conditionsNeeded(ApplicationFile file) {
+        return flagsReviewed(file) && !explanationsInHand(file);
     }
 
-    @Condition(name = "assetsUnknown")
-    public boolean assetsUnknown(ApplicationFile file) {
-        return file != null && file.reservesMonths() == null;
+    @Condition(name = "evidenceAccepted")
+    public boolean evidenceAccepted(ApplicationFile file) {
+        return explanationsInHand(file) && file.evidenceChecked() && file.flags().stream().noneMatch(Flag::open);
     }
 
-    @Condition(name = "employmentKnown")
-    public boolean employmentKnown(ApplicationFile file) {
-        return file != null && file.employmentConfirmed() != null && file.employment() != null;
-    }
-
-    @Condition(name = "employmentUnknown")
-    public boolean employmentUnknown(ApplicationFile file) {
-        return file != null && (file.employmentConfirmed() == null || file.employment() == null);
-    }
-
-    @Condition(name = "creditKnown")
-    public boolean creditKnown(ApplicationFile file) {
-        return file != null && file.creditScore() != null && file.monthlyDebts() != null;
-    }
-
-    @Condition(name = "creditUnknown")
-    public boolean creditUnknown(ApplicationFile file) {
-        return file != null && (file.creditScore() == null || file.monthlyDebts() == null);
+    @Condition(name = "rulingNeeded")
+    public boolean rulingNeeded(ApplicationFile file) {
+        return explanationsInHand(file) && file.evidenceChecked() && file.flags().stream().anyMatch(Flag::open);
     }
 
     @Condition(name = "affordabilityAssessed")

@@ -87,20 +87,28 @@ public class SreTakeoverAgent {
                 + StorySupport.asContext("Investigation notes", notes)
                 + checkpoint.map(j -> "Checkpoint artifact (JSON): " + j + "\n").orElse("")
                 + StorySupport.asContext("The first investigator's records in the incident's conversation", record, true);
-        Progress progress = decisions.decide(request.caseId(),
+        java.util.function.Supplier<Progress> byRule = () -> {
+            List<String> completed = checkpoint.map(j -> objectMapper.readTree(j).path("completed").valueStream().map(JsonNode::asString).toList())
+                    .orElse(List.of());
+            boolean deploy = completed.contains("correlateDeploy") || record.stream().anyMatch(t -> t.isEvent(SreInvestigatorAgent.AGENT_ID, SreInvestigatorAgent.DEPLOY_CORRELATED));
+            boolean database = completed.contains("ruleOutDatabase") || record.stream().anyMatch(t -> t.isEvent(SreInvestigatorAgent.AGENT_ID, SreInvestigatorAgent.DATABASE_RULED_OUT));
+            return new Progress(deploy, database,
+                    !deploy ? "correlate the spike with recent deployments" : !database ? "check the database" : "verify connection-pool saturation");
+        };
+        Progress evidence = byRule.get();
+        // Settled by rule when the checkpoint or the investigator's tagged records say what finished, or when there is
+        // nothing at all; the model reads the notes only when they exist in a form neither states.
+        Progress progress = decisions.decideUnlessClear(request.caseId(),
                 PERSONA,
                 "decisions/sre-progress",
                 Map.of(),
                 context,
                 Progress.class,
-                () -> {
-                    List<String> completed = checkpoint.map(j -> objectMapper.readTree(j).path("completed").valueStream().map(JsonNode::asString).toList())
-                            .orElse(List.of());
-                    boolean deploy = completed.contains("correlateDeploy") || record.stream().anyMatch(t -> t.isEvent(SreInvestigatorAgent.AGENT_ID, SreInvestigatorAgent.DEPLOY_CORRELATED));
-                    boolean database = completed.contains("ruleOutDatabase") || record.stream().anyMatch(t -> t.isEvent(SreInvestigatorAgent.AGENT_ID, SreInvestigatorAgent.DATABASE_RULED_OUT));
-                    return new Progress(deploy, database,
-                            !deploy ? "correlate the spike with recent deployments" : !database ? "check the database" : "verify connection-pool saturation");
-                },
+                () -> checkpoint.isPresent() || !record.isEmpty() || notes.isEmpty() ? Optional.of(evidence) : Optional.empty(),
+                checkpoint.isPresent() ? "the checkpoint lists what finished" : !record.isEmpty() ? "the investigator's records say what finished" : "nothing recovered",
+                byRule,
+                // A step counts as done only with evidence that it finished: skipping it otherwise would be unsafe.
+                p -> (!Boolean.TRUE.equals(p.deployCorrelated()) || !notes.isEmpty()) && (!Boolean.TRUE.equals(p.databaseRuledOut()) || !notes.isEmpty()),
                 ai);
         // The judgement goes on the incident's record, keyed by the incident id, with who made it and on what.
         support.traceDecisions(store, request.caseId(), AGENT_ID, request.caseId(), PERSONA);

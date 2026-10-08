@@ -54,6 +54,22 @@ public class StorySupport {
      * Writes an agent's record of something it did: a natural input and output, tagged in the reasoning as
      * {@code "<agent id> · <event>"} (followed by {@code ": <why>"} when given). Also kept in the party's own system of record.
      */
+    /** How a follow-up's finding is marked in the subject's conversation. */
+    public static final String FINDING = "finding";
+
+    /**
+     * Files a follow-up's finding where the next reader finds it: in the subject's conversation (keyed by its id, after
+     * the record it judged), and as a result in memory, with the verdict and the reasons it rests on. Ids, policies,
+     * counts and verdicts only: nothing about the customer beyond what the record already names.
+     */
+    public void fileFinding(ContextStore store, String caseId, String agentId, String subject, String what, String verdict, List<String> reasons) {
+        List<String> because = reasons == null ? List.of() : reasons.stream().limit(8).toList();
+        recordEvent(store, caseId, agentId, subject, FINDING, null, what + " " + subject,
+                verdict + (because.isEmpty() ? "" : " " + String.join(" ", because)));
+        store.rememberLater(caseId, agentId, what + " " + subject + " on " + java.time.LocalDate.now() + ": " + verdict
+                + (because.isEmpty() ? "" : " Because: " + String.join(" ", because)));
+    }
+
     public void recordEvent(ContextStore store, String caseId, String agentId, String thread, String event, String why,
                             String input, String output) {
         String reasoning = ContextStore.Turn.tag(agentId, event) + (why == null || why.isBlank() ? "" : ": " + why);

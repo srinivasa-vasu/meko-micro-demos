@@ -22,6 +22,7 @@ class MekoBackgroundWritesTest {
     static class SlowMeko extends MekoMcpClient {
         final Map<String, List<Map<String, Object>>> conversations = new ConcurrentHashMap<>();
         final List<String> memories = java.util.Collections.synchronizedList(new ArrayList<>());
+        final java.util.concurrent.atomic.AtomicInteger knowledgeSearches = new java.util.concurrent.atomic.AtomicInteger();
         private final ObjectMapper json = new ObjectMapper();
 
         SlowMeko() { super(new MekoProperties()); }
@@ -43,6 +44,10 @@ class MekoBackgroundWritesTest {
                 case "memory_add" -> {
                     memories.add(String.valueOf(args.get("text")));
                     yield json.readTree("{\"results\":[{\"id\":\"m-" + memories.size() + "\"}]}");
+                }
+                case "knowledgebase_search" -> {
+                    knowledgeSearches.incrementAndGet();
+                    yield json.readTree("{\"results\":[{\"id\":\"k-1\",\"chunk_text\":\"LEND-UW-05 policy text\",\"document_id\":\"d-1\"}]}");
                 }
                 default -> json.readTree("{}");
             };
@@ -82,5 +87,33 @@ class MekoBackgroundWritesTest {
         // Every background write has its receipt once the run flushes, so the run's counts are complete.
         assertThat(receipts.forCase("CASE-2")).extracting(ReceiptLog.Receipt::tool).containsExactlyInAnyOrder("memory_add", "conversation_add_message");
         assertThat(receipts.forCase("CASE-2")).allMatch(ReceiptLog.Receipt::ok);
+    }
+
+    @Test
+    void aRepeatedKnowledgeSearchInACaseIsAnsweredFromTheRunUntilSomethingIsPromoted() {
+        SlowMeko meko = new SlowMeko();
+        ReceiptLog receipts = new ReceiptLog(new RunEvents());
+        MekoContextStore store = new MekoContextStore(meko, receipts, new OutageSwitch());
+
+        store.searchKnowledge("CASE-K", "agent:a", "personal loan policy");
+        store.searchKnowledge("CASE-K", "agent:b", "personal loan policy");
+        assertThat(meko.knowledgeSearches.get()).isEqualTo(1);
+        assertThat(receipts.forCase("CASE-K")).extracting(ReceiptLog.Receipt::detail).anyMatch(d -> d.startsWith("[cached in this run]"));
+        // Promoting changes shared knowledge: the next search goes to Meko again.
+        store.promote("CASE-K", "agent:a", List.of("m-1"));
+        store.searchKnowledge("CASE-K", "agent:a", "personal loan policy");
+        assertThat(meko.knowledgeSearches.get()).isEqualTo(2);
+    }
+
+    @Test
+    void backgroundWritesAreReceiptedAsBackground() {
+        SlowMeko meko = new SlowMeko();
+        ReceiptLog receipts = new ReceiptLog(new RunEvents());
+        MekoContextStore store = new MekoContextStore(meko, receipts, new OutageSwitch());
+        store.addTurn("CASE-B", "agent:a", "TX-B", "in", "out");
+        store.recallCase("CASE-B", "agent:a", "anything");
+        store.flush("CASE-B");
+        assertThat(receipts.forCase("CASE-B")).filteredOn(r -> r.tool().equals("conversation_add_message")).allMatch(ReceiptLog.Receipt::background);
+        assertThat(receipts.forCase("CASE-B")).filteredOn(r -> r.tool().equals("memory_search")).noneMatch(ReceiptLog.Receipt::background);
     }
 }

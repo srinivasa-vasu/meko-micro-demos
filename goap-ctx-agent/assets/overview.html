@@ -590,7 +590,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
   // One boundary per use case, in the use cases' order: [icon, boundary, what happens, what it costs, what is lost (hero)].
   const BOUNDS = [
     ['bot', 'Vendor → you', "A vendor's chatbot escalates to your specialist. Only the CRM ticket crosses.", 'The customer repeats everything', 'customer re-asked'],
-    ['bot', 'Vendor system → you', "A vendor's loan-origination system refers the application. Only the referral crosses.", 'The borrower re-sends documents, and gets a second credit pull', 'borrower re-asked'],
+    ['bot', 'Vendor system → you', "A vendor's loan-origination system refers the application with its file. The borrower's explanations don't cross.", 'The borrower explains it all again, with the proof', 'explanation lost'],
     ['clock', 'Desk → desk, over time', "Last quarter's review was done by another desk's agent.", 'The whole review is redone', 'review redone'],
     ['globe', 'Team → organization', 'Another team solved the failure that keeps reaching you.', 'Every team rediscovers the fix', 'fix rediscovered'],
     ['team', 'Team → team', "One team's agent dies mid-incident; another team's agent takes over.", 'Finished checks are redone', 'checks redone'],
@@ -624,9 +624,9 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
       db: {label: 'Your own database', requests: 1, traces: 1, min: 42},
       with: {label: 'With Meko', requests: 0, traces: 2, min: 22}}},
     'loan-underwriting': {title: 'Review this credit call', lanes: {
-      without: {label: 'Without Meko', requests: 3, traces: 0, min: 194},
-      db: {label: 'Your own database', requests: 2, traces: 2, min: 164},
-      with: {label: 'With Meko', requests: 0, traces: 3, min: 19}}}
+      without: {label: 'Without Meko', requests: 6, traces: 0, min: 388},
+      db: {label: 'Your own database', requests: 4, traces: 6, min: 328},
+      with: {label: 'With Meko', requests: 0, traces: 8, min: 38}}}
   };
   // What the record holds, in order: [writer, entry, gate of a decision trace or '']. The writers' order and the gates
   // are checked against a real run's record by DocumentedFiguresTest.
@@ -657,16 +657,16 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
         num: '0', unit: 'customer re-asks · 19 min', min: 19, wait: 6, why: "Your specialist recalls what the vendor's bot established and the right policy, so the asks never enter the plan."}
     },
     {
-      id: 'loan', ladder: ["The origination system’s check results, recalled by case id; the conversation, keyed by the application id", "The underwriting policy, an uploaded document whose thresholds the credit call applies", "LEND-UW-05 for a salaried borrower, not the look-alike self-employed policy LEND-UW-09", "Each underwriting decision in the application’s conversation, with who made it; a fair-lending reviewer reads it back by application id"], title: 'I already sent you my pay stubs', eyebrow: 'BFSI / Lending', line: 'The borrower changed systems. The file didn’t.', story: 'A borrower applies for a 25,000 USD personal loan through a vendor’s loan-origination system, which collects pay stubs and bank statements, verifies employment and pulls credit. It refers the application to your underwriter, a separate system that gets only the application id and loan terms.',
-      a: {icon: 'bot', name: 'Loan-origination system', where: 'A vendor product, its own store', does: 'Takes the application and runs the checks.'},
-      b: {icon: 'person', name: 'Your credit underwriter', where: 'Your application', does: 'Makes the credit call and tells the borrower.', yours: true},
-      later: {icon: 'shield', name: 'Fair-lending reviewer', where: 'Your compliance desk, later', does: 'Checks the credit call against the policy, decisions included, from the application id.', crosses: 'The application id'},
-      crosses: 'Referral only', note: 'Hands-on time is 19 min either way: the saving is the borrower’s waiting, 165 → 20 min, and a second hard inquiry.', db: {text: '3 borrower re-asks · 2 hard inquiries · 184 min', min: 184},
-      writes: ['The conversation, keyed by the application id', 'Income, assets, employment and credit results', 'Each decision, with who made it'], recalls: ["This application's check results", 'The right policy (05, not 09)', 'Later, the reviewer: the whole record'],
-      without: {plan: [['Open application file', 'ctx'], ['Ask: pay stubs again', 'ask'], ['Ask: bank statements again', 'ask'], ['Re-verify employment', 'rework'], ['Pull credit again', 'rework'], ['Compute DTI', ''], ['Find policy (none)', 'miss'], ['Escalate to credit risk', 'ask'], ['Credit call', '']],
-        num: '3', unit: 'borrower re-asks · 184 min', min: 184, wait: 165, why: 'Your underwriter only has the referral, so the planner asks the borrower again, re-verifies employment and escalates for the policy.'},
-      with: {plan: [['Open application file', 'ctx'], ['Compute DTI', ''], ['Find policy', 'ctx'], ['Credit call', '']],
-        num: '0', unit: 'borrower re-asks · 39 min', min: 39, wait: 20, why: 'Your underwriter recalls what the origination system verified and applies the right policy’s thresholds: nothing repeated, one hard inquiry.'}
+      id: 'loan', ladder: ["The borrowers’ explanations, recalled by case id; the conversation, keyed by the application id", "The underwriting policy; and credit risk’s ruling on a bill of sale, promoted from the underwriter’s memory into shared knowledge as precedent", "LEND-UW-05 for a salaried borrower, not the look-alike self-employed policy LEND-UW-09", "Each underwriting decision in the application’s conversation, with who made it; a fair-lending reviewer reads it back by application id"], title: 'I already explained this', eyebrow: 'BFSI / Lending', line: 'The documents crossed. The explanations didn’t.', story: 'Two borrowers apply for personal loans through a vendor’s loan-origination system. The first explains an 8,000 USD deposit (the sale of their car, with the bill of sale) and a 92-day employment gap (parental leave, with the employer’s letter); the second, a later borrower, a deposit from selling a motorcycle, also with a bill of sale. Each application goes to your underwriter with its whole file.',
+      a: {icon: 'bot', name: 'Loan-origination system', where: 'A vendor product, its own store', does: 'Takes each application and the borrower’s explanations, runs the checks.'},
+      b: {icon: 'person', name: 'Your credit underwriter', where: 'Your application', does: 'Clears the policy’s conditions, shares rulings as precedent, makes the credit call.', yours: true},
+      later: {icon: 'shield', name: 'Fair-lending reviewer', where: 'Your compliance desk, later', does: 'Checks the conditions, the evidence basis and the credit call against the policy, from the application id.', crosses: 'The application id'},
+      crosses: 'Referral and file', note: 'The file crosses either way. What doesn’t is what the borrowers explained, and, without a shared place for it, credit risk’s ruling on the bill of sale: asked twice without Meko, once with it.', db: {text: '3 things re-explained · 1 ruling · 327 min', min: 327},
+      writes: ['The conversation, keyed by the application id', 'The borrowers’ explanations, with the evidence', 'The ruling, promoted to shared knowledge'], recalls: ["Each borrower's explanations", 'The right policy (05, not 09)', 'The ruling, as precedent, for application 2'],
+      without: {plan: [['Open application file', 'ctx'], ['Find policy (none)', 'miss'], ['Escalate to credit risk', 'ask'], ['Review flags: open', 'miss'], ['Conditions to the borrower', 'ask'], ['Check evidence: not listed', 'miss'], ['Ask credit risk to rule', 'ask'], ['Credit call', '']],
+        num: '3', unit: 'things re-explained · 359 min', min: 359, wait: 295, why: 'Each application goes the same way: the borrower explains again, and credit risk is asked again about the bill of sale.'},
+      with: {plan: [['Open application file', 'ctx'], ['Find policy', 'ctx'], ['Review flags: cleared', 'ctx'], ['Ruling (application 1), promoted', 'ask'], ['Precedent found (application 2)', 'ctx'], ['Credit call', '']],
+        num: '0', unit: 'things re-explained · 132 min', min: 132, wait: 70, why: 'The explanations clear the conditions; the ruling credit risk gave on application 1 is promoted into shared knowledge, so application 2 finds it.'}
     },
     {
       id: 'kyc', ladder: ["Last quarter’s review, written by another desk’s agent", "The KYC re-review standard: what counts as a material change", "The 2026 review of CUST-7788, not the 2025 one and not CUST-7789",, "The analyst’s decisions, the review it used and what it passed over, in the review’s conversation; a model-risk reviewer checks them by review id"], title: 'What changed since last review?', eyebrow: 'BFSI / KYC', line: 'The question isn’t “what do I know?” It’s “what changed?”', story: 'Business customer CUST-7788 is due for its periodic KYC re-review. Another desk’s agent reviewed it last quarter; since then exactly one thing changed: a new beneficiary. Your KYC agent, in a different system, has to decide what evidence to ask for.',
@@ -681,7 +681,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
         num: '1', unit: 'evidence request · 41 min', min: 41, why: 'The agent picks the 2026 review of this customer (not the 2025 one, not CUST-7789) and checks only what changed.'}
     },
     {
-      id: 'learned', ladder: ["The EU team’s root cause, written as it closes case 1", "Promoted from memory into shared knowledge for every application", "Checked against each case before reuse; a look-alike case is rejected",, "Each pattern-fit judgement, cited in the resolution note"], title: 'The organization learned', eyebrow: 'BFSI / Payments ops', line: 'Every silo pays once. With Meko, the organization pays once.', story: 'The same payment failure keeps arriving from different customers. The EU payments-ops team cracked case 1 after testing three hypotheses. Cases 2 and 3 land in your support app, a different application.',
+      id: 'learned', ladder: ["The EU team’s root cause, written as it closes case 1", "Promoted from memory into shared knowledge for every application", "Checked against each case before reuse; a look-alike case is rejected",, "Each pattern-fit judgement, cited in the resolution note"], title: 'The organization learned', eyebrow: 'BFSI / Payments ops', line: 'Every silo pays once. With Meko, the organization pays once.', story: 'The same payment failure keeps arriving from different customers. The EU payments-ops team cracked case 1 after testing every hypothesis. Cases 2 and 3 land in your support app, a different application.',
       a: {icon: 'globe', name: 'EU payments-ops agent', where: "Another team's application", does: 'Solves case 1 the hard way.'},
       b: {icon: 'person', name: 'Your support agents', where: 'Your support app', does: 'Handle cases 2 and 3.', yours: true},
       crosses: 'Nothing: another team', db: {text: '199 minutes for 3 cases (reuses its own lesson)', min: 199},
@@ -700,7 +700,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
       without: {plan: [['Restore investigation (nothing)', 'miss'], ['Redo deploy correlation', 'rework'], ['Redo database check', 'rework'], ['Verify connection pool', ''], ['Mitigate', '']],
         num: '2', unit: 'steps repeated · 80 min to mitigate', min: 80, why: 'Nothing survives the dead process, so the planner schedules the finished checks again.'},
       with: {plan: [['Restore investigation', 'ctx'], ['Verify connection pool', ''], ['Mitigate', '']],
-        num: '0', unit: 'steps repeated · 50 min', min: 50, why: 'The checkpoint is in Meko, not in the dead process. It survives even a server restart.'}
+        num: '0', unit: 'steps repeated · 50 min', min: 50, why: 'The checkpoint is in Meko, not in the dead process. With live Meko it survives even a server restart.'}
     },
     {
       id: 'catchup', ladder: ["Decisions and requests written by Claude Code, the PR bot and the incident bot", "ADR-194, the decision behind the retry contract", "The open request on PR-4821; the superseded draft and PR-4812 are passed over",, "The catch-up agent’s reading of the project context, in the PR case’s conversation"], title: 'I was on vacation. Catch me up.', eyebrow: 'SDLC / Code review', line: 'Your coding assistant remembers the project, not just the prompt.', story: 'A developer returns from two weeks off to a payment-retry pull request. Meanwhile a Claude Code session settled the retry design, the PR bot logged a reviewer’s request for a regression test, and the incident bot recorded a related outage. None of it is in the diff.',
@@ -784,7 +784,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
     `<tr><td>All six</td><td>Estimated minutes</td><td class="w">${total.without} min</td><td class="d">${total.db} min</td><td class="m">${total.with} min</td></tr>`;
   // Counted per-case differences × a month's volume: the defensible projection (no minutes, no prices).
   const VOLUME = 2000;
-  const PROJ = {support: 'customer re-asks avoided', incident: 'repeated investigation steps avoided', kyc: 'evidence requests avoided', loan: 'borrower re-asks avoided',
+  const PROJ = {support: 'customer re-asks avoided', incident: 'repeated investigation steps avoided', kyc: 'evidence requests avoided', loan: 'borrower re-explanations avoided',
     catchup: 'missed review requirements avoided', learned: 'hypothesis tests avoided (after the first case)'};
   const perCase = {learned: 3};  // steady state: without Meko 3 hypotheses per case, with Meko 0
   document.getElementById('projection').style.setProperty('--cases', CASES.length);
@@ -795,7 +795,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
     }).join('');
 
   document.getElementById('stats').innerHTML =
-    `<div class="stat"><b>${items('without')} → ${items('with')}</b><span>customer and borrower re-asks, repeated steps, evidence requests and missed requirements, counted from the plans</span></div>` +
+    `<div class="stat"><b>${items('without')} → ${items('with')}</b><span>customer re-asks, borrower re-explanations, repeated steps, evidence requests and missed requirements, counted from the plans</span></div>` +
     `<div class="stat est"><b>${total.without} → ${total.with}</b><span>estimated minutes across the six cases (illustrative per-step estimates)</span></div>`;
   document.querySelector('#ladderTable tbody').innerHTML = CASES.map(c => '<tr><td>' + esc(c.title) + '</td>' +
     c.ladder.map(x => x ? '<td>' + esc(x) + '</td>' : '<td class="na">Not this story’s focus</td>').join('') + '</tr>').join('');

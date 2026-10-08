@@ -69,7 +69,7 @@ public class StoryLedger {
         events.send(type, payload);
     }
     private volatile String outcome;
-    private volatile Object writingTask;
+    private final List<Object> writingTasks = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     public void phase(String phase) {
         this.phase = phase;
@@ -172,9 +172,12 @@ public class StoryLedger {
         return outcome;
     }
 
-    /** Text the story's last agent wants written for a human, handed to the response writer phase. */
+    /**
+     * Text an agent wants written for a human, handed to the response writer phase. A run that handles several cases
+     * (two loan applications) hands over one task each, written in order.
+     */
     public void handToWriter(Object task) {
-        this.writingTask = task;
+        writingTasks.add(task);
     }
 
     /**
@@ -197,8 +200,13 @@ public class StoryLedger {
         return auditTrail;
     }
 
+    /** The first task handed to the writer, or null. */
     public Object writingTask() {
-        return writingTask;
+        return writingTasks.isEmpty() ? null : writingTasks.getFirst();
+    }
+
+    public List<Object> writingTasks() {
+        return List.copyOf(writingTasks);
     }
 
     public int minutes() {

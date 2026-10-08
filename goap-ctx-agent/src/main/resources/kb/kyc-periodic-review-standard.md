@@ -13,7 +13,8 @@ latest review of exactly that customer id, not an older review and not a similar
 - Unchanged registered address and ownership need no new evidence.
 - A newly added beneficiary is a material change: request targeted source-of-funds evidence and sanctions screening
   for that beneficiary, and require a human reviewer's sign-off.
-- A material increase in expected monthly volume needs an explanation from the customer.
+- A material increase in expected monthly volume needs an explanation from the customer: monthly volume more than 25%
+  outside the previous band is material.
 
 ## KYC-STD-04 when there is no prior review
 

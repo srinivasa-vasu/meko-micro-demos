@@ -61,6 +61,11 @@ public class MekoMcpClient {
             .connectTimeout(Duration.ofSeconds(8))
             .build();
     private final Map<String, String> conversations = new ConcurrentHashMap<>();
+    private final Map<String, Object> creating = new ConcurrentHashMap<>();
+    /** Reads that change nothing, so a timeout or a server error can be retried once. */
+    private static final java.util.Set<String> IDEMPOTENT = java.util.Set.of("memory_search", "knowledgebase_search", "conversation_get", "artifact_get");
+    /** Calls that make model calls on Meko's side (fact extraction, summaries) get longer than the default. */
+    private static final java.util.Set<String> SLOW = java.util.Set.of("memory_add", "memory_update", "conversation_get");
     private final AtomicLong requestIds = new AtomicLong(1);
     private volatile boolean initialized;
     private volatile String mcpSessionId;
@@ -136,6 +141,15 @@ public class MekoMcpClient {
     public String conversation(String sessionKey, String title, Map<String, Object> metadata) throws Exception {
         String existing = conversations.get(sessionKey);
         if (existing != null) return existing;
+        // One create per key, even when a background writer and the agent reach a new key at the same moment.
+        synchronized (creating.computeIfAbsent(sessionKey, k -> new Object())) {
+            existing = conversations.get(sessionKey);
+            if (existing != null) return existing;
+            return create(sessionKey, title, metadata);
+        }
+    }
+
+    private String create(String sessionKey, String title, Map<String, Object> metadata) throws Exception {
         JsonNode created = callTool("conversation_create", args(
                 "agent_id", CONVERSATION_OWNER,
                 "session_id", sessionKey,
@@ -183,7 +197,15 @@ public class MekoMcpClient {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("name", tool);
         params.put("arguments", arguments);
-        JsonNode result = rpcResult(tool, post(mcpRequest("tools/call", params), true));
+        Duration timeout = Duration.ofSeconds(SLOW.contains(tool) ? 60 : 30);
+        JsonNode result;
+        try {
+            result = rpcResult(tool, post(mcpRequest("tools/call", params), true, timeout));
+        } catch (java.io.IOException | IllegalStateException e) {
+            boolean serverError = e instanceof IllegalStateException && String.valueOf(e.getMessage()).startsWith("Meko MCP HTTP 5");
+            if (!IDEMPOTENT.contains(tool) || (e instanceof IllegalStateException && !serverError)) throw e;
+            result = rpcResult(tool, post(mcpRequest("tools/call", params), true, timeout));
+        }
         String text = result.path("content").path(0).path("text").asString("");
         if (result.path("isError").asBoolean(false)) {
             throw new IllegalStateException(tool + " rejected the call: " + text);
@@ -214,7 +236,11 @@ public class MekoMcpClient {
     }
 
     private HttpResponse<String> post(String payload, boolean sessionAware) throws Exception {
-        HttpResponse<String> response = send(payload, sessionAware);
+        return post(payload, sessionAware, Duration.ofSeconds(30));
+    }
+
+    private HttpResponse<String> post(String payload, boolean sessionAware, Duration timeout) throws Exception {
+        HttpResponse<String> response = send(payload, sessionAware, timeout);
         if (response.statusCode() == 404 && sessionAware && mcpSessionId != null) {
             // The server dropped our MCP session (restart or idle expiry): re-initialise once and retry.
             synchronized (this) {
@@ -222,7 +248,7 @@ public class MekoMcpClient {
                 mcpSessionId = null;
             }
             ensureInitialized();
-            response = send(payload, true);
+            response = send(payload, true, timeout);
         }
         if (response.statusCode() >= 300) {
             throw new IllegalStateException("Meko MCP HTTP " + response.statusCode() + ": " + response.body());
@@ -230,9 +256,9 @@ public class MekoMcpClient {
         return response;
     }
 
-    private HttpResponse<String> send(String payload, boolean sessionAware) throws Exception {
+    private HttpResponse<String> send(String payload, boolean sessionAware, Duration timeout) throws Exception {
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(properties.getMcpUrl()))
-                .timeout(Duration.ofSeconds(30))
+                .timeout(timeout)
                 .header("Authorization", "Bearer " + properties.getApiKey())
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json, text/event-stream")

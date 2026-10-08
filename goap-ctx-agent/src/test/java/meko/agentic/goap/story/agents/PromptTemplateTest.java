@@ -24,10 +24,10 @@ class PromptTemplateTest {
     @ParameterizedTest
     @ValueSource(strings = {"support-known-facts", "support-policy", "sre-progress", "kyc-prior-review",
             "kyc-materiality", "sdlc-context", "payments-pattern-fit", "audit-record", "audit-compliance", "kyc-check-record", "kyc-check-standard",
-            "lending-known-facts", "lending-policy", "lending-credit-call", "lending-review-record", "lending-review-compliance"})
+            "lending-flags", "lending-precedent", "lending-share-ruling", "lending-policy", "lending-credit-call", "lending-review-record", "lending-review-compliance"})
     void everyDecisionRendersItsQuestionContextAndAnswerShape(String gate) {
         String prompt = DecisionService.prompt(strict, "SUP-TEST01", "decisions/" + gate,
-                Map.of("customer", "CUST-7788", "pr", "PR-4821", "transaction", "TX-10001", "review", "KYC-TEST01", "application", "APP-10001"), "CONTEXT-MARKER");
+                Map.of("customer", "CUST-7788", "pr", "PR-4821", "transaction", "TX-10001", "review", "KYC-TEST01", "application", "APP-10001", "flags", "deposit: a deposit", "evidence", "the bill of sale", "item", "evidence of a deposit's source", "kind", "a vehicle sale"), "CONTEXT-MARKER");
         assertThat(prompt).startsWith("[case SUP-TEST01] [decision " + gate + "]");
         assertThat(DecisionService.question(prompt)).isNotBlank();
         assertThat(prompt).contains("CONTEXT-MARKER").contains("Use ONLY the context");
@@ -63,9 +63,9 @@ class PromptTemplateTest {
 
     @Test
     void theBorrowerMessageGivesReasonsOnlyForADeclineAndApologisesOnlyForRepetition() {
-        assertThat(strict.renderLoadedTemplate("writer/borrower-credit-call", Map.of("reasked", 3, "decision", "approve")))
+        assertThat(strict.renderLoadedTemplate("writer/borrower-credit-call", Map.of("reexplained", 2, "decision", "approve")))
                 .contains("Apologise specifically").doesNotContain("adverse-action");
-        assertThat(strict.renderLoadedTemplate("writer/borrower-credit-call", Map.of("reasked", 0, "decision", "decline")))
+        assertThat(strict.renderLoadedTemplate("writer/borrower-credit-call", Map.of("reexplained", 0, "decision", "decline")))
                 .contains("adverse-action").contains("Do not apologise");
     }
 

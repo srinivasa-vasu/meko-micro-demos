@@ -12,6 +12,7 @@ import meko.agentic.goap.story.agents.PaymentFailureAgent;
 import meko.agentic.goap.story.agents.SreInvestigatorAgent;
 import meko.agentic.goap.story.agents.SreTakeoverAgent;
 import meko.agentic.goap.story.agents.SupportFrontlineAgent;
+import meko.agentic.goap.story.agents.UnderwriterAgent;
 import meko.agentic.goap.story.store.ContextStore;
 import meko.agentic.goap.story.store.ContextStores;
 import meko.agentic.goap.story.store.ReceiptLog;
@@ -52,6 +53,12 @@ public class StoryService {
     private volatile String reviewCycle = "1";
     /** The catch-up story's round: the agent's write-backs from earlier rounds are set aside, the request reopened. */
     private volatile String catchUpRound = "1";
+    /**
+     * The loan story's precedent set: credit-risk rulings promoted while it is current count as precedent, in this run
+     * and later ones, so a ruling is promoted once rather than per run. A reset starts a new set; rulings from earlier
+     * sets stay in shared knowledge (promoted knowledge cannot be deleted through MCP) but are set aside by their tag.
+     */
+    private volatile String precedentSet = Long.toString(System.currentTimeMillis(), 36);
     private final PullRequests pullRequests;
 
     public StoryService(StoryCatalog catalog, StoryRunner runner, StoryLedgers ledgers,
@@ -106,15 +113,15 @@ public class StoryService {
                 }
             }
             case "loan-underwriting" -> {
-                lastSubject.put(subjectKey(storyId, lane), loans.open(caseId).applicationId());
-                StoryRunner.Phase intake = runner.run("Loan-origination system · a vendor's product with its own store", "LoanIntakeAgent", ledger,
-                        new LoanIntakeAgent.LoanApplicationStart(caseId, otherSide));
-                phases.add(intake);
-                if (intake.result() instanceof LoanIntakeAgent.Referral referral) {
-                    // Only the referral crosses the boundary.
-                    phases.add(runner.run("Your credit underwriter · new agent process, given only the referral", "UnderwriterAgent", ledger,
-                            new LoanIntakeAgent.Referral(referral.caseId(), kind, referral.applicationId(), referral.note())));
-                }
+                // Two applications in turn. A credit-risk ruling promoted on the first is precedent for the second, and for
+                // later runs, until the precedent set is reset.
+                String precedents = precedentSet;
+                String first = loans.open(caseId).applicationId();
+                underwrite("Application 1", caseId, kind, otherSide, precedents, ledger, phases);
+                String second = loans.openNext(caseId).applicationId();
+                underwrite("Application 2, a later borrower", caseId, kind, otherSide, precedents, ledger, phases);
+                // The follow-up reviews both applications.
+                lastSubject.put(subjectKey(storyId, lane), first + SUBJECTS + second);
             }
             case "agent-died-2am" -> {
                 phases.add(investigate(caseId, otherSide, ledger));
@@ -138,6 +145,19 @@ public class StoryService {
         return assemble(story, lane, kind, caseId, ledger, phases);
     }
 
+    /** One loan application: the vendor's origination system takes it, then your underwriter, given the referral and its file. */
+    private void underwrite(String label, String caseId, ContextStore.Kind kind, ContextStore.Kind otherSide, String precedents,
+                            StoryLedger ledger, List<StoryRunner.Phase> phases) {
+        StoryRunner.Phase intake = runner.run(label + " · loan-origination system, a vendor's product with its own store", "LoanIntakeAgent", ledger,
+                new LoanIntakeAgent.LoanApplicationStart(caseId, otherSide));
+        phases.add(intake);
+        if (intake.result() instanceof LoanIntakeAgent.Referral referral) {
+            // The referral and the application file cross the boundary; the borrower's explanations do not.
+            phases.add(runner.run(label + " · your credit underwriter, new agent process, given the referral and the file", "UnderwriterAgent", ledger,
+                    new LoanIntakeAgent.Referral(referral.caseId(), kind, referral.applicationId(), referral.note(), referral.file(), precedents)));
+        }
+    }
+
     // ------------------------------------------------------------------
     // Follow-ups: someone accountable looks at a finished case later, given only its id, and reads the decision traces.
     // ------------------------------------------------------------------
@@ -159,15 +179,17 @@ public class StoryService {
         StoryCatalog.FollowUp followUp = story.followUp();
         ContextStore.Kind kind = stores.forLane(lane).kind();
         StoryLedger ledger = ledgers.forCase(caseId);
-        Object request = switch (followUp.agent()) {
-            case "DisputeAuditorAgent" -> new DisputeAuditorAgent.AuditRequest(caseId, kind, subject);
-            case "KycReviewCheckAgent" -> new KycReviewCheckAgent.CheckRequest(caseId, kind, subject);
-            case "FairLendingReviewAgent" -> new FairLendingReviewAgent.ReviewRequest(caseId, kind, subject);
-            default -> throw new IllegalStateException("No request shape for " + followUp.agent());
-        };
-        StoryRunner.Phase phase = runner.run(followUp.who() + " · later, given only " + followUp.subject() + " " + subject,
-                followUp.agent(), ledger, request);
-        return assemble(story, lane, kind, caseId, ledger, List.of(phase), followUp.headline());
+        List<StoryRunner.Phase> phases = new ArrayList<>();
+        for (String one : subject.split(SUBJECTS)) {
+            Object ask = switch (followUp.agent()) {
+                case "DisputeAuditorAgent" -> new DisputeAuditorAgent.AuditRequest(caseId, kind, one);
+                case "KycReviewCheckAgent" -> new KycReviewCheckAgent.CheckRequest(caseId, kind, one);
+                case "FairLendingReviewAgent" -> new FairLendingReviewAgent.ReviewRequest(caseId, kind, one);
+                default -> throw new IllegalStateException("No request shape for " + followUp.agent());
+            };
+            phases.add(runner.run(followUp.who() + " · later, given only " + followUp.subject() + " " + one, followUp.agent(), ledger, ask));
+        }
+        return assemble(story, lane, kind, caseId, ledger, phases, followUp.headline());
     }
 
     /** What {@code lane} last handled for {@code storyId}: the subject its follow-up looks at. */
@@ -180,6 +202,9 @@ public class StoryService {
         StoryCatalog.FollowUp followUp = catalog.get(storyId).followUp();
         return newCaseId(followUp == null ? storyId : followUp.caseKind());
     }
+
+    /** Separates the subjects of a run that handled several (the loan story's two applications). */
+    static final String SUBJECTS = ",";
 
     private static String subjectKey(String storyId, ContextStores.Lane lane) {
         return storyId + "|" + lane;
@@ -265,6 +290,23 @@ public class StoryService {
     }
 
     /**
+     * Starts a new precedent set for the loan story: rulings promoted in the current set are set aside, so the next
+     * application asks credit risk again and its ruling is promoted afresh.
+     */
+    public Map<String, Object> newPrecedentSet() {
+        String previous = precedentSet;
+        // How many rulings the set being closed holds, as Meko's shared knowledge returns them.
+        long rulings = stores.forLane(ContextStores.Lane.MEKO).searchKnowledge("precedent-reset", UnderwriterAgent.AGENT_ID,
+                        UnderwriterAgent.RULING_MARKER + " acceptable evidence " + UnderwriterAgent.precedentTag(previous))
+                .stream().filter(r -> r.text().contains(UnderwriterAgent.RULING_MARKER) && r.text().contains(UnderwriterAgent.precedentTag(previous))).count();
+        precedentSet = Long.toString(System.currentTimeMillis(), 36);
+        return Map.of("precedentSet", precedentSet, "note", "Started a new precedent set. "
+                + (rulings == 0 ? "No rulings had been promoted in the previous one" : rulings + " ruling" + (rulings == 1 ? "" : "s")
+                + " promoted in the previous set " + (rulings == 1 ? "is" : "are") + " set aside")
+                + ": the next application asks credit risk again.");
+    }
+
+    /**
      * Removes {@code agentId}'s own memories matching {@code stale} from every store this application writes to (Meko
      * and its own database); returns how many were removed. Never touches what another agent wrote.
      */
@@ -290,6 +332,7 @@ public class StoryService {
             case "organization-learned" -> resetLearning();
             case "what-changed" -> newReviewCycle();
             case "vacation-catch-up" -> reopenReviewRequest();
+            case "loan-underwriting" -> newPrecedentSet();
             default -> throw new IllegalArgumentException(catalog.get(storyId).title() + " has no reset.");
         };
     }
@@ -371,11 +414,17 @@ public class StoryService {
                       StoryLedger ledger, List<StoryRunner.Phase> storyPhases, List<List<String>> headline) {
         List<StoryRunner.Phase> phases = new ArrayList<>(storyPhases);
         // The story's last agent may hand text to be written for a human; which model writes it is planned.
-        if (ledger.writingTask() instanceof ResponseWriterAgent.WritingTask task) {
-            phases.add(runner.run("Response writer · model tier chosen by planner cost", "ResponseWriterAgent", ledger, task));
+        List<Object> tasks = ledger.writingTasks();
+        for (Object t : tasks) {
+            if (t instanceof ResponseWriterAgent.WritingTask task) {
+                phases.add(runner.run("Response writer · " + (tasks.size() > 1 ? task.purpose() + " · " : "") + "model tier chosen by planner cost",
+                        "ResponseWriterAgent", ledger, task));
+            }
         }
         // Writes that ran in the background (conversation turns, results written back) finish before the run reports.
+        long flushStart = System.nanoTime();
         stores.byKind(kind).flush(caseId);
+        long flushMillis = (System.nanoTime() - flushStart) / 1_000_000;
         List<ReceiptLog.Receipt> calls = receipts.forCase(caseId);
         List<ModelCallLog.ModelCall> models = modelCalls.forCase(caseId);
         Map<String, Object> metrics = new LinkedHashMap<>(ledger.counters());
@@ -387,7 +436,10 @@ public class StoryService {
         metrics.put("replans", phases.stream().mapToInt(p -> Math.max(0, p.plans().size() - 1)).sum());
         metrics.put("plannerCost", Math.round(phases.stream().mapToDouble(StoryRunner.Phase::plannedCost).sum() * 100) / 100.0);
         metrics.put("contextCalls", calls.size());
-        metrics.put("contextMillis", calls.stream().mapToLong(ReceiptLog.Receipt::millis).sum());
+        // Time the agents waited on the store: their own calls, plus waiting at the end for background writes to finish.
+        // Background writes run alongside the agents, so their durations are reported separately, not added in.
+        metrics.put("contextMillis", calls.stream().filter(r -> !r.background()).mapToLong(ReceiptLog.Receipt::millis).sum() + flushMillis);
+        metrics.put("contextBackgroundMillis", calls.stream().filter(ReceiptLog.Receipt::background).mapToLong(ReceiptLog.Receipt::millis).sum());
         metrics.put("contextFailures", calls.stream().filter(r -> !r.ok()).count());
         metrics.put("contextItemsUsed", ledger.found().size());
         metrics.put("contextItemsPassedOver", ledger.passedOver().size());
@@ -423,7 +475,7 @@ public class StoryService {
             case "dont-make-me-explain" -> "SUP";
             case "agent-died-2am" -> "INC";
             case "what-changed" -> "KYC";
-            case "vacation-catch-up" -> "PR";
+            case "vacation-catch-up" -> "CATCHUP";
             case "organization-learned" -> "PAY";
             case "loan-underwriting" -> "LOAN";
             case "lending-review" -> "FLR";

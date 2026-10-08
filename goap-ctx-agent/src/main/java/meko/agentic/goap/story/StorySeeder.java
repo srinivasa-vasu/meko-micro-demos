@@ -53,7 +53,8 @@ public class StorySeeder {
                             + "then check database saturation, then verify connection-pool saturation on the payments service before rolling back.", "RB-PAY-12"),
             new Seed(CURATOR, "KYC periodic review material change beneficiary",
                     "Demo KYC review standard: in a periodic re-review, compare against the previous assessment; unchanged address and ownership need no new evidence, "
-                            + "but a newly added beneficiary is a material change that requires targeted source-of-funds evidence and a human reviewer sign-off.", "KYC-STD-04"),
+                            + "but a newly added beneficiary is a material change that requires targeted source-of-funds evidence and a human reviewer sign-off; "
+                            + "monthly volume more than 25% outside the previous band is material.", "KYC-STD-04"),
             // Distractor: a look-alike policy for a different situation (issuer chargebacks).
             new Seed(CURATOR, "CARD-DISPUTE-03 chargeback policy",
                     "Demo policy CARD-DISPUTE-03: when the customer raises a chargeback through their card issuer, follow the card network's "
@@ -61,6 +62,11 @@ public class StorySeeder {
             new Seed(CURATOR, "LEND-UW-05 salaried personal loan underwriting policy",
                     "Demo policy LEND-UW-05: unsecured personal loans to salaried borrowers. Verify income from two recent pay stubs, employment with the employer, "
                             + "and assets from two months of bank statements; pull one credit report per application with consent, and reuse checks the origination system completed. "
+                            + "A single deposit larger than 25% of monthly income must be sourced; an employment gap longer than 30 days in the last two years needs a letter of explanation; "
+                            + "a condition the borrower already answered during origination is cleared from that record. "
+                            + "Acceptable evidence of a deposit's source: a gift letter, or a statement of the account the money came from. "
+                            + "Acceptable evidence for an employment gap: the employer's letter. Any other evidence needs a ruling from credit risk; "
+                            + "a ruling applies to later applications with the same kind of evidence. "
                             + "Credit score of at least 680. DTI up to 40% approve; above 40% and up to 45% approve only with at least 3 months of reserves; above 45% decline.", "LEND-UW-05"),
             // Distractor: a look-alike policy for a different borrower (self-employed).
             new Seed(CURATOR, "LEND-UW-09 self-employed personal loan underwriting policy",
