@@ -13,6 +13,7 @@ import meko.agentic.goap.story.store.StoreRecord;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 
 /**
@@ -23,13 +24,16 @@ import java.util.Map;
  */
 @Agent(planner = PlannerType.GOAP, description = "Payments investigator for a recurring card-payment failure")
 public class PaymentFailureAgent {
-    /** Your support app's investigator and curator; the EU payments-ops team's application writes under its own ids. */
+    /** The APAC payments desk's investigator and curator; the EU payments desk's application writes under its own ids. */
     public static final String AGENT_ID = "payments:investigator-agent";
     public static final String CURATOR_ID = "payments:knowledge-curator";
     public static final String EU_AGENT_ID = "eu-payments-ops:investigator-agent";
     public static final String EU_CURATOR_ID = "eu-payments-ops:knowledge-curator";
+    /** The two desks, as people read them: the one that sees the failure first, and the one that sees it next. */
+    public static final String EU_DESK = "EU desk";
+    public static final String APAC_DESK = "APAC desk";
 
-    /** Who investigates for {@code team} ("" for this application's own support team). */
+    /** Who investigates for {@code team} ("" for the APAC desk, this application). */
     static String investigator(String team) {
         return team == null || team.isBlank() ? AGENT_ID : EU_AGENT_ID;
     }
@@ -49,9 +53,18 @@ public class PaymentFailureAgent {
      * @param epoch learning epoch. Meko's MCP cannot currently remove promoted knowledge, so "reset learning"
      *              starts a new epoch and patterns learned in earlier epochs are ignored.
      */
-    /** @param team the team whose agent handles the case ("" for this application's own support team) */
+    /**
+     * @param team  the team whose agent handles the case ("" for the APAC desk, this application)
+     * @param share whether what the case teaches is promoted for others; off for a baseline run (the workshop's case
+     *              without the lesson), so the only lesson in the datapack is the one the EU desk promotes
+     */
     public record FailureCase(String caseId, ContextStore.Kind store, String customer, String transaction, String epoch,
-                              boolean duplicateSettled, String team) {
+                              boolean duplicateSettled, String team, boolean share) {
+        public FailureCase(String caseId, ContextStore.Kind store, String customer, String transaction, String epoch,
+                           boolean duplicateSettled, String team) {
+            this(caseId, store, customer, transaction, epoch, duplicateSettled, team, true);
+        }
+
         public FailureCase(String caseId, ContextStore.Kind store, String customer, String transaction, String epoch) {
             this(caseId, store, customer, transaction, epoch, false, "");
         }
@@ -67,7 +80,13 @@ public class PaymentFailureAgent {
      */
     public record Signals(String caseId, ContextStore.Kind store, String customer, String transaction, String epoch,
                           boolean duplicateSettled, String description, String team,
-                          boolean captureTimedOut, boolean captureQueued, int settledCaptures) {}
+                          boolean captureTimedOut, boolean captureQueued, int settledCaptures, boolean share) {
+        public Signals(String caseId, ContextStore.Kind store, String customer, String transaction, String epoch,
+                       boolean duplicateSettled, String description, String team,
+                       boolean captureTimedOut, boolean captureQueued, int settledCaptures) {
+            this(caseId, store, customer, transaction, epoch, duplicateSettled, description, team, captureTimedOut, captureQueued, settledCaptures, true);
+        }
+    }
 
     /** The model's judgement of whether the retrieved pattern fits this case. */
     public record PatternFit(Boolean applies, String reason) {}
@@ -107,7 +126,7 @@ public class PaymentFailureAgent {
         support.ledger(failure.caseId()).step(persona(failure.team()), "gatherSignals",
                 failure.customer() + " / " + failure.transaction() + ": " + description + ".", support.effort("payment-failure", "gather-signals"), StoryLedger.Kind.WORK);
         Signals signals = new Signals(failure.caseId(), failure.store(), failure.customer(), failure.transaction(), failure.epoch(),
-                failure.duplicateSettled(), description, failure.team(), timedOut, false, settled);
+                failure.duplicateSettled(), description, failure.team(), timedOut, false, settled, failure.share());
         note(signals, SIGNALS, "Gather gateway, ledger and settlement signals for " + failure.transaction(), description);
         return signals;
     }
@@ -144,11 +163,9 @@ public class PaymentFailureAgent {
                 "decisions/" + PATTERN_FIT,
                 Map.of(),
                 "Case signals: " + signals.description() + ".\n" + StorySupport.asContext("Learned pattern from shared knowledge", List.of(match)),
-                () -> fitsPattern(signals)
-                        ? new PatternFit(true, "Signals match every condition of the pattern.")
-                        : new PatternFit(false, "The pattern requires a capture timeout with no settled capture; here "
-                                + signals.settledCaptures() + " captures settled."),
-                "the gateway capture timed out and no capture settled, as the pattern states");
+                () -> misfit(signals, match.text()).map(why -> new PatternFit(false, why))
+                        .orElse(new PatternFit(true, "Signals match every condition the pattern states.")),
+                "the conditions the pattern's text states, checked against this case's signals");
         support.traceDecisions(support.store(signals.store()), signals.caseId(), investigator(signals.team()), signals.caseId(), persona(signals.team()));
         if (!Boolean.TRUE.equals(fit.applies())) {
             ledger.step(persona(signals.team()), "lookUpKnownPatterns",
@@ -165,9 +182,27 @@ public class PaymentFailureAgent {
         return new PatternLookup(signals.caseId(), true, match.text(), match.writtenBy(), null);
     }
 
-    /** The learned pattern's conditions: the gateway capture timed out and no capture settled. */
-    static boolean fitsPattern(Signals signals) {
-        return signals.captureTimedOut() && signals.settledCaptures() == 0;
+    /**
+     * Why the learned pattern does not fit this case, from the conditions its own text states; empty if it fits. A pattern
+     * that states no condition this agent can check does not fit: retrieval is not reuse.
+     */
+    static Optional<String> misfit(Signals signals, String patternText) {
+        String text = patternText == null ? "" : patternText.toLowerCase();
+        boolean needsTimeout = text.matches("(?s).*capture (times|timed) out.*");
+        boolean needsNothingSettled = text.matches("(?s).*(no settlement exists|no capture is settled|no settled capture|nothing settled).*");
+        if (!needsTimeout && !needsNothingSettled) return Optional.of("the pattern states no condition this case's signals can be checked against.");
+        List<String> failed = new ArrayList<>();
+        if (needsTimeout && !signals.captureTimedOut()) failed.add("it requires a capture timeout; none was logged");
+        if (needsNothingSettled && signals.settledCaptures() > 0) failed.add("it requires no settled capture; here " + signals.settledCaptures() + " settled");
+        return failed.isEmpty() ? Optional.empty() : Optional.of(String.join("; ", failed) + ".");
+    }
+
+    /** The root cause a learned pattern names, from its id ("LEARNED PATTERN gateway-capture-timeout"). */
+    static String rootCauseOf(String patternText) {
+        java.util.regex.Matcher id = java.util.regex.Pattern.compile("LEARNED PATTERN ([a-z0-9-]+)").matcher(patternText == null ? "" : patternText);
+        String slug = id.find() ? id.group(1) : "";
+        return slug.contains("capture-timeout") ? CAPTURE_TIMEOUT : slug.contains("duplicate") ? DUPLICATE_CAPTURE
+                : slug.contains("delayed") ? DELAYED_CAPTURE : UNDETERMINED;
     }
 
     @Action(description = "Validate the learned pattern against this case's signals", pre = {"patternKnown"},
@@ -175,12 +210,13 @@ public class PaymentFailureAgent {
     public Diagnosis validateKnownPattern(Signals signals, PatternLookup lookup) {
         String evidence = "gateway capture timeout " + (signals.captureTimedOut() ? "logged" : "not logged")
                 + ", " + signals.settledCaptures() + " settled capture" + (signals.settledCaptures() == 1 ? "" : "s");
-        boolean holds = fitsPattern(signals);
+        // Validation re-checks the pattern's stated conditions on the evidence just gathered; the diagnosis is the cause it names.
+        boolean holds = misfit(signals, lookup.pattern()).isEmpty() && !UNDETERMINED.equals(rootCauseOf(lookup.pattern()));
         support.ledger(signals.caseId()).step(persona(signals.team()), "validateKnownPattern",
                 (holds ? "Validated the learned pattern: " : "The learned pattern did not hold on validation: ") + evidence + ".",
                 support.effort("payment-failure", "validate-known-pattern"), StoryLedger.Kind.WORK);
         note(signals, VALIDATED, "Validate the learned pattern against this case's signals", (holds ? "holds: " : "does not hold: ") + evidence);
-        return new Diagnosis(signals.caseId(), holds ? CAPTURE_TIMEOUT : null, true, List.of(), evidence);
+        return new Diagnosis(signals.caseId(), holds ? rootCauseOf(lookup.pattern()) : null, true, List.of(), evidence);
     }
 
     @Action(description = "Test each hypothesis from scratch", pre = {"patternUnknown"}, post = {"diagnosed"},
@@ -229,6 +265,7 @@ public class PaymentFailureAgent {
             case CAPTURE_TIMEOUT -> "Provisional refund issued and capture voided";
             default -> "Escalated to payments operations";
         }) + "; root cause: " + diagnosis.rootCause() + ".";
+        support.ledger(diagnosis.caseId()).count(UNDETERMINED.equals(diagnosis.rootCause()) ? "handedToPerson" : "decided", 1);
         support.ledger(diagnosis.caseId()).step(persona(signals.team()), "resolve", outcome, support.effort("payment-failure", "resolve"), StoryLedger.Kind.WORK);
         note(signals, RESOLUTION, "Resolve the failed payment " + signals.transaction(), outcome);
         return new Resolution(diagnosis.caseId(), diagnosis.rootCause(), outcome, diagnosis.fromPattern());
@@ -243,6 +280,9 @@ public class PaymentFailureAgent {
         boolean published = false;
         if (!resolution.fromPattern() && !CAPTURE_TIMEOUT.equals(resolution.rootCause())) {
             ledger.step(persona(signals.team()), "closeAndShare", "Closed the case. A one-off " + resolution.rootCause() + ": no new pattern published.", support.effort("payment-failure", "close-case"), StoryLedger.Kind.WORK);
+        } else if (!resolution.fromPattern() && !signals.share()) {
+            ledger.step(persona(signals.team()), "closeAndShare", "Closed the case. A baseline run: what it found is not promoted, so the only lesson in reach later is another desk's.",
+                    support.effort("payment-failure", "close-case"), StoryLedger.Kind.WORK);
         } else if (!resolution.fromPattern() && store.kind() != ContextStore.Kind.NONE) {
             String learning = PATTERN_MARKER + ": when card authorization succeeds but the gateway capture times out and no settlement exists, "
                     + "it is not a duplicate charge or a delayed capture. Validate that capture identifiers differ and no capture is settled, "
@@ -265,7 +305,7 @@ public class PaymentFailureAgent {
         // Everything below is what this run actually did, read back from its own records.
         // How the reuse decision was made, from the decision recorded at the gate.
         ledger.decisions().stream().filter(d -> d.gate().equals(PATTERN_FIT)).forEach(d ->
-                facts.add("Pattern-fit decision: " + d.answer() + " (decided by " + d.decidedBy() + ", reading " + d.context() + ")"));
+                facts.add("Pattern-fit decision: " + d.answer() + " (" + d.how() + ")"));
         if (lookup.rejectedReason() != null) {
             facts.add("A learned pattern published by " + lookup.writtenBy() + " was retrieved but rejected: " + lookup.rejectedReason());
         }
@@ -295,7 +335,7 @@ public class PaymentFailureAgent {
     private static final String LOOKUP_ASK = "Look for a learned pattern matching these signals in shared knowledge";
 
     static String persona(String team) {
-        return team == null || team.isBlank() ? "Payments investigator" : "Payments investigator (" + team + ")";
+        return "Payments investigator (" + (team == null || team.isBlank() ? APAC_DESK : team) + ")";
     }
 
     static String epochTag(String epoch) {

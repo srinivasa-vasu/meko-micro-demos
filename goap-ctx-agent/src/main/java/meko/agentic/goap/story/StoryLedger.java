@@ -43,7 +43,16 @@ public class StoryLedger {
     public record Passed(String source, String text, String writtenBy, String reason) {}
 
     /** A judgement made at a gate, by a model reading the agent's context or by the fallback rule. */
-    public record Decision(String persona, String gate, String question, String answer, String decidedBy, String context, boolean byModel) {}
+    /** @param read the context the decision read (cut to a few thousand characters): which retrieved items it rested on */
+    public record Decision(String persona, String gate, String question, String answer, String decidedBy, String context, boolean byModel, String read) {
+        /**
+         * Who decided, as a record states it; for a model, also how much it was given. A rule reads no tokens, so none
+         * are claimed for it (the figure is an estimate: the context's length / 4).
+         */
+        public String how() {
+            return "decided by " + decidedBy + (byModel ? ", given about " + context : "");
+        }
+    }
 
     private final List<Step> steps = Collections.synchronizedList(new ArrayList<>());
     private final List<Line> transcript = Collections.synchronizedList(new ArrayList<>());

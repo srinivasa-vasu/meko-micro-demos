@@ -134,7 +134,14 @@ public class UnderwriterAgent {
     private final DecisionService decisions;
     private final KnowledgeDocuments documents;
 
-    public UnderwriterAgent(StorySupport support, DecisionService decisions, KnowledgeDocuments documents) {
+    /** As in {@link PaymentsSpecialistAgent}: in the workshop, an escalation for a missing policy is not answered. */
+    private final boolean escalationsAnswered;
+    /** How a ruling request nobody has answered yet is recorded. */
+    public static final String RULING_PENDING = "ruling pending with credit risk";
+
+    public UnderwriterAgent(StorySupport support, DecisionService decisions, KnowledgeDocuments documents,
+                            @org.springframework.beans.factory.annotation.Value("${goap.escalation.answered:true}") boolean escalationsAnswered) {
+        this.escalationsAnswered = escalationsAnswered;
         this.support = support;
         this.decisions = decisions;
         this.documents = documents;
@@ -213,11 +220,14 @@ public class UnderwriterAgent {
         ledger.say(PERSONA, "I need credit risk to send the policy for this application.");
         ledger.step(PERSONA, "escalateForPolicy", "Waited on credit risk to send the applicable policy.",
                 support.effort("underwriter", "escalate-for-policy"), StoryLedger.Kind.ASK);
-        // The simulated credit-risk team owns the policy documents and sends the one that covers the application.
-        Optional<KnowledgeDocuments.Document> doc = documents.all().stream().filter(d -> covers(d.markdown(), file)).findFirst();
+        // The simulated credit-risk team owns the policy documents and sends the one that covers the application; in the
+        // workshop nobody answers, so with no written policy in reach the call goes to a human underwriter.
+        Optional<KnowledgeDocuments.Document> doc = escalationsAnswered
+                ? documents.all().stream().filter(d -> covers(d.markdown(), file)).findFirst() : Optional.empty();
         List<StoreRecord> sent = doc.map(d -> d.chunks().stream().map(c -> new StoreRecord(d.key(), c, CREDIT_RISK, "", d.filename())).toList()).orElse(List.of());
         String policy = doc.map(KnowledgeDocuments.Document::key).orElse(null);
-        ledger.say("Credit risk", policy == null ? "There is no written policy for this; refer it to a human underwriter." : "Attached: " + policy + ".");
+        ledger.say("Credit risk", policy == null ? (escalationsAnswered ? "There is no written policy for this; refer it to a human underwriter."
+                : "We'll look at it; refer the application to a human underwriter for now.") : "Attached: " + policy + ".");
         PolicyLookup confirmed = new PolicyLookup(file.caseId(), policy, sent, CREDIT_RISK, policy == null ? "no written policy covers this application" : SENT_ON_REQUEST);
         support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.applicationId(), POLICY, null,
                 "Apply the underwriting policy for " + file.applicationId(), (policy == null ? "none" : policy) + ": " + confirmed.reason());
@@ -404,6 +414,13 @@ public class UnderwriterAgent {
             ledger.step(PERSONA, "requestRuling", "Waited on credit risk to rule on " + f.evidence() + " as " + ITEM_PHRASE.get(f.id()) + ".",
                     support.effort("underwriter", "request-ruling"), StoryLedger.Kind.ASK);
             ledger.count("rulingsRequested", 1);
+            if (!escalationsAnswered) {
+                // Nobody answers (the workshop): the condition stays with credit risk, and the credit call can only refer.
+                ledger.say("Credit risk", "We'll review it and get back to you.");
+                support.recordEvent(store, file.caseId(), AGENT_ID, file.applicationId(), RULING, null, question, RULING_PENDING);
+                flags.set(i, f.cleared(RULING_PENDING + ": " + f.evidence() + " for the " + f.id()));
+                continue;
+            }
             // The simulated credit-risk team rules on the kind of evidence, not on the borrower: no application, no amounts.
             String ruling = RULING_MARKER + lookup.policy() + ": " + f.evidence() + " is acceptable " + ITEM_PHRASE.get(f.id())
                     + (f.kind() == null ? "" : " for " + f.kind()) + ". " + precedentTag(file.precedents());
@@ -444,7 +461,8 @@ public class UnderwriterAgent {
 
     private Flag clear(ApplicationFile file, Flag f, String accepted) {
         String how = f.explained() + "; " + EVIDENCE_ACCEPTED + accepted;
-        support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.applicationId(), CONDITION_CLEARED, null,
+        // The item cleared is named in the tag too, which every reader gets back, whatever the store returns as the input.
+        support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.applicationId(), CONDITION_CLEARED, f.id(),
                 "Clear the condition on " + f.description(), how);
         return f.cleared(how);
     }
@@ -507,7 +525,10 @@ public class UnderwriterAgent {
                 () -> lookup.policy() == null || thresholds.isPresent() ? Optional.of(byRule.get()) : Optional.empty(),
                 lookup.policy() == null ? "no written policy: the call is refer" : "the policy's thresholds, compared exactly with the file's figures",
                 byRule, ai);
-        String decision = lookup.policy() == null ? "refer" : normalize(judgement.decision());
+        // A condition still waiting on a credit-risk ruling leaves only one call: refer, saying which.
+        List<String> pending = file.flags().stream().map(Flag::clearedFrom).filter(c -> c != null && c.startsWith(RULING_PENDING)).toList();
+        String decision = lookup.policy() == null || !pending.isEmpty() ? "refer" : normalize(judgement.decision());
+        if (!pending.isEmpty()) judgement = new CallJudgement("refer", judgement.thresholdsApplied(), String.join("; ", pending) + ": refer to a human underwriter");
         boolean sent = CREDIT_RISK.equals(lookup.writtenBy());
         String outcome = file.applicationId() + ": " + decision + " under " + (lookup.policy() == null ? "no written policy" : lookup.policy())
                 + (sent && lookup.policy() != null ? " (" + SENT_ON_REQUEST + ")" : "") + ". " + judgement.reason() + ".";
@@ -518,6 +539,7 @@ public class UnderwriterAgent {
                         + ". " + FACTORS + affordability.factors() + ".");
         store.rememberLater(file.caseId(), AGENT_ID, "Loan application " + file.applicationId() + " underwritten: " + outcome.substring(outcome.indexOf(": ") + 2));
         ledger.step(PERSONA, "makeCreditCall", outcome, support.effort("underwriter", "make-credit-call"), StoryLedger.Kind.WORK);
+        ledger.count("refer".equals(decision) ? "handedToPerson" : "decided", 1);
         ledger.outcome(ledger.outcome() == null ? outcome : ledger.outcome() + " " + outcome);
         List<String> facts = new ArrayList<>(List.of(
                 file.referral(),

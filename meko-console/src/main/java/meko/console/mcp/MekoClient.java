@@ -144,6 +144,108 @@ public class MekoClient {
     }
 
     // ------------------------------------------------------------------
+    // Raw call templates
+    // ------------------------------------------------------------------
+
+    /** Arguments that are needed in practice whatever the schema says — when the tool has them. */
+    private static final List<String> CONTEXT_ARGS =
+            List.of("conversation_id", "datapack_id", "agent_id");
+
+    public record ToolTemplate(String tool, String resolvedTool, Map<String, Object> arguments,
+                               List<String> required, List<String> optional, String error) {}
+
+    /**
+     * A starting argument set for a raw call, built from the tool's own input schema.
+     * <p>
+     * The schema decides WHICH arguments exist: every tool rejects unknown ones, so a template
+     * carrying an argument the schema lacks would fail before testing anything — datapack_list
+     * has no agent_id, and gets none. The schema does NOT decide which are needed: it marks
+     * conversation_id optional where the server requires it. So the template holds the schema's
+     * required arguments plus conversation_id, datapack_id and agent_id wherever the tool has
+     * them, filled with the live values this console uses. Everything else is listed as optional
+     * rather than sent, since an argument you did not mean to test muddies the answer.
+     */
+    public ToolTemplate template(String tool, String datapackId) {
+        var callback = Arrays.stream(provider.getToolCallbacks())
+                .filter(c -> matches(c.getToolDefinition().name(), tool))
+                .findFirst()
+                .orElse(null);
+        if (callback == null) {
+            return new ToolTemplate(tool, null, Map.of(), List.of(), List.of(),
+                    "Tool not registered.");
+        }
+        var schema = parse(callback.getToolDefinition().inputSchema());
+        var properties = schema == null ? null : schema.get("properties");
+        if (properties == null || !properties.isObject()) {
+            return new ToolTemplate(tool, callback.getToolDefinition().name(), Map.of(),
+                    List.of(), List.of(), null);
+        }
+        var required = new ArrayList<String>();
+        if (schema.has("required")) {
+            schema.get("required").values().forEach(n -> required.add(n.asString()));
+        }
+        // The one tool where conversation_id is genuinely optional, and better left out.
+        var skipConversation = tool.endsWith("conversation_list");
+
+        var args = new LinkedHashMap<String, Object>();
+        var optional = new ArrayList<String>();
+        for (var name : properties.propertyNames()) {
+            var include = required.contains(name)
+                    || CONTEXT_ARGS.contains(name)
+                    && !(skipConversation && name.equals("conversation_id"));
+            if (include) {
+                args.put(name, placeholder(name, properties.get(name), datapackId));
+            } else {
+                optional.add(name);
+            }
+        }
+        return new ToolTemplate(tool, callback.getToolDefinition().name(), args,
+                List.copyOf(required), List.copyOf(optional), null);
+    }
+
+    private Object placeholder(String name, JsonNode property, String datapackId) {
+        var hasDatapack = datapackId != null && !datapackId.isBlank();
+        switch (name) {
+            case "conversation_id" -> {
+                return conversationFor(hasDatapack ? datapackId : "");
+            }
+            case "datapack_id" -> {
+                return hasDatapack ? datapackId : "<datapack_id>";
+            }
+            case "agent_id" -> {
+                return agentId;
+            }
+            default -> { }
+        }
+        var type = typeOf(property);
+        var fallback = property.get("default");
+        return switch (type) {
+            case "integer", "number" -> fallback != null && fallback.isNumber()
+                    ? fallback.numberValue() : 0;
+            case "boolean" -> fallback != null && fallback.isBoolean() && fallback.asBoolean();
+            case "array" -> List.of("<" + name + ">");
+            case "object" -> Map.of();
+            default -> "<" + name + ">";
+        };
+    }
+
+    /** The schema type, looking through anyOf [T, null] to T. */
+    private String typeOf(JsonNode property) {
+        if (property.has("type") && property.get("type").isString()) {
+            return property.get("type").asString();
+        }
+        if (property.has("anyOf")) {
+            for (var option : property.get("anyOf").values()) {
+                var t = option.get("type");
+                if (t != null && t.isString() && !t.asString().equals("null")) {
+                    return t.asString();
+                }
+            }
+        }
+        return "string";
+    }
+
+    // ------------------------------------------------------------------
     // Conversations. Everything needs one, so this comes first.
     // ------------------------------------------------------------------
 
@@ -368,6 +470,45 @@ public class MekoClient {
         return conversationFor(datapackId);
     }
 
+    /**
+     * One memory by id.
+     * <p>
+     * Answers with the bare memory object rather than a collection, so the generic row extractor
+     * finds nothing; read it as a single row instead.
+     */
+    public McpCall getMemory(String datapackId, String memoryId, String asAgent) {
+        var call = call("memory_get_by_id", datapackId, asAgent, Map.of(
+                "memory_id", memoryId, "datapack_id", datapackId));
+        if (!call.ok() || !call.rows().isEmpty()) {
+            return call;
+        }
+        var row = singleRow(call.raw());
+        return row == null ? call : call.withRows(List.of(row));
+    }
+
+    /**
+     * Retrieval across the conversation cache, memory and the knowledge base in one call.
+     * <p>
+     * Each source answers in its own bucket and has its own floor: memory keeps the FULL mem0
+     * list on "auto" where memory_search drops rows below its min score, and the knowledge base
+     * gets an absolute cutoff knowledgebase_search lacks. The same query returning different
+     * rows here than from the single-source tools is expected, and it is the comparison worth
+     * making. force_source="memory" reapplies the floor.
+     */
+    public McpCall searchContext(String datapackId, String query, int limit, String forceSource,
+                                 String asAgent) {
+        var args = new LinkedHashMap<String, Object>();
+        args.put("query", query);
+        args.put("datapack_id", datapackId);
+        args.put("limit", limit);
+        if (forceSource != null && !forceSource.isBlank()) {
+            args.put("force_source", forceSource);
+        }
+        var call = call("context_search", datapackId, asAgent, args);
+        var buckets = buckets(call.raw());
+        return buckets.isEmpty() ? call : call.withBuckets(buckets);
+    }
+
     public McpCall searchKnowledge(String datapackId, String query, int limit, String asAgent) {
         return call("knowledgebase_search", datapackId, asAgent, Map.of(
                 "query", query, "datapack_id", datapackId, "limit", limit));
@@ -418,35 +559,129 @@ public class MekoClient {
         }
         // datapack_list answers with a bare array, not a named collection.
         var collection = holder != null ? holder.get(key) : bareArray(parsed);
+        return rowsOf(collection);
+    }
+
+    private List<MekoRow> rowsOf(JsonNode collection) {
         if (collection == null || !collection.isArray()) {
             return List.of();
         }
-
         var out = new ArrayList<MekoRow>();
         for (var row : collection.values()) {
-            if (!row.isObject()) {
-                continue;
+            var parsed = rowOf(row);
+            if (parsed != null) {
+                out.add(parsed);
             }
-            var id = Optional.ofNullable(text(row, "id"))
-                    .or(() -> Optional.ofNullable(text(row, "memory_id")))
-                    .or(() -> Optional.ofNullable(text(row, "datapack_id")))
-                    .orElse(null);
-            var payload = payloadOf(row);
-            if (id == null && payload == null) {
-                continue;
-            }
-            out.add(new MekoRow(
-                    id,
-                    payload,
-                    row.has("score") ? row.get("score").asDouble() : MekoRow.UNRANKED,
-                    row.has("raw_similarity_score")
-                            ? row.get("raw_similarity_score").asDouble() : MekoRow.UNRANKED,
-                    Optional.ofNullable(text(row, "agent_id")).orElse(""),
-                    Optional.ofNullable(text(row, "created_at"))
-                            .or(() -> Optional.ofNullable(text(row, "promoted_to_kb_at")))
-                            .orElse("")));
         }
         return List.copyOf(out);
+    }
+
+    private MekoRow rowOf(JsonNode row) {
+        if (row == null || !row.isObject()) {
+            return null;
+        }
+        var id = Optional.ofNullable(text(row, "id"))
+                .or(() -> Optional.ofNullable(text(row, "memory_id")))
+                .or(() -> Optional.ofNullable(text(row, "datapack_id")))
+                .orElse(null);
+        var payload = payloadOf(row);
+        if (id == null && payload == null) {
+            return null;
+        }
+        return new MekoRow(
+                id,
+                payload,
+                row.has("score") ? row.get("score").asDouble() : MekoRow.UNRANKED,
+                row.has("raw_similarity_score")
+                        ? row.get("raw_similarity_score").asDouble() : MekoRow.UNRANKED,
+                Optional.ofNullable(text(row, "agent_id")).orElse(""),
+                Optional.ofNullable(text(row, "created_at"))
+                        .or(() -> Optional.ofNullable(text(row, "promoted_to_kb_at")))
+                        .orElse(""));
+    }
+
+    /** A response that is one bare object (memory_get_by_id), read as a row. */
+    MekoRow singleRow(String raw) {
+        var node = unwrap(parse(raw));
+        return node != null && node.isObject() && errorIn(raw) == null ? rowOf(node) : null;
+    }
+
+    /**
+     * Rows per source, for a response made of labelled buckets.
+     * <p>
+     * Bucket names are read off the response, not hard-coded: every field of the payload object
+     * that holds a list — directly, or as the one list inside a nested object — is a bucket,
+     * named by its field. An EMPTY list is still a bucket. "That source found nothing" is an
+     * answer, and dropping it would make two sources look like the whole response.
+     */
+    Map<String, List<MekoRow>> buckets(String raw) {
+        var root = unwrap(parse(raw));
+        var out = new LinkedHashMap<String, List<MekoRow>>();
+        if (root == null || !root.isObject()) {
+            return out;
+        }
+        for (var name : root.propertyNames()) {
+            var list = listIn(root.get(name));
+            if (list != null) {
+                out.put(name, rowsOf(list));
+            }
+        }
+        return out;
+    }
+
+    /** The list a bucket holds: the node itself, or a known collection or sole list inside it. */
+    private JsonNode listIn(JsonNode node) {
+        if (node == null) {
+            return null;
+        }
+        if (node.isString()) {
+            var nested = parse(node.stringValue());
+            return nested != null && (nested.isArray() || nested.isObject()) ? listIn(nested) : null;
+        }
+        if (node.isArray()) {
+            return node;
+        }
+        if (!node.isObject()) {
+            return null;
+        }
+        for (var key : COLLECTIONS) {
+            if (node.has(key) && node.get(key).isArray()) {
+                return node.get(key);
+            }
+        }
+        JsonNode only = null;
+        for (var child : node.values()) {
+            if (child.isArray()) {
+                if (only != null) {
+                    return null;
+                }
+                only = child;
+            }
+        }
+        return only;
+    }
+
+    /**
+     * Peel transport framing — SSE data, MCP text content, a {"result": "..."} envelope — down
+     * to the tool's own JSON.
+     */
+    private JsonNode unwrap(JsonNode node) {
+        while (node != null) {
+            if (node.isString()) {
+                node = parse(node.stringValue());
+            } else if (node.isArray() && node.size() == 1 && node.get(0).has("text")) {
+                node = node.get(0).get("text");
+            } else if (node.isObject() && node.size() == 1
+                    && (node.has("result") || node.has("text"))) {
+                node = node.values().iterator().next();
+            } else if (node.isObject() && node.has("content") && node.get("content").isArray()
+                    && node.get("content").size() == 1) {
+                node = node.get("content").get(0).get("text");
+            } else {
+                return node;
+            }
+        }
+        return null;
     }
 
     /**

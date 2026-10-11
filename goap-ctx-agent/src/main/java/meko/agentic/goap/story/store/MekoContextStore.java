@@ -22,6 +22,8 @@ public class MekoContextStore implements ContextStore {
 
     private final MekoMcpClient meko;
     private final ReceiptLog receipts;
+    /** The text of memories each case wrote, by id, until promoted or the case is flushed: what a promotion moved. */
+    private final Map<String, Map<String, String>> rememberedText = new java.util.concurrent.ConcurrentHashMap<>();
     private final OutageSwitch outage;
 
     /*
@@ -43,6 +45,12 @@ public class MekoContextStore implements ContextStore {
         this.meko = meko;
         this.receipts = receipts;
         this.outage = outage;
+        // Another datapack: what is still queued for this one is written to it first, and nothing cached carries over.
+        meko.beforeDatapackSwitch(() -> {
+            pendingByCase.values().forEach(list -> list.forEach(java.util.concurrent.CompletableFuture::join));
+            knowledgeCache.clear();
+            rememberedText.clear();
+        });
     }
 
     @Override
@@ -61,16 +69,42 @@ public class MekoContextStore implements ContextStore {
         background(caseId, thread, () -> writeTurn(caseId, agentId, thread, input, output, reasoning));
     }
 
+    /**
+     * Meko extracts memories from a turn's input side, so an agent's own record carries a short label as its input; the
+     * request it answers travels in the turn's metadata and is restored as the input when the conversation is read.
+     */
+    @Override
+    public void addRecord(String caseId, String agentId, String thread, String label, String request, String output, String reasoning) {
+        background(caseId, thread, () -> writeTurn(caseId, agentId, thread, label, request, output, reasoning));
+    }
+
     private void writeTurn(String caseId, String agentId, String thread, String input, String output, String reasoning) {
+        writeTurn(caseId, agentId, thread, input, null, output, reasoning);
+    }
+
+    private void writeTurn(String caseId, String agentId, String thread, String input, String request, String output, String reasoning) {
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>(Map.of("caseId", caseId, "agent", agentId));
+        if (request != null) metadata.put(REQUEST, request);
+        // An agent's record: Meko extracts memories from a turn's input, and even a short label ("KYC-4F6AA1 · evidence
+        // requested") came back as memories ("the user's KYC case is at 'evidence requested'") that crowd out real ones
+        // in searches. The input is a constant with nothing to extract; the label travels in the metadata.
+        String sent = input;
+        if (request != null) {
+            metadata.put(LABEL, input);
+            sent = RECORD_INPUT;
+        }
+        String sentInput = sent;
         call(caseId, agentId, "conversation_add_message", "[" + thread + "] " + abbreviate(reasoning != null ? reasoning : input), () -> {
             meko.callTool("conversation_add_message", meko.args(
                     "conversation_id", thread(thread),
                     "agent_id", MekoMcpClient.CONVERSATION_OWNER,
-                    "input", input,
+                    "input", sentInput,
                     "output", output,
                     "reasoning", reasoning,
-                    "metadata", meko.json(Map.of("caseId", caseId, "agent", agentId)),
+                    "metadata", meko.json(metadata),
                     "datapack_id", meko.datapack()));
+            receipts.wrote(caseId, new ReceiptLog.Written(agentId, request != null ? "record" : "turn", request != null ? input : thread,
+                    (request != null ? request : input) + " → " + output));
             return new Result<>(null, 1);
         });
     }
@@ -91,7 +125,8 @@ public class MekoContextStore implements ContextStore {
                 String input = text(message.path("input"));
                 String reasoning = text(message.path("reasoning"));
                 String why = reasoning == null || reasoning.isBlank() ? null : reasoning;
-                turns.add(new Turn(input, text(message.path("output")), writer(message, why), why));
+                String request = metadata(message).map(m -> m.path(REQUEST).asString(null)).orElse(null);
+                turns.add(new Turn(request != null ? request : input, text(message.path("output")), writer(message, why), why));
             }
             return new Result<>(List.copyOf(turns), turns.size());
         }, List.of());
@@ -107,16 +142,28 @@ public class MekoContextStore implements ContextStore {
         return node.isString() ? node.asString("") : node.toString();
     }
 
-    /** Who wrote a message: its metadata when Meko returns it, else the agent id that leads a tagged record. */
-    private String writer(JsonNode message, String reasoning) {
+    /** Where an agent's record keeps the request it answers (its input in Meko is a short label). */
+    static final String REQUEST = "request";
+    /** Where an agent's record keeps its label, and what it sends as its input instead (nothing to extract a memory from). */
+    static final String LABEL = "label";
+    static final String RECORD_INPUT = "(agent record)";
+
+    /** A message's metadata as an object, whether Meko returns it as an object or as a JSON string. */
+    private Optional<JsonNode> metadata(JsonNode message) {
         JsonNode metadata = message.path("metadata");
         if (metadata.isString()) {
             try {
                 metadata = meko.objectMapper().readTree(metadata.asString());
             } catch (RuntimeException e) {
-                metadata = null;
+                return Optional.empty();
             }
         }
+        return metadata.isObject() ? Optional.of(metadata) : Optional.empty();
+    }
+
+    /** Who wrote a message: its metadata when Meko returns it, else the agent id that leads a tagged record. */
+    private String writer(JsonNode message, String reasoning) {
+        JsonNode metadata = metadata(message).orElse(null);
         String agent = metadata == null ? null : metadata.path("agent").asString(null);
         if (agent != null && !agent.isBlank()) return agent;
         return new Turn("", "", "", reasoning).taggedBy().orElse("unknown");
@@ -124,12 +171,17 @@ public class MekoContextStore implements ContextStore {
 
     @Override
     public List<StoreRecord> recallCase(String caseId, String agentId, String query) {
-        return search(caseId, agentId, "memory_search", query, true);
+        return search(caseId, agentId, "memory_search", query, true, LIMIT);
     }
 
     @Override
     public List<StoreRecord> searchMemory(String caseId, String agentId, String query) {
-        return search(caseId, agentId, "memory_search", query, false);
+        return search(caseId, agentId, "memory_search", query, false, LIMIT);
+    }
+
+    @Override
+    public List<StoreRecord> searchMemory(String caseId, String agentId, String query, int limit) {
+        return search(caseId, agentId, "memory_search", query, false, limit);
     }
 
     /**
@@ -147,12 +199,12 @@ public class MekoContextStore implements ContextStore {
             receipts.record(caseId, new ReceiptLog.Receipt(agentId, "knowledgebase_search", "[cached in this run] " + query, cached.size(), 0, true, kind().name()));
             return cached;
         }
-        List<StoreRecord> rows = StoreRecord.onePerDocument(search(caseId, agentId, "knowledgebase_search", query, false));
+        List<StoreRecord> rows = StoreRecord.onePerDocument(search(caseId, agentId, "knowledgebase_search", query, false, LIMIT));
         if (!rows.isEmpty()) knowledgeCache.put(key, rows);
         return rows;
     }
 
-    private List<StoreRecord> search(String caseId, String agentId, String tool, String query, boolean caseScoped) {
+    private List<StoreRecord> search(String caseId, String agentId, String tool, String query, boolean caseScoped, int limit) {
         String detail = (caseScoped ? "[this case] " : "") + query;
         return call(caseId, agentId, tool, detail, () -> {
             String conversationId = conversation(caseId);
@@ -161,10 +213,10 @@ public class MekoContextStore implements ContextStore {
                     "conversation_id", conversationId,
                     "run_id", caseScoped ? conversationId : null,
                     "agent_id", agentId,
-                    "limit", LIMIT,
+                    "limit", limit,
                     "datapack_id", meko.datapack()));
             List<StoreRecord> rows = meko.rows(payload).stream()
-                    .limit(LIMIT) // knowledgebase_search does not honour limit
+                    .limit(limit) // knowledgebase_search does not honour limit
                     .map(this::toRecord)
                     .filter(r -> r.text() != null)
                     .toList();
@@ -198,6 +250,8 @@ public class MekoContextStore implements ContextStore {
                     .map(r -> r.path("id").asString(""))
                     .filter(s -> !s.isBlank())
                     .findFirst();
+            receipts.wrote(caseId, new ReceiptLog.Written(agentId, "memory", null, text));
+            id.ifPresent(m -> rememberedText.computeIfAbsent(caseId, k -> new java.util.concurrent.ConcurrentHashMap<>()).put(m, text));
             return new Result<>(id, id.isPresent() ? 1 : 0);
         }, Optional.empty());
     }
@@ -238,6 +292,9 @@ public class MekoContextStore implements ContextStore {
                     "agent_id", agentId,
                     "conversation_id", conversation(caseId),
                     "datapack_id", meko.datapack()));
+            Map<String, String> mine = rememberedText.getOrDefault(caseId, Map.of());
+            memoryIds.stream().map(mine::remove).filter(java.util.Objects::nonNull)
+                    .forEach(t -> receipts.wrote(caseId, new ReceiptLog.Written(agentId, "promoted", null, t)));
             return new Result<>(true, memoryIds.size());
         }, false);
     }
@@ -281,6 +338,7 @@ public class MekoContextStore implements ContextStore {
         knowledgeCache.keySet().removeIf(k -> k.startsWith(caseId + "\u0000"));
         List<java.util.concurrent.CompletableFuture<Void>> pending = pendingByCase.remove(caseId);
         if (pending != null) java.util.concurrent.CompletableFuture.allOf(pending.toArray(java.util.concurrent.CompletableFuture[]::new)).join();
+        rememberedText.remove(caseId);
     }
 
     /** Runs a write in the background; with a thread, after that conversation's earlier writes. Failures are recorded by call(). */
@@ -297,7 +355,13 @@ public class MekoContextStore implements ContextStore {
                 ? java.util.concurrent.CompletableFuture.runAsync(write, writer)
                 : threadTail.compute(thread, (k, tail) -> (tail == null ? java.util.concurrent.CompletableFuture.<Void>completedFuture(null) : tail)
                         .exceptionally(e -> null).thenRunAsync(write, writer));
-        pendingByCase.computeIfAbsent(caseId, k -> new java.util.concurrent.CopyOnWriteArrayList<>()).add(done.exceptionally(e -> null));
+        // A conversation's last write, once done and still the last, is forgotten: the map holds only pending tails.
+        if (thread != null) done.whenComplete((v, e) -> threadTail.remove(thread, done));
+        java.util.concurrent.CompletableFuture<Void> settled = done.exceptionally(e -> null);
+        List<java.util.concurrent.CompletableFuture<Void>> list = pendingByCase.computeIfAbsent(caseId, k -> new java.util.concurrent.CopyOnWriteArrayList<>());
+        list.add(settled);
+        // Done writes leave the list, so a case whose run never flushes (it failed) leaves nothing behind.
+        settled.whenComplete((v, e) -> list.remove(settled));
     }
 
     /** The conversation for a case. Any process that knows the case id reconnects the same one. */

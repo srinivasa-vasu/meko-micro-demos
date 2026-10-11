@@ -163,6 +163,7 @@
 </head>
 <body>
 <div id="toast" class="toast" style="display:none"></div>
+<datalist id="toolNames"></datalist>
 <div class="wrap">
   <header>
     <div>
@@ -305,6 +306,15 @@ const OPS = {
                options: [['false','mem0 (private)'], ['true','promoted (shared)']] }],
     run: v => get(`/api/meko/memory/all?datapackId=${encodeURIComponent(dp())}&promoted=${v.promoted}`)
   },
+  'memory.get': {
+    label: 'Get memory',
+    note: 'One row by id — the direct way to check a single memory exists and what it says, '
+        + 'without a search ranking deciding whether you see it. agent_id must be the writer.',
+    fields: [{ id: 'memoryId', label: 'Memory id', type: 'text', value: '' }, AS_AGENT],
+    run: v => get(`/api/meko/memory?datapackId=${encodeURIComponent(dp())}`
+                  + `&memoryId=${encodeURIComponent(v.memoryId)}`
+                  + `&asAgent=${encodeURIComponent(v.asAgent)}`)
+  },
   'memory.add': {
     label: 'Add memory',
     note: 'Stored verbatim — mem0 does not distil it. Writing as another agent is how cross-agent '
@@ -437,6 +447,22 @@ const OPS = {
       asAgent: v.asAgent
     })
   },
+  'context.search': {
+    label: 'Context search',
+    note: 'What agents are told to call first: conversation cache, memory and knowledge base in '
+        + 'parallel, one bucket each. Floors differ from the single-source tools — on auto, memory '
+        + 'keeps rows memory_search would drop, and the KB can return nothing where '
+        + 'knowledgebase_search always returns one. Forcing "memory" reapplies the floor.',
+    fields: [{ id: 'q', label: 'Query', type: 'textarea', value: 'checkout payment timeout' },
+             { id: 'limit', label: 'Limit per source', type: 'number', value: 10 },
+             { id: 'forceSource', label: 'Sources', type: 'select',
+               options: [['auto','auto (all three)'], ['conversation','conversation only'],
+                         ['memory','memory only (floor applied)'],
+                         ['knowledge_base','knowledge base only']] },
+             AS_AGENT],
+    run: v => post('/api/meko/context/search', { datapackId: dp(), query: v.q, limit: +v.limit,
+                   forceSource: v.forceSource, asAgent: v.asAgent })
+  },
   'knowledge.search': {
     label: 'Search knowledge base',
     note: 'Uploaded documents AND promoted memories, chunked. Returns match_type, rank and '
@@ -451,9 +477,11 @@ const OPS = {
     label: 'Raw tool call',
     note: 'Arguments are sent verbatim — nothing is added, not even conversation_id. This is how '
         + 'you find out what a tool actually accepts, which the schemas have been wrong about '
-        + 'more than once. An unknown argument is rejected, never ignored.',
-    fields: [{ id: 'tool', label: 'Tool', type: 'text', value: 'datapack_list' },
-             { id: 'args', label: 'Arguments (JSON)', type: 'textarea', value: '{\n  "conversation_id": ""\n}' }],
+        + 'more than once. An unknown argument is rejected, never ignored. Picking a tool fills '
+        + 'in its required arguments from its schema, plus conversation_id, datapack_id and '
+        + 'agent_id wherever the tool has them, using live values.',
+    fields: [{ id: 'tool', label: 'Tool', type: 'text', value: 'datapack_list', list: 'toolNames' },
+             { id: 'args', label: 'Arguments (JSON)', type: 'textarea', value: '' }],
     run: v => {
       let args;
       try { args = JSON.parse(v.args || '{}'); }
@@ -467,7 +495,7 @@ const OPS = {
 const GROUPS = [
   ['Memory', k => k.startsWith('memory.')],
   ['Conversations', k => k.startsWith('conversation.')],
-  ['Knowledge', k => k.startsWith('knowledge.')],
+  ['Search', k => k.startsWith('context.') || k.startsWith('knowledge.')],
   ['Raw', k => k === 'raw']
 ];
 
@@ -516,6 +544,37 @@ function selectOp(key) {
       FORM_STATE[key][f.id] = el.value;
     });
   });
+  if (key === 'raw') {
+    $('form').insertAdjacentHTML('beforeend', '<p id="tplNote" class="note" style="margin:8px 0 0"></p>');
+    $('f-tool').addEventListener('change', () => fillTemplate());
+    $('f-args').insertAdjacentHTML('afterend', `<div class="btnrow" style="margin-top:6px">
+      <button class="mini" onclick="fillTemplate()">Reset arguments from schema</button></div>`);
+    if (!(saved.args || '').trim()) fillTemplate();
+  }
+}
+
+/* Fill the raw call's arguments from the picked tool's schema. Overwrites: arguments for the
+   previous tool are wrong for this one, and an argument it does not have is rejected. */
+async function fillTemplate() {
+  const tool = $('f-tool').value.trim();
+  if (!tool) return;
+  try {
+    const t = await get(`/api/meko/tool-template?tool=${encodeURIComponent(tool)}`
+                        + `&datapackId=${encodeURIComponent(dp())}`);
+    if (CURRENT !== 'raw') return;
+    if (t.error) { $('tplNote').textContent = `${tool}: ${t.error}`; return; }
+    const args = JSON.stringify(t.arguments, null, 2);
+    $('f-args').value = args;
+    FORM_STATE.raw = { ...(FORM_STATE.raw || {}), tool, args };
+    $('tplNote').innerHTML = `<span class="mono">${esc(t.resolvedTool)}</span>
+      &middot; schema requires ${t.required.length
+        ? t.required.map(n => `<code>${esc(n)}</code>`).join(', ') : 'nothing'}${
+      t.optional.length ? ` &middot; also accepts ${t.optional.map(n =>
+        `<code>${esc(n)}</code>`).join(', ')}` : ''}. Values in &lt;angle brackets&gt; are
+      placeholders to replace.`;
+  } catch (e) {
+    $('tplNote').textContent = 'Could not load the schema: ' + e.message;
+  }
 }
 
 function field(f, saved) {
@@ -530,7 +589,8 @@ function field(f, saved) {
         `<option value="${esc(v)}"${String(v) === String(value) ? ' selected' : ''}>${esc(l)}</option>`
       ).join('')}</select>`;
   return `<label for="${id}">${esc(f.label)}</label>
-          <input id="${id}" type="${f.type}" value="${esc(value)}">`;
+          <input id="${id}" type="${f.type}" value="${esc(value)}"${
+            f.list ? ` list="${f.list}" autocomplete="off"` : ''}>`;
 }
 
 async function runOp() {
@@ -633,8 +693,10 @@ function render(call, quiet) {
   const rows = call.rows || [];
   const hybrid = rows.some(hybridOn);
 
+  const buckets = Object.entries(call.buckets || {});
   const body = VIEW === 'rows'
-    ? (rows.length ? rowsTable(rows) : '<p class="empty">No rows in this response. The raw view '
+    ? (buckets.length ? bucketTables(buckets)
+      : rows.length ? rowsTable(rows) : '<p class="empty">No rows in this response. The raw view '
         + 'shows what actually came back &mdash; an empty parse and an empty result look the same '
         + 'from here.</p>')
     : VIEW === 'text'
@@ -644,7 +706,8 @@ function render(call, quiet) {
   $('result').innerHTML = `
     <div class="banner ${call.ok ? 'ok' : 'bad'}">
       ${call.ok ? 'OK' : 'Failed'} &middot; <span class="mono">${esc(call.resolvedTool || call.tool)}</span>
-      &middot; ${call.millis}ms &middot; ${rows.length} row(s)
+      &middot; ${call.millis}ms &middot; ${rows.length} row(s)${buckets.length
+        ? ' across ' + buckets.map(([n, r]) => `${esc(n)} ${r.length}`).join(', ') : ''}
       ${quiet ? ' &middot; <span class="note">from history</span>' : ''}
       ${call.error ? `<div style="margin-top:6px">${esc(call.error)}</div>` : ''}
     </div>
@@ -665,6 +728,16 @@ function render(call, quiet) {
       ${VIEW === 'rows' ? orderingNote(rows) : ''}
     </div>
     ${body}`;
+}
+
+/* One table per source. A merged table would hide which source a row came from, and an empty
+   source would vanish instead of saying it found nothing. */
+function bucketTables(buckets) {
+  return buckets.map(([name, rows]) => `
+    <h3 style="font-size:13px;margin:16px 0 2px;display:flex;gap:8px;align-items:center">
+      <span class="mono">${esc(name)}</span>
+      <span class="tag${rows.length ? '' : ' warn'}">${rows.length} row(s)</span></h3>
+    ${rows.length ? rowsTable(rows) : '<p class="empty">Nothing from this source.</p>'}`).join('');
 }
 
 function rowsTable(rows) {
@@ -707,13 +780,21 @@ async function loadStatus() {
          <span class="mono">${esc(s.agentId)}</span> &mdash; which on conversation_get, _update and
          _delete is an <strong>ownership filter</strong>, not just trace attribution.`
       : 'Not connected. Check MEKO_API_KEY and the MCP url &mdash; no tools are registered.';
+    $('toolNames').innerHTML = s.tools.map(t => `<option value="${esc(t)}">`).join('');
     $('tools').innerHTML = s.tools.length
-      ? s.tools.map(t => `<div class="mono" style="font-size:11.5px;padding:2px 0">${esc(t)}</div>`).join('')
+      ? s.tools.map(t => `<button class="histrow mono" style="font-size:11.5px;padding:3px 6px"
+          title="Open in a raw call with its arguments filled in"
+          onclick="openRaw('${esc(t)}')">${esc(t)}</button>`).join('')
       : '<p class="empty">None.</p>';
   } catch (e) {
     $('status').className = 'banner bad';
     $('status').textContent = e.message;
   }
+}
+
+function openRaw(tool) {
+  FORM_STATE.raw = { tool, args: '' };
+  selectOp('raw');
 }
 
 async function loadDatapacks() {

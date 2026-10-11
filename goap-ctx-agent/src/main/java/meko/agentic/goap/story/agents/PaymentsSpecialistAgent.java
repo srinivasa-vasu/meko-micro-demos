@@ -96,13 +96,44 @@ public class PaymentsSpecialistAgent {
         return check.authorized() && !check.captured() && !check.settled() && captureTimeout && !issuerChargebackOnly;
     }
 
-    /** @param reason why this policy governs the case, as the agent judged it (or who confirmed it) */
-    public record PolicyLookup(String caseId, String policy, String writtenBy, String reason) {}
+    /**
+     * @param reason why this policy governs the case, as the agent judged it (or who confirmed it)
+     * @param text   the policy's text as the specialist has it (retrieved, or as payments operations sent it); null if none
+     */
+    public record PolicyLookup(String caseId, String policy, String writtenBy, String reason, String text) {}
+
+    /** What a policy's text says about a provisional refund for this case. */
+    enum Refund { APPROVE, REFUSE, NOT_STATED }
+
+    /**
+     * Reads the policy's own rule on provisional refunds: the sentence that mentions one. "Do not" refuses; "may be
+     * approved" approves, when the conditions it states about settlement hold for what the settlement check found. A
+     * policy that says nothing about refunds decides nothing: the case goes to a person.
+     *
+     * @return the decision and the sentence it was read from (null when not stated)
+     */
+    static Map.Entry<Refund, String> refundRule(String policyText, SettlementCheck check) {
+        if (policyText == null) return Map.entry(Refund.NOT_STATED, "");
+        for (String sentence : policyText.replaceAll("\\s+", " ").split("(?<=[.;])\\s+|\\s\\d+\\.\\s")) {
+            String lower = sentence.toLowerCase();
+            if (!lower.contains("provisional refund")) continue;
+            String clause = sentence.trim();
+            if (lower.matches(".*\\b(do not|don't|must not|never) (issue|approve|grant|give|offer)\\b.*provisional refund.*|.*\\bno provisional refund\\b.*")) return Map.entry(Refund.REFUSE, clause);
+            if (lower.matches(".*provisional refund.*\\b(may|can|should|is to) be (approved|issued)\\b.*")) {
+                // A condition on settlement the policy states must hold for what the check found.
+                boolean needsNoSettled = lower.contains("no settled capture") || lower.contains("nothing settled") || lower.contains("not settled");
+                return needsNoSettled && check.settled() ? Map.entry(Refund.REFUSE, clause) : Map.entry(Refund.APPROVE, clause);
+            }
+        }
+        return Map.entry(Refund.NOT_STATED, "");
+    }
 
     /** Who answers when the specialist escalates for a policy, and how the specialist records it. */
     static final String PAYMENTS_OPS = "payments-ops";
     /** How a policy confirmed by payments operations, with no written policy in reach, is recorded. */
     public static final String VERBAL = "confirmed verbally by payments operations";
+    /** How an escalation nobody could answer from a written policy is recorded: the case is with a person, undecided. */
+    public static final String HANDED_TO_HUMAN = "no written policy in reach; handed to payments operations for a human decision";
 
     public record SupportOutcome(String caseId, String resolution) {}
 
@@ -116,7 +147,16 @@ public class PaymentsSpecialistAgent {
     private final DecisionService decisions;
     private final KnowledgeDocuments documents;
 
-    public PaymentsSpecialistAgent(StorySupport support, DecisionService decisions, KnowledgeDocuments documents) {
+    /**
+     * Whether an escalation for a missing policy is answered (the demo: a simulated payments-ops team confirms the policy,
+     * so the cost of escalating can be measured). In the workshop it is not: with no written policy in reach, the case
+     * goes to a human and nothing is decided.
+     */
+    private final boolean escalationsAnswered;
+
+    public PaymentsSpecialistAgent(StorySupport support, DecisionService decisions, KnowledgeDocuments documents,
+                                   @org.springframework.beans.factory.annotation.Value("${goap.escalation.answered:true}") boolean escalationsAnswered) {
+        this.escalationsAnswered = escalationsAnswered;
         this.support = support;
         this.decisions = decisions;
         this.documents = documents;
@@ -262,7 +302,9 @@ public class PaymentsSpecialistAgent {
     public PolicyLookup retrievePolicy(CaseFile file, SettlementCheck check, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(file.caseId());
         List<StoreRecord> policies = support.store(file.store())
-                .searchKnowledge(file.caseId(), AGENT_ID, "failed capture after successful authorization refund policy")
+                // The dispute policies in general, then the one whose scope covers this case: a narrower query can miss the
+                // look-alike altogether, and then there is nothing to tell apart.
+                .searchKnowledge(file.caseId(), AGENT_ID, "card dispute policy for a disputed card payment")
                 .stream().filter(r -> r.text().contains("policy")).toList();
         PolicyChoice choice = policies.isEmpty() ? new PolicyChoice(null, "no policies retrieved")
                 : decisions.decideUnlessClear(file.caseId(),
@@ -301,20 +343,30 @@ public class PaymentsSpecialistAgent {
         ledger.step("Payments specialist", "retrievePolicy",
                 chosen == null ? "No institutional policy found for failed capture."
                         : "Chose policy " + chosen + " from " + policies.size() + " retrieved: " + choice.reason(), support.effort("payments-specialist", "retrieve-policy"), StoryLedger.Kind.CONTEXT);
-        return chosen == null || used.isEmpty() ? new PolicyLookup(file.caseId(), null, null, choice.reason())
-                : new PolicyLookup(file.caseId(), chosen, used.getFirst().writtenBy(), choice.reason());
+        return chosen == null || used.isEmpty() ? new PolicyLookup(file.caseId(), null, null, choice.reason(), null)
+                : new PolicyLookup(file.caseId(), chosen, used.getFirst().writtenBy(), choice.reason(),
+                        String.join("\n\n", used.stream().map(StoreRecord::text).toList()));
     }
 
     @Action(description = "Escalate to payments operations to confirm which policy applies", pre = {"policyUnavailable"},
             post = {"policyKnown"}, cost = 0.40, canRerun = false)
     public PolicyLookup escalateForPolicy(CaseFile file, SettlementCheck check, PolicyLookup lookup) {
         StoryLedger ledger = support.ledger(file.caseId());
+        if (!escalationsAnswered) {
+            ledger.say("Payments specialist", "I can't find a written policy for this, so a colleague in payments operations will review your case and get back to you.");
+            ledger.step("Payments specialist", "escalateForPolicy", "No written policy in reach: handed the case to payments operations for a human decision.",
+                    support.effort("payments-specialist", "escalate-for-policy"), StoryLedger.Kind.ASK);
+            PolicyLookup handed = new PolicyLookup(file.caseId(), null, PAYMENTS_OPS, HANDED_TO_HUMAN, null);
+            support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.transaction(), POLICY, null,
+                    "Apply the dispute policy for " + file.transaction(), "none: " + HANDED_TO_HUMAN);
+            return handed;
+        }
         ledger.say("Payments specialist", "I need to check with our payments operations team. I'll get back to you within the hour.");
         ledger.step("Payments specialist", "escalateForPolicy", "Waited on payments operations to confirm the applicable policy.", support.effort("payments-specialist", "escalate-for-policy"), StoryLedger.Kind.ASK);
         // The simulated payments-ops team owns the policy documents and answers from them, for what the check found.
-        String policy = documents.all().stream().filter(d -> covers(d.markdown(), check)).map(KnowledgeDocuments.Document::key)
-                .findFirst().orElse("no written policy (payments operations decided case by case)");
-        PolicyLookup confirmed = new PolicyLookup(file.caseId(), policy, PAYMENTS_OPS, VERBAL);
+        Optional<KnowledgeDocuments.Document> doc = documents.all().stream().filter(d -> covers(d.markdown(), check)).findFirst();
+        String policy = doc.map(KnowledgeDocuments.Document::key).orElse("no written policy (payments operations decided case by case)");
+        PolicyLookup confirmed = new PolicyLookup(file.caseId(), policy, PAYMENTS_OPS, VERBAL, doc.map(KnowledgeDocuments.Document::markdown).orElse(null));
         support.recordEvent(support.store(file.store()), file.caseId(), AGENT_ID, file.transaction(), POLICY, null,
                 "Apply the dispute policy for " + file.transaction(), confirmed.policy() + ": " + confirmed.reason());
         return confirmed;
@@ -327,9 +379,18 @@ public class PaymentsSpecialistAgent {
         StoryLedger ledger = support.ledger(file.caseId());
         boolean verbal = PAYMENTS_OPS.equals(lookup.writtenBy());
         boolean written = lookup.policy() != null && StorySupport.extract(List.of(new StoreRecord("", lookup.policy(), "", "", null)), StorySupport.POLICY_ID).isPresent();
-        String basis = written ? "under " + lookup.policy() + (verbal ? " (confirmed by payments ops)" : "")
-                : "by payments operations, with no written policy";
-        String resolution = "Provisional refund of " + file.amount() + " approved " + basis + " while settlement is verified.";
+        // The refund follows the applied policy's own rule on refunds, read from its text; no rule, no decision.
+        Map.Entry<Refund, String> rule = written ? refundRule(lookup.text(), check) : Map.entry(Refund.NOT_STATED, "");
+        boolean undecided = rule.getKey() == Refund.NOT_STATED;
+        String basis = "under " + lookup.policy() + (verbal ? " (confirmed by payments ops)" : "");
+        String resolution = switch (rule.getKey()) {
+            case APPROVE -> "Provisional refund of " + file.amount() + " approved " + basis + " while settlement is verified. The policy: \"" + rule.getValue() + "\"";
+            case REFUSE -> "No provisional refund of " + file.amount() + " " + basis + ". The policy: \"" + rule.getValue() + "\"";
+            case NOT_STATED -> "No refund decided for " + file.amount() + ": " + (written
+                    ? lookup.policy() + " states no rule on a provisional refund"
+                    : "no written dispute policy in reach") + ", so the case is with payments operations for a human decision.";
+        };
+        ledger.count(undecided ? "handedToPerson" : "decided", 1);
         ledger.step("Payments specialist", "resolve", resolution, support.effort("payments-specialist", "resolve"), StoryLedger.Kind.WORK);
         ledger.outcome(resolution);
         int reasked = ledger.counters().getOrDefault("customerQuestions", 0);
@@ -342,7 +403,7 @@ public class PaymentsSpecialistAgent {
                 "Settlement check: " + check.describe(),
                 "Troubleshooting already done by the customer: " + (Boolean.TRUE.equals(file.troubleshootingDone()) ? "yes" : "unknown")
                         + "; card with the customer: " + (Boolean.TRUE.equals(file.cardWithCustomer()) ? "yes" : "unknown"),
-                "Resolution: provisional refund of " + file.amount() + " while settlement is verified"));
+                "Resolution: " + resolution));
         facts.add(asked.isEmpty() ? "The customer was not asked to repeat anything after the handoff"
                 : "After the handoff the customer had to be asked " + asked.size() + " times: " + String.join(" ", asked));
         List<String> gaps = verbal
@@ -354,8 +415,10 @@ public class PaymentsSpecialistAgent {
                 support.render("writer/support-reply", Map.of("reasked", reasked,
                         "redidTroubleshooting", ledger.steps().stream().anyMatch(st -> st.action().equals("askToRepeatTroubleshooting")))),
                 facts, gaps,
-                "Thanks for your patience. I've approved a provisional refund of " + file.amount() + " for " + file.transaction()
-                        + " while we confirm settlement."));
+                (undecided ? "Thanks for your patience. A colleague in payments operations is reviewing " + file.transaction() + " and will get back to you."
+                        : rule.getKey() == Refund.REFUSE ? "Thanks for your patience. Under our policy we can't issue a provisional refund for " + file.transaction() + " right now; we'll keep you posted."
+                        : "Thanks for your patience. I've approved a provisional refund of " + file.amount() + " for " + file.transaction()
+                        + " while we confirm settlement.")));
         support.store(file.store()).rememberLater(file.caseId(), AGENT_ID, "Support case " + file.caseId() + " (" + file.transaction() + ") resolved: " + resolution
                 + " Because: the settlement check found " + check.describe() + "; " + (lookup.policy() == null ? "no policy" : lookup.policy()) + " was applied: " + lookup.reason() + ".");
         support.traceDecisions(support.store(file.store()), file.caseId(), AGENT_ID, file.transaction(), PERSONA);
@@ -406,7 +469,8 @@ public class PaymentsSpecialistAgent {
 
     @Condition(name = "policyKnown")
     public boolean policyKnown(PolicyLookup lookup) {
-        return lookup != null && lookup.policy() != null;
+        // Known once a policy is found or confirmed, or once payments operations has the case (then nothing is decided here).
+        return lookup != null && (lookup.policy() != null || PAYMENTS_OPS.equals(lookup.writtenBy()));
     }
 
     @Condition(name = "policyUnavailable")

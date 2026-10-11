@@ -72,8 +72,18 @@ public class StoryController {
 
     @PostMapping("/organization-learned/series")
     public Map<String, List<StoryRun>> series(@RequestParam(defaultValue = "3") int cases,
-                                              @RequestParam(defaultValue = "false") boolean db) {
-        return stories.learningSeries(Math.max(1, Math.min(cases, 4)), db);
+                                              @RequestParam(defaultValue = "false") boolean db,
+                                              @RequestParam(defaultValue = "false") boolean mekoOnly) {
+        return stories.learningSeries(Math.max(1, Math.min(cases, 4)), db && !mekoOnly, !mekoOnly);
+    }
+
+    /** One case of the series, with Meko: without an epoch it starts a new one, so nothing learned before is in reach. */
+    @PostMapping("/organization-learned/case")
+    public Map<String, Object> learningCase(@RequestParam int index,
+                                            @RequestParam(required = false) String epoch,
+                                            @RequestParam(defaultValue = "false") boolean otherTeam,
+                                            @RequestParam(defaultValue = "true") boolean share) {
+        return stories.learningCase(index, epoch, otherTeam, share);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

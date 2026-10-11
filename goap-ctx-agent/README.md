@@ -5,7 +5,7 @@ planner and the same code**, with and without **[Meko](https://mekodata.ai/)**. 
 comparison*) adds a third lane, **your application's own database**, to show what Meko adds over what you would build
 yourself.
 
-> **Embabel GOAP decides what to do next from what the agent knows. Meko decides what the agent knows.**
+> **GOAP decides what to do next. Meko gives every agent the right context to decide it.**
 
 ## The stories
 
@@ -14,9 +14,9 @@ Each story states its boundary on screen:
 | Story | Boundary | Without | Your own database | With Meko |
 |---|---|---|---|---|
 | **Don't Make Me Explain It Again** | A vendor's chatbot (its own store) escalates to your payments specialist; only the CRM ticket crosses | 3 customer re-asks · 56 min | 3 · 56 min | 0 · 19 min |
-| **I Already Explained This** | A vendor's loan-origination system (its own store) refers two applications, each with its file, to your underwriter; the borrowers' explanations do not cross, and a credit-risk ruling on the first is promoted to shared knowledge | 3 things re-explained · 2 rulings requested · 359 min | 3 · 1 ruling · 327 min | 0 · 1 ruling · 132 min |
+| **Same Proof, Twice** | A vendor's loan-origination system (its own store) refers two applications, each with its file, to your underwriter; the borrowers' explanations do not cross, and a credit-risk ruling on the first is promoted to shared knowledge | 3 things re-explained · 2 rulings requested · 359 min | 3 · 1 ruling · 327 min | 0 · 1 ruling · 132 min |
 | **What Changed Since Last Review?** | Last quarter's review was written by the analyst desk's agent | 5 evidence requests · 166 min | 5 · 166 min | 1 · 41 min |
-| **The Organization Learned** | Case 1 is solved by the EU payments-ops team's agent, cases 2-3 by your support app | 3 cases: 264 min | 199 min | 131 min |
+| **The Organization Learned** | Case 1 is solved by the EU payments desk's agent, cases 2-3 by the APAC payments desk's | 3 cases: 264 min | 199 min | 131 min |
 | **The Agent Died at 2 AM** | The payments team's on-call agent dies; your platform SRE agent takes over with only the incident id | 2 repeated steps · 80 min | 2 · 80 min | 0 · 50 min |
 | **I Was on Vacation. Catch Me Up.** | Decisions and requests were written by Claude Code, the PR bot, the incident bot | 1 missed requirement · 158 min | 1 · 158 min | 0 · 53 min |
 
@@ -33,7 +33,7 @@ Three stories have a follow-up in which someone accountable, given only an id, r
 * **Check this review** (*What Changed Since Last Review?*). A model-risk reviewer checks the agent's KYC review against the KYC re-review
   standard: which previous review it compared against and what it passed over, the materiality decision, each evidence
   request and the sign-off.
-* **Review this credit call** (*I Already Explained This*). A fair-lending reviewer checks both applications' credit calls against
+* **Review this credit call** (*Same Proof, Twice*). A fair-lending reviewer checks both applications' credit calls against
   the underwriting policy: which checks were verified before the call and by whom, whether each condition the policy
   sets on the file (a large deposit sourced, an employment gap explained) was cleared on documented evidence and why
   that evidence was accepted (listed in the policy, or a credit-risk ruling), whether
@@ -50,13 +50,20 @@ exist only where an agent wrote them: in Meko, or in your own database for your 
 | **Review this credit call** (both applications) | 6 records requested · 0 decision traces · 388 min | 4 · 6 decision traces · 328 min | 0 · 8 decision traces · 38 min |
 | **Check this review** | 2 records requested · 0 decision traces · 102 min | 1 · 1 decision trace · 42 min | 0 · 2 decision traces · 22 min |
 
+## Workshop
+
+The same application runs a hands-on workshop for groups: `SPRING_PROFILES_ACTIVE=workshop` opens a workshop page
+where each participant adds context to their own empty datapack stage by stage (shared knowledge, then another desk's earlier reviews,
+then promotion to collective memory) and reruns three use cases to see what changes. No model key is needed. See
+[docs/WORKSHOP.md](docs/WORKSHOP.md): setup, and each use case step by step.
+
 ## What you see in the app
 
-Open `http://localhost:8080` and pick a story from the bar at the top.
+Open `http://localhost:8080` and pick a use case from the bar at the top.
 
-* **The story header** states the problem, the system boundary, and which of the four things the story is about:
-  memory, knowledge, the right context, decision traces. *How this story works* (collapsed by default) explains the
-  without-Meko and with-Meko paths and what the planner does.
+* **The use case header** says what the use case is, the system boundary, and which of the four things it is about:
+  memory, knowledge, the right context, decision traces. *How this use case works* (collapsed by default) explains the
+  challenge, and the without-Meko and with-Meko paths.
 * **Agents in this case** (collapsed by default) shows every agent in the case in the order it acts: its id, the system
   it lives in, what it does, whether it acted earlier (its writes are already in shared context), now, or later (the
   follow-up), and what crosses the boundary to the next one. After a run, each agent shows what it actually did in
@@ -69,9 +76,9 @@ Open `http://localhost:8080` and pick a story from the bar at the top.
   the case has run.
 * **Resets** start a story over where a run changes what the next run sees: *Reset learning* (*The Organization
   Learned*), *Start a new review cycle* (*What Changed Since Last Review?*), *Reopen the review request* (*I Was on
-  Vacation. Catch Me Up.*), *Reset precedents* (*I Already Explained This*: a promoted credit-risk ruling stays
+  Vacation. Catch Me Up.*), *Reset precedents* (*Same Proof, Twice*: a promoted credit-risk ruling stays
   precedent for later runs until then). Each says what it did.
-* **Story / Full detail.** *Story* (the default) shows the outcome, the steps, the context used and the cost. *Full
+* **Summary / Full detail.** *Summary* (the default) shows the outcome, the steps, the context used and the cost. *Full
   detail* adds the planner's plans and replans, the decisions at each gate, which model wrote the reply and why, and
   every Meko call with its latency.
 
@@ -176,7 +183,7 @@ waiting minutes are reported but not priced as labour.
 | Story | Without Meko | With Meko | Kind of saving |
 |---|---|---|---|
 | Don't Make Me Explain It Again | 56 (13 hands-on, 43 waiting) | 19 (13 hands-on, 6 waiting) | Customer waiting and time to resolution; your specialist's effort is the same |
-| I Already Explained This (2 applications) | 359 (64 hands-on, 295 waiting) | 132 (62 hands-on, 70 waiting) | Borrower waiting and time to the credit calls: no conditions sent back for what the borrowers already explained, no policy escalation, and no second ruling once the first is precedent |
+| Same Proof, Twice (2 applications) | 359 (64 hands-on, 295 waiting) | 132 (62 hands-on, 70 waiting) | Borrower waiting and time to the credit calls: no conditions sent back for what the borrowers already explained, no policy escalation, and no second ruling once the first is precedent |
 | What Changed Since Last Review? | 166 | 41 | Hands-on: full re-verifications replaced by a diff and targeted requests |
 | The Organization Learned (3 cases) | 264 | 131 | Hands-on: hypotheses not re-tested on cases 2 and 3 |
 | The Agent Died at 2 AM | 80 | 50 | Hands-on: finished investigation steps not redone |
@@ -220,8 +227,8 @@ The header shows the datapack and how many documents its knowledge base holds.
 #### Knowledge base documents
 
 Meko's shared knowledge has two sources, and the demo uses both: **documents** people upload through the Meko app, and
-**lessons** agents promote from memory (the root cause the EU team's agent promotes in *The Organization Learned*, and the
-credit-risk ruling the underwriter promotes in *I Already Explained This*). Knowledge search covers
+**lessons** agents promote from memory (the root cause the EU desk's agent promotes in *The Organization Learned*, and the
+credit-risk ruling the underwriter promotes in *Same Proof, Twice*). Knowledge search covers
 both. The documents are fictional and short:
 
 | Document | Used by |
@@ -294,6 +301,7 @@ POST /api/stories/{id}/reset
 POST /api/stories/agent-died-2am/start         {"meko": true}
 POST /api/stories/agent-died-2am/takeover      {"caseId": "INC-…", "meko": true}
 POST /api/stories/organization-learned/series?cases=3[&db=true]
+POST /api/stories/organization-learned/case?index=1[&epoch=...][&otherTeam=true]   (one case, with Meko; the workshop's steps)
 POST /api/stories/organization-learned/mismatch {"meko": true}
 GET  /api/meko/status
 POST /api/meko/seed

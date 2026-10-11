@@ -64,13 +64,27 @@ public class MekoMcpClient {
     private final Map<String, Object> creating = new ConcurrentHashMap<>();
     /** Reads that change nothing, so a timeout or a server error can be retried once. */
     private static final java.util.Set<String> IDEMPOTENT = java.util.Set.of("memory_search", "knowledgebase_search", "conversation_get", "artifact_get");
-    /** Calls that make model calls on Meko's side (fact extraction, summaries) get longer than the default. */
-    private static final java.util.Set<String> SLOW = java.util.Set.of("memory_add", "memory_update", "conversation_get");
+    /**
+     * Per-tool timeouts. Calls that make model calls on Meko's side (fact extraction) get longer than the default;
+     * conversation_get (about 1.4 s measured) is retried once, so it gets a short one.
+     */
+    private static final Map<String, Integer> TIMEOUT_SECONDS = Map.of("memory_add", 60, "memory_update", 60, "conversation_get", 15);
     private final AtomicLong requestIds = new AtomicLong(1);
     private volatile boolean initialized;
     private volatile String mcpSessionId;
     private volatile String datapackId;
     private volatile String lastError;
+    /** The datapack-lookup conversation (datapack_list and datapack_create need one): datapack-independent, so kept. */
+    private volatile String lookupConversationId;
+    /** When the datapack in use was last confirmed to exist, so a status poll does not list datapacks every time. */
+    private volatile long confirmedAt;
+    private static final long CONFIRM_TTL_MILLIS = 20_000;
+    /** Run before the datapack in use changes: writes still queued for the old one finish first, caches are dropped. */
+    private final List<Runnable> beforeSwitch = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    public void beforeDatapackSwitch(Runnable hook) {
+        beforeSwitch.add(hook);
+    }
 
     public MekoMcpClient(MekoProperties properties) {
         this.properties = properties;
@@ -163,6 +177,110 @@ public class MekoMcpClient {
         return id;
     }
 
+    public boolean keyed() {
+        return properties.keyed();
+    }
+
+    /**
+     * Switches to another datapack, creating it first if asked (the workshop: each participant starts from a fresh,
+     * empty datapack). Conversations are per datapack, so the ones this client knew are forgotten.
+     */
+    public synchronized String useDatapack(String name, boolean create) throws Exception {
+        if (!properties.keyed()) throw new IllegalStateException("No Meko API key: set MEKO_API_KEY and restart.");
+        String created = null;
+        if (create) {
+            JsonNode result = callTool("datapack_create", args("name", name, "conversation_id", lookupConversation()));
+            for (String path : List.of("datapack_id", "id")) {
+                if (result.path(path).isString()) created = result.path(path).asString();
+            }
+            if (created == null && result.path("datapack").path("id").isString()) created = result.path("datapack").path("id").asString();
+        }
+        beforeSwitch.forEach(Runnable::run);
+        properties.setDatapackName(name);
+        properties.setDatapackId(null);
+        conversations.clear();
+        datapackId = created;
+        confirmedAt = System.currentTimeMillis();
+        lastError = null;
+        // A datapack just created may take a moment to appear in the listing the name is resolved from.
+        for (int attempt = 0; ; attempt++) {
+            try {
+                return datapack();
+            } catch (IllegalStateException e) {
+                if (!create || attempt >= 4) throw e;
+                Thread.sleep(1_000);
+            }
+        }
+    }
+
+    /**
+     * Whether the datapack in use still exists in this account. A datapack can be deleted in the Meko app while this
+     * application runs; then it is forgotten (with its conversations), so the next status asks for a datapack again.
+     */
+    public boolean datapackStillExists() {
+        String id = datapackId;
+        if (id == null || !properties.keyed()) return true;
+        // Confirmed moments ago: a status poll does not list every datapack again.
+        if (System.currentTimeMillis() - confirmedAt < CONFIRM_TTL_MILLIS) return true;
+        // The listing runs outside this client's lock, so a slow datapack_list never holds up a session re-initialisation.
+        try {
+            JsonNode list = callTool("datapack_list", args("conversation_id", lookupConversation()));
+            for (JsonNode row : list.values()) {
+                if (id.equals(row.path("datapack_id").asString(""))) {
+                    confirmedAt = System.currentTimeMillis();
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            return true; // unreachable is not the same as deleted: keep it
+        }
+        synchronized (this) {
+            if (!id.equals(datapackId)) return true; // switched meanwhile: the new one stands
+            forgetDeleted();
+        }
+        return false;
+    }
+
+    private void forgetDeleted() {
+        beforeSwitch.forEach(Runnable::run);
+        datapackId = null;
+        properties.setDatapackId(null);
+        properties.setDatapackName(null);
+        conversations.clear();
+        lastError = "The datapack in use no longer exists: create or choose another.";
+    }
+
+    /** Forgets when the datapack was last confirmed, so the next check asks Meko (tests). */
+    void expireConfirmation() {
+        confirmedAt = 0;
+    }
+
+    /** The datapacks this key can see: name, id and when each was created. */
+    public synchronized List<Map<String, String>> listDatapacks() throws Exception {
+        if (!properties.keyed()) return List.of();
+        JsonNode list = callTool("datapack_list", args("conversation_id", lookupConversation()));
+        List<Map<String, String>> out = new ArrayList<>();
+        for (JsonNode row : list.values()) {
+            // Shared datapacks are listed too, with this key's grant on them and who owns them.
+            out.add(Map.of("name", row.path("datapack_name").asString(""), "id", row.path("datapack_id").asString(""),
+                    "created", row.path("created_at").asString(""), "grant", row.path("grant").asString(""),
+                    "owner", row.path("datapack_owner_name").asString("")));
+        }
+        return out;
+    }
+
+    /** datapack_list and datapack_create need a conversation id even though no datapack is chosen yet. */
+    private String lookupConversation() throws Exception {
+        String id = lookupConversationId;
+        if (id != null) return id;
+        id = callTool("conversation_create", args(
+                "agent_id", CONVERSATION_OWNER,
+                "session_id", CONVERSATION_OWNER + ":datapack-lookup",
+                "title", "Datapack lookup")).path("id").asString();
+        if (!id.isBlank()) lookupConversationId = id;
+        return id;
+    }
+
     public String datapack() throws Exception {
         if (datapackId != null) return datapackId;
         if (properties.getDatapackId() != null && !properties.getDatapackId().isBlank()) {
@@ -173,11 +291,7 @@ public class MekoMcpClient {
             String name = properties.getDatapackName();
             // datapack_list requires a conversation_id even though no datapack is known yet, so it
             // gets a bootstrap conversation created without one. It also rejects agent_id.
-            JsonNode bootstrap = callTool("conversation_create", args(
-                    "agent_id", CONVERSATION_OWNER,
-                    "session_id", CONVERSATION_OWNER + ":datapack-lookup",
-                    "title", "Datapack lookup"));
-            JsonNode list = callTool("datapack_list", args("conversation_id", bootstrap.path("id").asString()));
+            JsonNode list = callTool("datapack_list", args("conversation_id", lookupConversation()));
             List<String> visible = new ArrayList<>();
             for (JsonNode row : list.values()) {
                 String rowName = row.path("datapack_name").asString("");
@@ -197,7 +311,7 @@ public class MekoMcpClient {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("name", tool);
         params.put("arguments", arguments);
-        Duration timeout = Duration.ofSeconds(SLOW.contains(tool) ? 60 : 30);
+        Duration timeout = Duration.ofSeconds(TIMEOUT_SECONDS.getOrDefault(tool, 30));
         JsonNode result;
         try {
             result = rpcResult(tool, post(mcpRequest("tools/call", params), true, timeout));
@@ -219,7 +333,8 @@ public class MekoMcpClient {
     }
 
     private void ensureInitialized() throws Exception {
-        if (!properties.configured()) throw new IllegalStateException("Meko is not configured");
+        // A key is enough to connect: the datapack may be chosen later (the workshop creates it from its page).
+        if (!properties.keyed()) throw new IllegalStateException("Meko is not configured: set MEKO_API_KEY");
         if (initialized) return;
         synchronized (this) {
             if (initialized) return;

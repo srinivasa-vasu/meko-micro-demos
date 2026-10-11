@@ -576,7 +576,7 @@ class StoryPlanningTest {
         // Last quarter's analyst tool, a Claude Code session, the PR bot.
         assertThat(executed(stories.run("what-changed", db))).contains("fullReview");
         assertThat(metric(stories.run("vacation-catch-up", db), "missedRequirements")).isEqualTo(1);
-        // The EU team's lesson stays in the EU team's database; your app rediscovers it once, then reuses its own copy.
+        // The EU desk's lesson stays in the EU desk's database; the APAC desk rediscovers it once, then reuses its own copy.
         var series = stories.learningSeries(3, true);
         assertThat(series.get("database").get(0).store()).isEqualTo("OTHER_SYSTEM_DB");
         assertThat(executed(series.get("database").get(1))).contains("testHypotheses");

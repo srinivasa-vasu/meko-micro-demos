@@ -50,10 +50,6 @@ public class StorySupport {
         systemsOfRecord.keep(thread, new ContextStore.Turn(input, output, agentId));
     }
 
-    /**
-     * Writes an agent's record of something it did: a natural input and output, tagged in the reasoning as
-     * {@code "<agent id> · <event>"} (followed by {@code ": <why>"} when given). Also kept in the party's own system of record.
-     */
     /** How a follow-up's finding is marked in the subject's conversation. */
     public static final String FINDING = "finding";
 
@@ -70,10 +66,20 @@ public class StorySupport {
                 + (because.isEmpty() ? "" : " Because: " + String.join(" ", because)));
     }
 
+    /** Events that are dialogue with a person (a re-ask), written as natural turns rather than as an agent's records. */
+    private static final java.util.Set<String> DIALOGUE = java.util.Set.copyOf(List.of(PaymentsSpecialistAgent.REASKED, UnderwriterAgent.REASKED));
+
+    /**
+     * Writes an agent's record of something it did, tagged in the reasoning as {@code "<agent id> · <event>"} (followed
+     * by {@code ": <why>"} when given): the request it answers and the result. A re-ask is dialogue and stays a natural
+     * turn (what the person said, the question); any other record goes in as a record, labelled by thread and event (see
+     * {@link ContextStore#addRecord}). Also kept in the party's own system of record.
+     */
     public void recordEvent(ContextStore store, String caseId, String agentId, String thread, String event, String why,
                             String input, String output) {
         String reasoning = ContextStore.Turn.tag(agentId, event) + (why == null || why.isBlank() ? "" : ": " + why);
-        store.addTurn(caseId, agentId, thread, input, output, reasoning);
+        if (DIALOGUE.contains(event)) store.addTurn(caseId, agentId, thread, input, output, reasoning);
+        else store.addRecord(caseId, agentId, thread, thread + " · " + event, input, output, reasoning);
         systemsOfRecord.keep(thread, new ContextStore.Turn(input, output, agentId, reasoning));
     }
 
@@ -86,8 +92,8 @@ public class StorySupport {
      */
     public void traceDecisions(ContextStore store, String caseId, String agentId, String thread, String persona) {
         for (StoryLedger.Decision d : ledger(caseId).takeUntraced(persona)) {
-            store.addTurn(caseId, agentId, thread, d.question(), d.answer(),
-                    ContextStore.Turn.decisionTag(agentId, d.gate()) + ": decided by " + d.decidedBy() + ", reading " + d.context() + ".");
+            store.addRecord(caseId, agentId, thread, thread + " · decision " + d.gate(), d.question(), d.answer(),
+                    ContextStore.Turn.decisionTag(agentId, d.gate()) + ": " + d.how() + ".");
         }
     }
 
@@ -146,7 +152,7 @@ public class StorySupport {
         for (StoryLedger.Decision d : ledger(caseId).decisions()) {
             if (!d.persona().equals(reader)) continue;
             trail.add(new StoryLedger.AuditEntry(trail.size() + 1, readerId, "decision", d.question(),
-                    "Gate " + d.gate() + ", decided by " + d.decidedBy() + ", reading " + d.context(), d.answer(), "", "this audit"));
+                    "Gate " + d.gate() + ", " + d.how(), d.answer(), "", "this audit"));
         }
         return trail;
     }
@@ -165,10 +171,14 @@ public class StorySupport {
      * Reads a conversation back by its key. Where writes are queued (live Meko), a record written moments ago may not
      * be readable yet: it retries a few times, briefly, until {@code enough} holds. Elsewhere it reads once.
      */
+    private static final long READ_BACK_BUDGET_MILLIS = 20_000;
+
     public List<ContextStore.Turn> readBack(ContextStore store, String caseId, String agentId, String thread,
                                             java.util.function.Predicate<List<ContextStore.Turn>> enough) {
+        // Bounded in time as well as attempts: a slow conversation_get must not hold a run for minutes.
+        long deadline = System.currentTimeMillis() + READ_BACK_BUDGET_MILLIS;
         List<ContextStore.Turn> turns = store.transcript(caseId, agentId, thread);
-        for (int attempt = 0; attempt < 4 && store.writesAreQueued() && !enough.test(turns); attempt++) {
+        for (int attempt = 0; attempt < 4 && store.writesAreQueued() && !enough.test(turns) && System.currentTimeMillis() + 2_000 < deadline; attempt++) {
             try {
                 Thread.sleep(2_000);
             } catch (InterruptedException e) {

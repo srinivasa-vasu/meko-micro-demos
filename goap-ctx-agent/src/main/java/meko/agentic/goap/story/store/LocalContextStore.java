@@ -73,7 +73,16 @@ public class LocalContextStore implements ContextStore {
     public void addTurn(String caseId, String agentId, String thread, String input, String output, String reasoning) {
         if (down(caseId, agentId, "conversation_add_message", "[" + thread + "] " + (reasoning != null ? reasoning : input))) return;
         conversations.computeIfAbsent(thread, k -> new CopyOnWriteArrayList<>()).add(new Turn(input, output, agentId, reasoning));
+        receipts.wrote(caseId, new ReceiptLog.Written(agentId, "turn", thread, input + " → " + output));
         log(caseId, agentId, "conversation_add_message", "[" + thread + "] " + (reasoning != null ? reasoning : input), 1);
+    }
+
+    @Override
+    public void addRecord(String caseId, String agentId, String thread, String label, String request, String output, String reasoning) {
+        if (down(caseId, agentId, "conversation_add_message", "[" + thread + "] " + (reasoning != null ? reasoning : request))) return;
+        conversations.computeIfAbsent(thread, k -> new CopyOnWriteArrayList<>()).add(new Turn(request, output, agentId, reasoning));
+        log(caseId, agentId, "conversation_add_message", "[" + thread + "] " + (reasoning != null ? reasoning : request), 1);
+        receipts.wrote(caseId, new ReceiptLog.Written(agentId, "record", label, request + " → " + output));
     }
 
     @Override
@@ -101,6 +110,11 @@ public class LocalContextStore implements ContextStore {
     }
 
     @Override
+    public List<StoreRecord> searchMemory(String caseId, String agentId, String query, int limit) {
+        return searchMemory(caseId, agentId, query);
+    }
+
+    @Override
     public List<StoreRecord> searchKnowledge(String caseId, String agentId, String query) {
         if (down(caseId, agentId, "knowledgebase_search", query)) return List.of();
         List<StoreRecord> rows = rank(knowledge, query);
@@ -117,6 +131,7 @@ public class LocalContextStore implements ContextStore {
         }
         String id = UUID.randomUUID().toString();
         memories.add(new Row(id, caseId, text, agentId, Instant.now()));
+        receipts.wrote(caseId, new ReceiptLog.Written(agentId, "memory", null, text));
         log(caseId, agentId, "memory_add", text, 1);
         return Optional.of(id);
     }
@@ -150,6 +165,7 @@ public class LocalContextStore implements ContextStore {
         List<Row> moved = memories.stream().filter(r -> memoryIds.contains(r.id())).toList();
         memories.removeAll(moved);
         knowledge.addAll(moved);
+        moved.forEach(r -> receipts.wrote(caseId, new ReceiptLog.Written(agentId, "promoted", null, r.text())));
         log(caseId, agentId, "memory_promote", moved.size() + " memory row(s) to the shared knowledge base", moved.size());
         return !moved.isEmpty();
     }

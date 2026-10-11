@@ -190,7 +190,7 @@ public class CatchUpAgent {
     @Action(description = "Check the change against the relevant architecture decision", pre = {"adrRelevant"},
             post = {"architectureChecked"}, cost = 0.10, canRerun = false)
     public ArchitectureChecked architectureCheck(DiffSummary diff, ProjectContext context) {
-        String result = "Checked retries are keyed by the original authorization id, as ADR-194 requires.";
+        String result = "Checked retries are keyed by the original authorization id, as ADR-194 requires (the simulated change does).";
         support.ledger(context.caseId()).step("Catch-up agent", "architectureCheck", result, support.effort("catch-up", "architecture-check"), StoryLedger.Kind.WORK);
         note(diff, CHECKED, "Check the change against ADR-194", result);
         return new ArchitectureChecked(context.caseId());
@@ -241,7 +241,7 @@ public class CatchUpAgent {
         String summary;
         ContextStore store = support.store(diff.store());
         if (tests.idempotencyTestAdded()) {
-            summary = PR + " pushed with " + (context.adrRelevant() ? "ADR-194 compliance and " : "") + "the requested idempotency test: approved on the next review.";
+            summary = PR + " pushed with " + (context.adrRelevant() ? "ADR-194 compliance and " : "") + "the requested idempotency test: the simulated reviewer approves it on the next review.";
             ledger.step("Catch-up agent", "requestReview", summary, support.effort("catch-up", "request-review"), StoryLedger.Kind.WORK);
             // The result goes back to memory: the request is addressed, so the PR bot, the reviewer and the next catch-up know.
             store.rememberLater(context.caseId(), AGENT_ID, PR + " review: the reviewer's request for an idempotency regression test "
@@ -249,7 +249,7 @@ public class CatchUpAgent {
                     + roundTag(diff.round()) + "]: test added, review requested.");
         } else if (!pullRequests.requestOpen(diff.store(), PR)) {
             // Nothing is open on the PR: it was addressed before, as the recalled context said.
-            summary = PR + " pushed: the reviewer's earlier request was already addressed; approved on the next review.";
+            summary = PR + " pushed: the reviewer's earlier request was already addressed; the simulated reviewer approves it on the next review.";
             ledger.step("Catch-up agent", "requestReview", summary, support.effort("catch-up", "request-review"), StoryLedger.Kind.WORK);
         } else {
             // The simulated reviewer's open request on the PR (the PR system's ground truth) was not addressed.
@@ -260,6 +260,7 @@ public class CatchUpAgent {
             ledger.count("missedRequirements", 1);
         }
         ledger.outcome(summary);
+        ledger.count("decided", 1);
         note(diff, REVIEW, "Push " + PR + " and request review", summary);
         List<String> facts = new ArrayList<>(List.of(
                 PR + " changes the payment retry contract (" + String.join(", ", diff.files()) + ")"));

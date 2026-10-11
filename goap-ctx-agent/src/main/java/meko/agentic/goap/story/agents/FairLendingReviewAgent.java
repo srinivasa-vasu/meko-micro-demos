@@ -211,7 +211,12 @@ public class FairLendingReviewAgent {
     public ReviewFinding fileFinding(ReviewRecord record, PolicyText policy, ReviewChecked checked) {
         StoryLedger ledger = support.ledger(record.caseId());
         Consistency c = checked.consistency();
-        String verdict = record.applicationId() + ": " + verdict(c);
+        // What was reviewed, as the record states it (the credit call, without its record-keeping), then the verdict.
+        String decided = record.turns().stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.CREDIT_CALL)).map(Turn::output)
+                .reduce((a, b) -> b).map(o -> o.contains(UnderwriterAgent.THRESHOLDS_APPLIED) ? o.substring(0, o.indexOf(UnderwriterAgent.THRESHOLDS_APPLIED)).trim() : o)
+                .map(o -> o.replaceFirst("^" + java.util.regex.Pattern.quote(record.applicationId()) + ":\\s*", "") + " ").orElse("");
+        String verdict = record.applicationId() + ": " + decided + verdict(c);
+        ledger.count(c.consistent() == null ? "findingsUnverified" : c.consistent() ? "findingsCompliant" : "findingsNotCompliant", 1);
         ledger.step(PERSONA, "fileFinding", "Filed the finding: " + verdict, support.effort("fair-lending-reviewer", "file-finding"), StoryLedger.Kind.WORK);
         ledger.outcome(ledger.outcome() == null ? verdict : ledger.outcome() + " " + verdict);
         List<String> sources = record.turns().stream().map(Turn::writtenBy).distinct().toList();
@@ -333,7 +338,7 @@ public class FairLendingReviewAgent {
         List<String> required = requiredConditions(turns, policyText);
         List<Turn> cleared = turns.stream().filter(t -> t.isEvent(UNDERWRITER, UnderwriterAgent.CONDITION_CLEARED)).toList();
         Boolean conditionsDocumented = policyText.isBlank() || call < 0 || required == null ? null
-                : required.stream().allMatch(item -> cleared.stream().anyMatch(t -> t.input().toLowerCase().contains(item) && documented(t)
+                : required.stream().allMatch(item -> cleared.stream().anyMatch(t -> t.why().equalsIgnoreCase(item) && documented(t)
                 && turns.indexOf(t) < call));
         List<String> findings = new ArrayList<>();
         if (verifiedFirst != null) findings.add(verifiedFirst ? "Income, assets, employment and credit were verified before the credit call."

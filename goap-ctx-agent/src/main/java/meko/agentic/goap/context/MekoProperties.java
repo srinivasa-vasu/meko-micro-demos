@@ -27,6 +27,11 @@ public class MekoProperties {
     public void setClientName(String clientName) { this.clientName = clientName; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
 
+    /** A key is set, so a datapack can be created or chosen at run time. */
+    public boolean keyed() {
+        return enabled && notBlank(apiKey);
+    }
+
     public boolean configured() {
         return enabled && notBlank(apiKey) && (notBlank(datapackId) || notBlank(datapackName));
     }

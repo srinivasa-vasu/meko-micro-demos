@@ -1,0 +1,1067 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meko Workshop</title>
+<style>
+:root{--bg:#091016;--panel:#101a24;--panel2:#0c141c;--ink:#edf3f8;--muted:#8ea0b2;--line:#263443;--accent:#71ddb9;--warn:#f5c66a;--bad:#ff8b8b;--blue:#8fbcff;--violet:#c9b6ff;
+  --accent-bg:#14382c;--warn-bg:#3a2e14;--bad-bg:#3a1c1f;--blue-bg:#16263d;--violet-bg:#2a2350;--btn:#1a2632;--chip:#17222d;--text2:#c5d1dc;--on-accent:#06130f;--hover:#121d28;--active:#132028;
+  --cust-bg:#1a1f2b;--agent-bg:#13202c;--spec-bg:#1c1a12;--warn-tint:#1b1912;--bad-tint:#1b1416;--blue-tint:#111a26;--boundary-bg:#13202c;--boundary-line:#3a5068;color-scheme:dark}
+:root[data-theme="light"]{--bg:#f4f6f9;--panel:#ffffff;--panel2:#f3f6f9;--ink:#14202b;--muted:#5a6878;--line:#d6dee7;--accent:#0b8462;--warn:#946300;--bad:#c23a3a;--blue:#2a5fc4;--violet:#5b45c9;
+  --accent-bg:#dcf2ea;--warn-bg:#f7ecd0;--bad-bg:#f9e0e0;--blue-bg:#e1eafa;--violet-bg:#ebe6fb;--btn:#f3f6f9;--chip:#f0f4f8;--text2:#2e3d4b;--on-accent:#ffffff;--hover:#edf2f6;--active:#e3f1ec;
+  --cust-bg:#eef2f8;--agent-bg:#eaf4f0;--spec-bg:#f8f5ea;--warn-tint:#fdf8ec;--bad-tint:#fdf3f3;--blue-tint:#f1f6fd;--boundary-bg:#f0f5fa;--boundary-line:#a9bed3;color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.wrap{max-width:1500px;margin:auto;padding:14px clamp(12px,2vw,32px) 48px}
+svg.i{width:16px;height:16px;flex:none;vertical-align:-3px}
+svg.i.lg{width:20px;height:20px}
+a{color:var(--blue)}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.brand{color:var(--accent);font-weight:800;font-size:13px;display:flex;gap:6px;align-items:center}
+h1{font-size:22px;margin:2px 0;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13px;max-width:780px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{display:inline-flex;gap:6px;align-items:center;padding:5px 10px;border-radius:99px;background:var(--chip);color:var(--muted);font-size:11.5px;white-space:nowrap}
+.pill.ok{background:var(--accent-bg);color:var(--accent)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.btn{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);background:var(--btn);color:var(--ink);padding:7px 13px;border-radius:9px;cursor:pointer;font:inherit}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:800}
+.iconbtn{display:inline-grid;place-items:center;width:32px;height:32px;padding:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px;background:var(--panel2)}
+.seg button{border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:7px;cursor:pointer;font:inherit;font-weight:600}
+.seg button[aria-selected="true"]{background:var(--accent-bg);color:var(--accent)}
+/* An option with a second line: what it is, then who you are in it. */
+.seg button .role{display:block;font-size:11.5px;font-weight:500;opacity:.8;margin-top:1px}
+.dp-panel{margin-top:10px}
+.lbl{display:block;font-size:12.5px;font-weight:700;color:var(--text2);margin-bottom:4px}
+.hint{font-size:12px;color:var(--muted);margin-top:5px}
+.dp-list{display:flex;flex-direction:column;gap:4px;max-height:240px;overflow:auto;max-width:720px}
+.dp{display:flex;gap:10px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);cursor:pointer}
+.dp:has(input:checked){border-color:var(--accent)}
+.dp.other .dp-n{color:var(--muted)}
+.dp-n{font-weight:700}.dp-m{font-size:12px;color:var(--muted);margin-right:auto}
+input.text,select.text{min-width:300px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:7px 10px;font:inherit}
+h3{font-size:14px;margin:0 0 10px;display:flex;gap:8px;align-items:center}
+h3 .count{color:var(--muted);font-weight:400}
+.note{font-size:12.5px;color:var(--muted)}
+
+/* Use case tabs */
+.tabs{display:flex;gap:4px;margin-top:14px;overflow-x:auto;border-bottom:1px solid var(--line)}
+/* The vertical (BFSI) once, standing beside its use cases, as in the demo. */
+.tab-group{align-self:center;flex:0 0 auto;font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--muted);writing-mode:vertical-rl;transform:rotate(180deg);padding:4px 2px;border-right:2px solid var(--line)}
+.tab{flex:1 0 auto;min-width:210px;display:flex;gap:10px;align-items:flex-start;border:0;border-bottom:3px solid transparent;background:transparent;border-radius:9px 9px 0 0;padding:9px 12px 10px;cursor:pointer;text-align:left;color:var(--muted);font:inherit}
+.tab:hover{background:var(--hover);color:var(--ink)}
+.tab.active{border-bottom-color:var(--accent);background:var(--active);color:var(--ink)}
+.tab .ico{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:var(--chip);color:var(--muted)}
+.tab.active .ico{background:var(--accent-bg);color:var(--accent)}
+.tab .k{font-size:11px;color:var(--muted)}
+.tab .t{font-weight:800;font-size:13.5px;white-space:nowrap}
+.dots{display:flex;gap:3px;margin-top:4px}.dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}.dots i.on{background:var(--accent)}
+
+/* The use case */
+.uc{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px}
+.uc h2{font-size:21px;margin:0 0 4px;letter-spacing:-.01em}
+.uc .domain{font-size:12px;color:var(--accent);font-weight:700}
+.uc .problem{color:var(--text2);font-size:14.5px;max-width:70ch}
+.boundary{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:13px;color:var(--text2);background:var(--boundary-bg);border:1px dashed var(--boundary-line);border-radius:9px;padding:7px 10px}
+.challenge{margin-top:10px;font-style:italic;color:var(--muted)}
+.reads{border-left:1px solid var(--line);padding-left:18px}
+.reads .r{display:flex;gap:10px;align-items:flex-start;margin:8px 0;font-size:13px;color:var(--text2)}
+.reads .r .ico{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--chip);color:var(--muted);flex:none}
+.reads .r.on .ico{background:var(--accent-bg);color:var(--accent)}
+.reads .r.off{color:var(--muted)}
+
+/* Guided steps: a connected track */
+.track{display:flex;gap:0;overflow-x:auto;padding-bottom:2px}
+.step{position:relative;flex:1 0 120px;display:flex;flex-direction:column;align-items:center;gap:5px;border:0;background:transparent;cursor:pointer;color:var(--muted);font:inherit;padding:2px 4px;text-align:center}
+.step::before{content:"";position:absolute;top:18px;left:-50%;right:50%;height:2px;background:var(--line)}
+.step:first-child::before{display:none}
+.step.linked::before{background:var(--accent)}
+.step .dot{position:relative;z-index:1;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--panel2);border:2px solid var(--line);color:var(--muted)}
+.step.done .dot{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.step.current .dot{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.step.skip{opacity:.4}.step.skip .dot{border-style:dashed}
+.step .t{font-size:12px;font-weight:700;color:var(--ink);line-height:1.3}
+.step .s{font-size:11px}
+.guide h2{margin:16px 0 6px;font-size:18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.guide ol{margin:6px 0 12px;padding-left:20px;color:var(--text2);max-width:110ch}.guide li{margin:4px 0}
+code{font:12px ui-monospace,monospace;background:var(--chip);padding:1px 5px;border-radius:5px}
+.status{color:var(--muted);font-size:12.5px;min-height:18px;margin-top:10px}
+.nav{display:flex;justify-content:space-between;gap:8px;margin-top:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:12px}
+
+/* Output: the stage track, then one stage's run */
+.stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.stage{display:flex;flex-direction:column;gap:6px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2);min-width:0;cursor:pointer;text-align:left;color:var(--ink);font:inherit}
+.stage.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.stage.skip{opacity:.4;border-style:dashed;cursor:default}
+.stage .h{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
+.stage .n{font-size:11.5px;color:var(--muted)}
+.stage .t{font-weight:800;font-size:13.5px}
+.layers{display:flex;gap:5px}
+.layers span{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:var(--chip);color:var(--line)}
+.layers span.on{background:var(--accent-bg);color:var(--accent)}
+.verdict{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:700;border-radius:99px;padding:3px 9px;width:fit-content}
+.verdict.ok{background:var(--accent-bg);color:var(--accent)}.verdict.warn{background:var(--warn-bg);color:var(--warn)}.verdict.bad{background:var(--bad-bg);color:var(--bad)}
+.metric{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--muted)}
+.metric b{font-size:17px;color:var(--ink)}
+.delta{font-size:11.5px;font-weight:800;margin-left:5px}.win{color:var(--accent)}.lose{color:var(--bad)}
+.stage .none{color:var(--muted);font-size:12.5px}
+.outcome{display:flex;gap:10px;align-items:flex-start;font-size:14px;background:var(--panel2);border-left:3px solid var(--accent);border-radius:8px;padding:10px 12px;margin-top:14px}
+.outcome.warn{border-left-color:var(--warn)}.outcome.bad{border-left-color:var(--bad)}
+.pillars{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
+.pillar{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--panel2);min-width:0;max-height:320px;overflow:auto}
+.pillar h3{margin-bottom:6px}
+.pillar h3 .ico{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--accent-bg);color:var(--accent)}
+.pillar.off h3 .ico{background:var(--chip);color:var(--muted)}
+.part{margin-top:6px}.part + .part{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
+.part-t{display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:700;color:var(--text2)}
+.item{font-size:12.5px;padding:7px 9px;border-radius:8px;background:var(--panel);margin:5px 0;color:var(--text2)}
+.item.trace .q{font-weight:700;color:var(--ink)}
+.item.trace .a{margin-top:3px;color:var(--accent)}
+.item.trace .m{margin-top:3px;font-size:12px;color:var(--muted)}.item.trace .m b{color:var(--text2);font-weight:700}
+.item .src{font-size:11.5px;font-weight:700;color:var(--accent);margin-bottom:2px}
+.item.passed .src{color:var(--warn)}
+.detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}
+.box{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);min-width:0}
+.chat{display:flex;flex-direction:column;gap:6px;max-height:460px;overflow:auto;padding-right:4px}
+.bubble{max-width:85%;border-radius:12px;padding:7px 10px;font-size:13px}
+.bubble .who{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:1px}
+.bubble.person{align-self:flex-start;background:var(--cust-bg);border-bottom-left-radius:4px}
+.bubble.agent{align-self:flex-end;background:var(--agent-bg);border-bottom-right-radius:4px}
+.chat .sep{align-self:center;font-size:11.5px;color:var(--muted);font-weight:700;margin-top:6px}
+.did{display:flex;gap:8px;font-size:12.5px;padding:6px 8px;border-radius:8px;margin:4px 0;align-items:flex-start}
+.did .k{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;flex:none;background:var(--chip);color:var(--muted)}
+.did.ASK{background:var(--warn-tint)}.did.ASK .k{background:var(--warn-bg);color:var(--warn)}
+.did.REWORK{background:var(--bad-tint)}.did.REWORK .k{background:var(--bad-bg);color:var(--bad)}
+.did.CONTEXT{background:var(--blue-tint)}.did.CONTEXT .k{background:var(--blue-bg);color:var(--blue)}
+.did .p{font-weight:700}.did .m{margin-left:auto;color:var(--muted);font-size:11px;white-space:nowrap}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-bottom:6px}
+.legend span{display:inline-flex;gap:5px;align-items:center}
+.sum{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-size:11.5px;font-weight:600}
+td.tool{white-space:nowrap}
+.tool span{display:inline-flex;gap:5px;align-items:center;font:11.5px ui-monospace,monospace;border-radius:6px;padding:2px 6px}
+.tool .read{background:var(--blue-bg);color:var(--blue)}.tool .write{background:var(--violet-bg);color:var(--violet)}
+td.fail{color:var(--bad);font-weight:700}
+.empty{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:13px;margin-top:14px}
+@media(max-width:1000px){.uc{grid-template-columns:minmax(0,1fr)}.reads{border-left:0;padding-left:0}.detail{grid-template-columns:minmax(0,1fr)}.stages,.pillars{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:no-preference){.stage,.step .dot,.btn{transition:border-color .15s,background .15s,box-shadow .15s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <div class="brand" id="brandMark">Meko workshop</div>
+      <h1>Focus on the domain, never pay the data infrastructure tax. Same agents. Same code. Only the context changes.</h1>
+      <div class="sub">Pick a use case, then follow the steps. At each stage you run the same agent with Meko and see what it now knows,
+        what it still has to ask, and every call it makes to Meko.</div>
+    </div>
+    <div class="row"><span class="pill" id="storePill">Meko: checking…</span><span class="pill" id="modelPill">Models: …</span>
+      <button class="btn iconbtn" id="themeBtn" aria-label="Switch theme" title="Switch theme"></button></div>
+  </header>
+
+  <nav class="tabs" id="tabs" aria-label="Use cases"></nav>
+  <section class="panel" id="usecase"></section>
+
+  <section class="panel guide">
+    <nav class="track" id="stepper" aria-label="Workshop steps"></nav>
+    <div id="guide"></div>
+  </section>
+
+  <section class="panel" id="output"></section>
+</div>
+<script>
+const el = id => document.getElementById(id);
+const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[c]));
+const post = async url => { const r = await fetch(url, {method: 'POST'}); if (!r.ok) throw new Error((await r.text()) || r.statusText); return r.json(); };
+const keep = {get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+              set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* not kept */ } }};
+
+// ---------------------------------------------------------------- icons (stroke icons, inline)
+const PATHS = {
+  database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+  play: '<path d="M7 4l13 8-13 8z"/>',
+  upload: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6M9 15l3-3 3 3"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
+  promote: '<path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>',
+  shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  check: '<path d="M5 12l5 5L20 7"/>',
+  card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/>',
+  bank: '<path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 21h18"/>',
+  id: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.5 1.7-2.2 3-2.2s2.4.7 3 2.2M14 10h4M14 14h3"/>',
+  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/>',
+  memory: '<path d="M12 5a3 3 0 0 0-6 .5A3 3 0 0 0 4 11a3 3 0 0 0 2 5.5A3 3 0 0 0 12 19z"/><path d="M12 5a3 3 0 0 1 6 .5A3 3 0 0 1 20 11a3 3 0 0 1-2 5.5A3 3 0 0 1 12 19z"/>',
+  book: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  route: '<circle cx="6" cy="19" r="2"/><circle cx="18" cy="5" r="2"/><path d="M8 19h8a3 3 0 0 0 0-6H8a3 3 0 0 1 0-6h8"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+  read: '<path d="M17 7L7 17M7 9v8h8"/>',
+  write: '<path d="M7 17L17 7M9 7h8v8"/>',
+  ask: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17h.01"/>',
+  redo: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>',
+  dot: '<circle cx="12" cy="12" r="3"/>',
+  boundary: '<path d="M12 3v18" stroke-dasharray="3 3"/><path d="M4 8l4 4-4 4M20 8l-4 4 4 4"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  left: '<path d="M15 18l-6-6 6-6"/>', right: '<path d="M9 18l6-6-6-6"/>', trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  refresh: '<path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/><path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>'};
+const icon = (name, cls) => '<svg class="i' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + PATHS[name] + '</svg>';
+
+// ---------------------------------------------------------------- theme (this browser only)
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  el('themeBtn').innerHTML = icon(t === 'light' ? 'moon' : 'sun');
+  el('themeBtn').title = 'Switch to the ' + (t === 'light' ? 'dark' : 'light') + ' theme';
+}
+applyTheme(keep.get('theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+el('themeBtn').onclick = () => { const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; applyTheme(t); keep.set('theme', t); };
+el('brandMark').insertAdjacentHTML('afterbegin', icon('database'));
+
+// ---------------------------------------------------------------- state
+let status = null;                 // /api/workshop/status
+let catalog = {};                  // use case id → catalog entry
+let busy = false;
+let step = 0;                      // set on load to where the selected use case should resume
+let selected = keep.get('workshop.tab');
+let shown = null;                  // the stage whose run is shown in detail
+// Runs are saved per datapack (and per start of the offline stand-in): they only mean something for the context they ran against.
+let context = null;
+const runs = {}, audits = {};                             // use case id → {stage: run}, {stage: follow-up}
+/**
+ * The learning use case's pair exercise: solo (the default), or one of two partners, each with their own Meko account,
+ * sharing one datapack. The EU desk solves case 1 and shares its datapack; the APAC desk runs its baseline in its
+ * own datapack, switches to the shared one, and runs again. A partner's runs are kept per role, not per datapack, so
+ * the baseline stays on the page across the switch.
+ */
+let pair = Object.assign({mode: 'solo', role: 'support', shared: false}, keep.get('workshop.pair') || {});
+let soloLearn = null;   // the solo runs of the learning use case, set aside while pair mode is on
+let lesson = null;      // the newest lesson in the datapack in use, as /api/workshop/lesson reports it (pair, support)
+const pairRuns = () => keep.get('workshop.pairruns.' + pair.role) || {};
+
+function loadRuns(id) {
+  context = id || 'unsaved-' + Date.now();   // no datapack to file runs under: nothing is kept
+  [runs, audits].forEach(o => Object.keys(o).forEach(k => delete o[k]));
+  Object.assign(runs, keep.get('workshop.runs9.' + context) || {});
+  Object.assign(audits, keep.get('workshop.audits9.' + context) || {});
+  soloLearn = runs['organization-learned'] || null;
+  if (pair.mode === 'pair') runs['organization-learned'] = pairRuns();
+}
+function save() {
+  const mine = Object.assign({}, runs);
+  if (pair.mode === 'pair') {
+    keep.set('workshop.pairruns.' + pair.role, runs['organization-learned'] || {});
+    if (soloLearn) mine['organization-learned'] = soloLearn; else delete mine['organization-learned'];
+  }
+  keep.set('workshop.runs9.' + context, mine); keep.set('workshop.audits9.' + context, audits);
+  keep.set('workshop.tab', selected); keep.set('workshop.pair', pair);
+}
+
+/** Switches the learning use case between solo and a pair role; each keeps its own runs. */
+function setPair(mode, role) {
+  if (pair.mode === 'pair') keep.set('workshop.pairruns.' + pair.role, runs['organization-learned'] || {});
+  else soloLearn = runs['organization-learned'] || null;
+  pair = Object.assign({}, pair, {mode, role: role || pair.role});
+  runs['organization-learned'] = mode === 'pair' ? pairRuns() : (soloLearn || {});
+  lesson = null; lastMessage = '';
+  resume(); save(); render();
+  if (mode === 'pair' && pair.role === 'support') refreshLesson().then(render);
+}
+
+/** The newest lesson promoted in the datapack in use (the partner's case 1), or null. */
+async function refreshLesson() {
+  try { const l = await (await fetch('/api/workshop/lesson')).json(); lesson = l && l.epoch ? l : null; } catch (e) { lesson = null; }
+  return lesson;
+}
+
+const STAGES = ['No context', 'Shared knowledge', 'Another desk\'s reviews', 'Collective memory & audit'];
+const STAGE_NOTES = ['Empty datapack: only what the agents write during the run', 'Documents uploaded', 'Last quarter\'s reviews, in memory', 'Lessons promoted; records audited'];
+/** How the state of the earlier reviews reads on the page ("seeded" is the server's word for it). */
+const reviewsState = v => v === 'seeded' ? 'added' : v === 'missing' || !v ? 'not added yet' : String(v).replace('partly seeded', 'partly added');
+const STEPS = [
+  // Done once a datapack is connected; on the offline stand-in (no key) there is nothing to create.
+  {t: 'Create your datapack', icon: 'database', done: () => status && ((status.store.live && status.store.connected) || !status.store.keyed)},
+  {t: 'Run with no context', icon: 'play', stage: 0},
+  // Per use case: what this use case reads, not everything the workshop's use cases read together.
+  {t: 'Add the documents', icon: 'upload', done: () => status && myDocs().length > 0 && myDocs().every(k => (status.documents[k] || 'missing') !== 'missing')},
+  {t: 'Run with shared knowledge', icon: 'play', stage: 1},
+  {t: 'Add last quarter\'s reviews', icon: 'history', done: () => status && status.history[selected] === 'seeded'},
+  {t: 'Run with their reviews', icon: 'play', stage: 2},
+  {t: 'Promote & audit', icon: 'shield', stage: 3},
+  // The pair exercise's own steps (the learning use case, in pair mode).
+  {t: 'Share it with your partner', icon: 'user', done: () => !!pair.shared},
+  {t: 'Switch to the shared datapack', icon: 'database', done: () => switchedToShared()}];
+/** The last step of the usual flow: named for what it does in each use case. */
+const FINALE = 6;
+/** The support partner has moved from the datapack its baseline ran in to another one (the shared one). */
+function switchedToShared() {
+  const base = (runs['organization-learned'] || {})[0];
+  return !!(base && base.datapackId && status.store.connected && status.store.datapackId && status.store.datapackId !== base.datapackId);
+}
+/**
+ * The learning use case runs the same case twice around another desk's case: the APAC desk's investigator alone (nothing promoted
+ * yet), the EU payments desk's agent on case 1 (it promotes the root cause), then the APAC desk's again.
+ */
+const LEARNS = 'organization-learned';
+const pairOn = (id = selected) => id === LEARNS && pair.mode === 'pair';
+/** Whether the learning use case's lesson is in the datapack: for the APAC partner, as the datapack reports it. */
+const learnPromoted = () => selected === LEARNS && (pairOn() && pair.role === 'support' ? !!lesson : !!(runs[LEARNS] && runs[LEARNS][2]));
+/** Each partner's steps, in the order they do them. */
+const pairSteps = () => pair.role === 'eu' ? [0, 5, 7] : [0, 1, 8, 6];
+const PAIR_TITLES = {eu: {0: 'Create your datapack', 5: 'Solve case 1', 7: 'Share it with your partner'},
+  support: {0: 'Create your own datapack', 1: 'Run without the lesson', 8: 'Switch to the shared datapack', 6: 'Run with the lesson'}};
+const LEARN_STAGES = {0: ['Without the lesson', 'Your investigator, case 2: nothing promoted yet'],
+  2: ['The EU desk\'s case 1', 'The EU payments desk\'s agent solves it and promotes the root cause'],
+  3: ['With the lesson', 'Your investigator, case 2 again: the root cause is collective memory']};
+const LEARN_STEPS = {1: 'Run without the lesson', 5: 'The EU desk solves case 1', 6: 'Run with the lesson'};
+/**
+ * A use case that reads both documents and another desk's earlier reviews (the KYC review) gets them in one stage: the
+ * standard alone changes nothing without an earlier review to compare with, so its own run would only repeat the
+ * first. Its steps: add last quarter's reviews, add the documents, then one run with both.
+ */
+const memoryFirst = (id = selected) => { const u = status.useCases.find(x => x.id === id); return !!u && u.history && u.documents.length > 0; };
+const BOTH_STAGE = ['The standard & last quarter\'s reviews', 'The standard added, and another desk\'s reviews in memory'];
+const stageName = (s, id = selected) => id === LEARNS && LEARN_STAGES[s] ? LEARN_STAGES[s][0] : s === 2 && memoryFirst(id) ? BOTH_STAGE[0] : STAGES[s];
+const stageNote = (s, id = selected) => id === LEARNS && LEARN_STAGES[s] ? LEARN_STAGES[s][1] : s === 2 && memoryFirst(id) ? BOTH_STAGE[1] : STAGE_NOTES[s];
+/** The documents the selected use case reads. */
+const myDocs = () => (status.useCases.find(x => x.id === selected) || {documents: []}).documents;
+const TAB_ICONS = {'dont-make-me-explain': 'card', 'loan-underwriting': 'bank', 'what-changed': 'id', 'organization-learned': 'bulb'};
+const stepDone = i => STEPS[i].stage != null ? !!(runs[selected] && runs[selected][STEPS[i].stage]) : STEPS[i].done();
+
+/**
+ * Which steps a use case needs: the documents only if it reads them, the history only if it reads it. The learning use
+ * case needs nothing in the datapack (its lesson is written and promoted during the run), so it runs at its last step.
+ */
+function needed(i, id = selected) {
+  const u = status.useCases.find(x => x.id === id);
+  if (pairOn(id)) return pairSteps().includes(i);
+  if (i >= 7) return false;
+  if (i === 0 || i === 6) return true;
+  if (id === LEARNS) return i === 1 || i === 5;
+  if (i === 3 && memoryFirst(id)) return false;
+  if (i === 1) return true;
+  if (i === 2 || i === 3) return u.documents.length > 0;
+  return u.history;
+}
+/** The use cases where one agent hands the case to another: memory written during the run is what crosses. */
+const handsOff = id => id === 'dont-make-me-explain' || id === 'loan-underwriting';
+const stageNeeded = (s, id = selected) => needed(STEPS.findIndex(x => x.stage === s), id);
+function whyNotNeeded(i) {
+  const t = catalog[selected].title;
+  if (selected === LEARNS) return t + ' needs nothing added to your datapack: the EU desk\'s agent promotes the lesson during its run.';
+  if (i === 2 || i === 3) return t + ' reads no shared knowledge: nothing to add for it.';
+  return t + ' does not read another desk\'s earlier reviews: nothing to add for it.';
+}
+const promotes = id => id === 'organization-learned' || id === 'loan-underwriting';
+
+/** Where the selected use case resumes: the first step it needs that is not done yet (the last step once all are). */
+function resume() {
+  const open = mySteps().find(i => !stepDone(i));
+  step = open == null ? mySteps().slice(-1)[0] : open;
+  shown = null;
+}
+
+// ---------------------------------------------------------------- use case tabs and description
+function renderTabs() {
+  // The vertical before the first use case of each (BFSI), then each tab names only its area (PAYMENTS, KYC).
+  const vertical = id => String(catalog[id].domain).split(' / ')[0];
+  const area = id => String(catalog[id].domain).split(' / ').slice(1).join(' / ') || catalog[id].domain;
+  el('tabs').innerHTML = status.useCases.map((u, n) => {
+    const c = catalog[u.id];
+    const group = n === 0 || vertical(status.useCases[n - 1].id) !== vertical(u.id) ? '<span class="tab-group">' + esc(vertical(u.id)) + '</span>' : '';
+    const dots = [0, 1, 2, 3].filter(s => stageNeeded(s, u.id)).map(s => '<i class="' + (runs[u.id] && runs[u.id][s] ? 'on' : '') + '" title="' + esc(stageName(s, u.id)) + '"></i>').join('');
+    return group + '<button class="tab' + (u.id === selected ? ' active' : '') + '" data-tab="' + esc(u.id) + '"><span class="ico">' + icon(TAB_ICONS[u.id] || 'dot', 'lg') + '</span>' +
+      '<span><span class="k">' + esc(area(u.id)) + '</span><div class="t">' + esc(c.title) + '</div><div class="dots" aria-label="Stages run">' + dots + '</div></span></button>';
+  }).join('');
+  // Another use case: it resumes at its own first open step, and the last message (about the other one) is cleared.
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { selected = b.dataset.tab; resume(); lastMessage = ''; save(); render(); });
+}
+
+function renderUseCase() {
+  const c = catalog[selected];
+  const u = status.useCases.find(x => x.id === selected);
+  // What the datapack holds for this use case right now: lit only when it is actually there.
+  const docState = u.documents.map(k => [k, status.documents[k] || 'missing']);
+  const docsIn = docState.length > 0 && docState.every(d => d[1] !== 'missing');
+  const histIn = u.history && status.history[selected] === 'seeded';
+  const reads = [
+    ['memory', 'Memory', histIn ? 'in' : u.history ? 'not' : handsOff(selected) ? 'run' : 'none',
+      (handsOff(selected) ? 'Nothing stored yet: during each run the first agent writes here and the next one recalls it.' : '') +
+      (u.history ? (handsOff(selected) ? ' ' : '') + 'Last quarter\'s reviews from another desk\'s agent: ' + (histIn ? 'in your datapack.' : 'not in your datapack yet.') : '') +
+      (!handsOff(selected) && !u.history ? 'Not read by this use case.' : '')],
+    ['book', 'Shared knowledge', docsIn ? 'in' : u.documents.length ? 'not' : 'none',
+      u.documents.length ? docState.map(d => d[0] + ': ' + (d[1] === 'missing' ? 'not in your datapack yet' : d[1])).join('; ') + (docsIn ? '.' : ' (stage 1).') : 'Not read by this use case.'],
+    ['promote', 'Collective memory', learnPromoted() ? 'in' : promotes(selected) ? 'run' : 'none',
+      selected === LEARNS ? (pairOn() && pair.role === 'support'
+        ? (lesson ? 'The root cause your partner\'s agent promoted (' + lesson.writtenBy + '), in this datapack.' : 'Empty until your partner solves case 1 and shares their datapack.')
+        : learnPromoted() ? 'The root cause the EU payments desk\'s agent promoted in case 1, as that run (step ' + stepNo(5) + ') reported its promotion.'
+        : 'Empty until ' + (pairOn() ? 'your' : 'the EU desk\'s') + ' agent solves case 1 and promotes its root cause (step ' + stepNo(5) + ').')
+      : promotes(selected) ? 'Nothing promoted yet: the runs promote what they learn from memory, then reuse it (stage 3).' : 'Not used by this use case.']];
+  const BADGE = {in: ['ok', 'in your datapack'], not: ['warn', 'not yet'], run: ['', 'empty'], none: ['', 'not used'], needs: ['', 'needed']};
+  // No datapack yet (a key, but none created or chosen): say what the use case needs, not what a datapack lacks.
+  const noDatapack = status.store.keyed && !(status.store.live && status.store.connected);
+  if (noDatapack) {
+    reads[0][2] = handsOff(selected) || u.history ? 'needs' : 'none';
+    reads[0][3] = (handsOff(selected) ? 'Written by one agent during each run and recalled by the next.' : '') +
+      (u.history ? (handsOff(selected) ? ' ' : '') + 'Also last quarter\'s reviews from another desk\'s agent.' : '') + (!handsOff(selected) && !u.history ? 'Not read by this use case.' : '');
+    reads[1][2] = u.documents.length ? 'needs' : 'none';
+    reads[1][3] = u.documents.length ? 'The documents ' + u.documents.join(' and ') + ' (stage 1).' : 'Not read by this use case.';
+  }
+  el('usecase').innerHTML = '<div class="uc"><div>' +
+    '<div class="domain">' + esc(c.domain) + '</div><h2>' + esc(c.title) + '</h2>' +
+    '<div class="problem">' + esc(c.problem) + '</div>' +
+    '<div class="boundary">' + icon('boundary') + '<span><b>Boundary.</b> ' + esc(c.boundary) + '</span></div>' +
+    '<div class="challenge">' + esc(c.hook) + '</div></div>' +
+    '<div class="reads"><h3>Your datapack, for this use case</h3><div class="note" style="margin:-4px 0 6px">' +
+      (noDatapack ? 'No datapack yet: create one in step 1. This use case will need:' : 'Green is what is in it now.') + '</div>' +
+    reads.map(r => '<div class="r' + (r[2] === 'in' ? ' on' : r[2] === 'none' ? ' off' : '') + '"><span class="ico">' + icon(r[0]) + '</span><span><b>' + esc(r[1]) + '</b> ' +
+      '<span class="pill ' + BADGE[r[2]][0] + '">' + BADGE[r[2]][1] + '</span><br>' + esc(r[3]) + '</span></div>').join('') +
+    '</div></div>';
+}
+
+// ---------------------------------------------------------------- the guided steps
+/** The steps the selected use case has, in order (indexes into STEPS). */
+const mySteps = () => (pairOn() ? pairSteps() : memoryFirst() ? [0, 1, 4, 2, 5, 6] : STEPS.map((x, i) => i)).filter(i => needed(i));
+/** A step's number as this use case counts them. */
+const stepNo = i => mySteps().indexOf(i) + 1;
+/** A step's title; the last one is named for what it does in this use case. */
+function stepTitle(i) {
+  if (pairOn() && PAIR_TITLES[pair.role][i]) return PAIR_TITLES[pair.role][i];
+  if (selected === LEARNS && LEARN_STEPS[i]) return LEARN_STEPS[i];
+  if (i === 5 && memoryFirst()) return 'Run with the standard and their reviews';
+  if (i !== FINALE) return STEPS[i].t;
+  const f = finale();
+  return f.rerun && f.audit ? 'Promote & audit' : f.audit ? 'Audit' : 'Promote & reuse';
+}
+
+function renderStepper() {
+  const mine = mySteps();
+  el('stepper').innerHTML = mine.map((i, n) => {
+    const s = STEPS[i], done = stepDone(i);
+    const linked = n > 0 && stepDone(mine[n - 1]);
+    return '<button class="step' + (done ? ' done' : '') + (linked ? ' linked' : '') + (i === step ? ' current' : '') + '" data-i="' + i + '" aria-current="' + (i === step ? 'step' : 'false') + '">' +
+      '<span class="dot">' + icon(done && i !== step ? 'check' : s.icon) + '</span><span class="t">' + esc(stepTitle(i)) + '</span>' +
+      '<span class="s">' + (done ? 'done' : 'step ' + (n + 1)) + '</span></button>';
+  }).join('');
+  // Another step: the last message (about the step left) is cleared.
+  document.querySelectorAll('.step').forEach(b => b.onclick = () => { step = Number(b.dataset.i); shown = STEPS[step].stage ?? shown; lastMessage = ''; save(); render(); });
+}
+
+function guide() {
+  const live = status.store.live;
+  const title = esc(catalog[selected].title);
+  const docs = myDocs().map(k => [k, status.documents[k] || 'missing']);
+  const ran = STEPS[step].stage != null && !!(runs[selected] && runs[selected][STEPS[step].stage]);
+  const blocked = earlierOpen(step) || (STEPS[step].stage != null ? stageBlocked(STEPS[step].stage) : null);
+  const wait = blocked ? '<span class="note">' + esc(blocked) + '</span>' : '';
+  const run = '<button class="btn primary" data-run' + (busy || ran || blocked ? ' disabled' : '') +
+    (ran ? ' title="Already run at this stage: start over with a new datapack to run it again."' : blocked ? ' title="' + esc(blocked) + '"' : '') + '>' +
+    icon(ran ? 'check' : 'play') + (ran ? 'Run done' : 'Run') + '</button>' + (blocked && !ran ? '<span class="note">' + esc(blocked) + '</span>' : '');
+  const check = '<button class="btn" data-act="check"' + (busy ? ' disabled' : '') + '>' + icon('refresh') + 'Check my datapack</button>';
+  let body = [
+    ['Create a fresh datapack for the workshop', datapackLines(), datapackForm()],
+    ['Run ' + title + ' with no context',
+      ['Your datapack is empty: no documents, no earlier memory. The agents still write to Meko during the run, and the next agent can recall it.',
+       'What did the agent know, and what could it still not decide? Do this for each use case: pick its tab at the top, then press Run.'], run],
+    ['Add the documents: policies and standards',
+      [live ? 'In the Meko app, upload these files from <code>src/main/resources/kb/</code> to your datapack: ' + docs.map(([k]) => '<code>' + esc((status.files || {})[k] || k) + '</code>').join(', ') + '.'
+            : 'On the stand-in, press <b>Add the documents</b>: it loads them as an upload would.',
+       'Press <b>Check my datapack</b> until each shows uploaded. Now: ' + docs.map(([k, v]) => '<code>' + esc(k) + '</code> ' + esc(v)).join(' · ') + '.'],
+      check + '<button class="btn" data-act="documents"' + (busy || blocked ? ' disabled' : '') + '>' + icon('upload') + (live ? 'Can\'t upload? Add one-line versions' : 'Add the documents') + '</button>' + wait],
+    ['Run ' + title + ' with shared knowledge',
+      ['Which steps disappeared? Under Shared knowledge, what did Meko return, and under Right context, what did the agent set aside?', 'Did the outcome change?'], run],
+    ['Add last quarter\'s reviews',
+      ['Another desk\'s agent reviewed this customer last quarter, in its own application, and wrote the reviews to memory. Press <b>Add their reviews</b> to put them in your datapack as that agent wrote them: one is the right review to compare with, two are look-alikes.',
+       'Now: ' + esc(reviewsState(status.history[selected])) + '.'],
+      check + '<button class="btn" data-act="history"' + (busy || blocked ? ' disabled' : '') + '>' + icon('history') + 'Add their reviews</button>' + wait],
+    memoryFirst() ? ['Run ' + title + ' with the standard and their reviews',
+      ['Under Memory, who wrote the review the agent compared with? Under Right context, what happened to the look-alikes?',
+       'Under Shared knowledge, which rules did it judge the changes by, and what did it request for each?'], run]
+    : ['Run ' + title + ' with their reviews',
+      ['Under Memory, who wrote what the agent relied on?', 'Under Right context, what happened to the look-alikes?'], run],
+    [stepTitle(6), finale().lines, '<button class="btn primary" data-run' + (busy || ran || blocked || (finale().audit && !finale().rerun && !lastMekoRun()) ? ' disabled' : '') +
+      (ran ? ' title="Already done at this stage: start over with a new datapack to run it again."' : blocked ? ' title="' + esc(blocked) + '"' : '') + '>' +
+      icon(ran ? 'check' : finale().audit && !finale().rerun ? 'shield' : 'play') + (ran ? 'Done' : finale().label) + '</button>' +
+      (blocked && !ran ? '<span class="note">' + esc(blocked) + '</span>' : '')]][step];
+  if (selected === LEARNS && LEARN_GUIDE[step]) body.splice(0, 2, LEARN_STEPS[step], LEARN_GUIDE[step]);
+  if (pairOn()) body = pairGuide(run, check, body);
+  const skip = !needed(step);
+  return pairToggle() + '<h2>' + icon(STEPS[step].icon, 'lg') + 'Step ' + stepNo(step) + ': ' + body[0] + (skip ? ' <span class="pill">not needed for this use case</span>' : '') + '</h2>' +
+    (skip ? '<ol><li>' + esc(whyNotNeeded(step)) + '</li></ol>' : '<ol>' + body[1].map(l => '<li>' + l + '</li>').join('') + '</ol><div class="row">' + body[2] + '</div>') +
+    '<div class="status" id="status" role="status" aria-live="polite"></div>' +
+    // Back and Next together, where the eye is after acting; Next lights up once this step is done.
+    '<div class="nav"><span class="row"><button class="btn" data-nav="-1"' + (step === mySteps()[0] ? ' disabled' : '') + '>' + icon('left') + 'Back</button>' +
+    (step === mySteps().slice(-1)[0] ? '' : '<button class="btn' + (stepDone(step) ? ' primary' : '') + '" data-nav="1"' + (stepDone(step) && !busy ? '' : ' disabled title="Finish this step first"') + '>Next step' + icon('right') + '</button>') + '</span>' +
+    '<span class="row">' +
+    (status.store.keyed ? '<button class="btn" data-act="restart" title="A datapack keeps everything written to it, across restarts: starting over means a new one">' + icon('refresh') + 'Start over with a new datapack</button>' : '') + '</span></div>';
+}
+
+/** Solo or pair, for the learning use case: solo is the default; pair needs a Meko key (two accounts share a datapack). */
+function pairToggle() {
+  if (selected !== LEARNS || !status.store.keyed) return '';
+  const opt = (v, label, role) => '<button role="tab" aria-selected="' + ((pair.mode === 'solo' ? 'solo' : pair.role) === v) + '" data-pair="' + v + '">' +
+    label + '<span class="role">' + role + '</span></button>';
+  // Where the lesson lives (one datapack for the whole organization, or each desk's own, shared by the EU desk), and
+  // under each, who you are in it; what that means, on its own line below.
+  return '<div style="margin-bottom:12px"><div class="seg" role="tablist" aria-label="Where the lesson lives">' +
+    opt('solo', 'One org-wide datapack', 'You play both desks') + opt('eu', 'Shared datapack', 'You are the EU desk') + opt('support', 'Shared datapack', 'You are the APAC desk') + '</div>' +
+    '<div class="hint" style="margin-top:6px">' + (pair.mode !== 'pair' ? 'Both desks write to one datapack for the whole organization.'
+      : 'Each desk has its own datapack; the EU desk shares its datapack with the APAC desk. Two people, two Meko accounts. '
+        + (pair.role === 'eu' ? 'Solve case 1, then share your datapack.' : 'Your partner solves case 1 and shares their datapack with you.')) + '</div></div>';
+}
+
+function pairGuide(run, check, body) {
+  const name = esc(status.store.datapack || 'your datapack');
+  if (step === 0) return [PAIR_TITLES[pair.role][0], pair.role === 'eu'
+    ? ['Create the datapack you will share. Your agent writes and promotes its lesson here.'] : ['Create a datapack of your own: your baseline runs here, with nothing anyone else learned in reach.'], body[2]];
+  if (step === 5) return [PAIR_TITLES.eu[5], ['You are the EU payments desk: your agent, in your desk\'s application, gets case 1 of the failed payment. It investigates, then promotes the root cause from memory to collective memory in your datapack.',
+    'Under Shared knowledge, what did it promote? Your partner runs their baseline meanwhile.'], run];
+  if (step === 7) return [PAIR_TITLES.eu[7], ['In the Meko app, share <b>' + name + '</b> with your partner\'s account. Reading is enough: they promote nothing.',
+    'Then press <b>I\'ve shared it</b> and tell your partner the datapack\'s name.'],
+    '<button class="btn primary" data-act="shared"' + (busy || pair.shared ? ' disabled' : '') + '>' + icon(pair.shared ? 'check' : 'user') + (pair.shared ? 'Shared' : 'I\'ve shared it') + '</button>'];
+  if (step === 1) return [PAIR_TITLES.support[1], ['In your own datapack, still empty: a failed payment reaches the APAC desk\'s payments investigator. Nothing anyone else learned is in reach.',
+    'How many hypotheses does it test? Your partner is solving case 1 meanwhile. What it finds is not promoted.'], run];
+  if (step === 8) return [PAIR_TITLES.support[8], ['When your partner has shared their datapack, pick it below: it shows as shared with you. Press <b>Refresh</b> if it is not listed yet.',
+    'Your baseline stays on this page.'], datapackForm(true)];
+  if (step === 6) return [PAIR_TITLES.support[6], ['The same case as your baseline, now in your partner\'s datapack. Does your investigator still test every hypothesis?',
+    lesson ? 'In reach: the lesson promoted by <b>' + esc(lesson.writtenBy) + '</b>.' : 'Your partner\'s lesson is not in this datapack yet.'], run + check];
+  return body;
+}
+
+/** The steps go in order: the first earlier step this use case needs that is not done yet, as the reason to wait, or null. */
+function earlierOpen(i) {
+  const mine = mySteps();
+  const open = mine.slice(0, Math.max(0, mine.indexOf(i))).find(j => !stepDone(j));
+  return open == null ? null : 'Finish step ' + stepNo(open) + ' first: ' + stepTitle(open) + '.';
+}
+
+/** What the learning use case's first two runs ask (its last one is the finale). */
+const LEARN_GUIDE = {
+  1: ['A failed payment reaches the APAC payments desk\'s investigator. Nothing has been promoted yet: each run of this step starts a new learning epoch, so lessons from earlier runs are set aside.',
+      'How many hypotheses does it test before it finds the root cause? This is the baseline: what it finds is not promoted, so the only lesson later is the one the EU desk shares.'],
+  5: ['Case 1 reaches the EU payments desk: another desk\'s agent, in its own application. It investigates the same failure, then promotes the root cause from memory to collective memory.',
+      'Under Shared knowledge, what was promoted, and by whom?']};
+
+/**
+ * Why a stage cannot run now, or null if it can: a stage only means what it says while the datapack holds exactly that
+ * stage's context for this use case. An earlier stage cannot be reproduced once later context is in the datapack.
+ */
+function stageBlocked(s) {
+  // The learning use case: its last run reads what the EU desk's case 1 promoted, in that run's learning epoch.
+  if (pairOn()) return s === 3 && !lesson ? 'Waiting for your partner\'s lesson: once they have run case 1 and shared their datapack, press Check my datapack.' : null;
+  if (selected === LEARNS) return s === 3 && !(runs[LEARNS] && runs[LEARNS][2] && runs[LEARNS][2].epoch)
+    ? 'Run step ' + stepNo(5) + ' first: the EU desk solves case 1.' : null;
+  const u = status.useCases.find(x => x.id === selected);
+  const docsIn = u.documents.length > 0 && u.documents.every(k => (status.documents[k] || 'missing') !== 'missing');
+  const histIn = u.history && status.history[selected] === 'seeded';
+  const rerun = ' This stage cannot be reproduced in it: start over with a new datapack to run it.';
+  if (s === 0 && docsIn) return 'Your datapack already has the documents.' + rerun;
+  if (s === 0 && histIn) return 'Your datapack already has last quarter\'s reviews.' + rerun;
+  if (s === 1 && !docsIn) return 'Add the documents first (step ' + stepNo(2) + ').';
+  if (s === 1 && histIn) return 'Your datapack already has last quarter\'s reviews.' + rerun;
+  if (s === 2 && !histIn) return 'Add last quarter\'s reviews first (step ' + stepNo(4) + ').';
+  if (s === 2 && memoryFirst() && !docsIn) return 'Add the documents first (step ' + stepNo(2) + ').';
+  return null;
+}
+
+/** Step 7 for the selected use case: run it again where something was promoted, then audit it where it has an auditor. */
+function finale() {
+  const c = catalog[selected];
+  const rerun = promotes(selected);
+  const audit = !!c.followUp;
+  const lines = [];
+  if (selected === LEARNS) lines.push('The same case as step ' + stepNo(1) + ', for the APAC desk\'s investigator again: the root cause the EU desk promoted in case 1 is now collective memory. Does it still test every hypothesis?',
+    'Compare with the <i>Without the lesson</i> card: the same case, the same agent; only the context changed.');
+  if (selected === 'loan-underwriting') lines.push('Run it once more: the credit-risk ruling promoted in an earlier run is now collective memory. Does anyone ask credit risk this time?');
+  if (audit) lines.push((rerun ? 'Then an' : 'An') + ' auditor, given only the ' + c.followUp.subject + ' id, reads the whole record back. How many records did it have to request?');
+  if (audit && !rerun && !lastMekoRun()) lines.push('Run this use case at an earlier step first: there is nothing to audit yet.');
+  return {rerun, audit, lines, label: rerun && audit ? 'Run, then audit' : audit ? 'Audit' : 'Run'};
+}
+const lastMekoRun = () => Object.keys(runs[selected] || {}).length > 0;
+
+function datapackLines() {
+  const s = status.store;
+  if (!s.keyed) return ['No Meko API key: set <code>MEKO_API_KEY</code> and restart with <code>SPRING_PROFILES_ACTIVE=workshop</code>. Until then this session uses the offline stand-in: every step works, but nothing is kept after a restart.'];
+  const lines = ['Your datapack is where memory, shared knowledge and collective memory live. Start from a new, empty one, so the first stage really has no context.'];
+  if (s.live && s.connected) lines.push('In use: <b>' + esc(s.datapack) + '</b>.');
+  else if (s.error) lines.push('<b>' + esc(s.error) + '</b>');
+  return lines;
+}
+
+/** A fresh, unique name for a new datapack (Meko names are unique across the platform); kept only for this page. */
+let suggested = null;
+/** Set by Start over: the step shows the form again, though a datapack is still in use until another is chosen. */
+let choosing = false;
+function suggestedName() {
+  if (!suggested) {
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    suggested = 'meko-workshop-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' + Math.random().toString(36).slice(2, 6);
+  }
+  return suggested;
+}
+
+/** The account's datapacks for "Use existing", loaded when that option is chosen (null until then). */
+let datapacks = null, loadingDatapacks = false, dpMode = 'new', dpPicked = null;
+async function loadDatapacks() {
+  if (loadingDatapacks) return;
+  loadingDatapacks = true;
+  try { datapacks = await (await fetch('/api/workshop/datapacks')).json(); } catch (e) { datapacks = []; }
+  loadingDatapacks = false;
+  render();
+}
+
+const ago = iso => {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  return isNaN(days) ? '' : days <= 0 ? 'created today' : days === 1 ? 'created yesterday' : 'created ' + days + ' days ago';
+};
+
+function datapackForm(listOnly) {
+  if (!status.store.keyed) return '<button class="btn" data-act="check"' + (busy ? ' disabled' : '') + '>' + icon('refresh') + 'Check again</button>';
+  const mode = listOnly ? 'existing' : dpMode;
+  const sw = '<div class="seg" role="tablist" aria-label="Datapack">' +
+    '<button role="tab" aria-selected="' + (dpMode === 'new') + '" data-dpmode="new">New datapack</button>' +
+    '<button role="tab" aria-selected="' + (dpMode === 'existing') + '" data-dpmode="existing">Use an existing one</button></div>';
+  let panel;
+  // A datapack in use is shown as such, read-only; Start over makes the name editable again for a new one.
+  const inUse = status.store.live && status.store.connected && !choosing;
+  if (mode === 'new' && inUse) {
+    panel = '<div class="dp-panel"><label class="lbl" for="dpName">Name</label>' +
+      '<div class="row"><input class="text" id="dpName" value="' + esc(status.store.datapack || '') + '" disabled>' +
+      '<button class="btn" disabled>' + icon('check') + 'In use</button></div>' +
+      '<div class="hint">To use another datapack, press <b>Start over with a new datapack</b>.</div></div>';
+  } else if (mode === 'new') {
+    panel = '<div class="dp-panel"><label class="lbl" for="dpName">Name</label>' +
+      '<div class="row"><input class="text" id="dpName" value="' + esc(suggestedName()) + '"' + (busy ? ' disabled' : '') + '>' +
+      '<button class="btn primary" data-datapack="create"' + (busy ? ' disabled' : '') + '>' + icon('database') + 'Create and use</button></div>' +
+      '<div class="hint">Unique across Meko: lowercase letters, digits and hyphens.</div></div>';
+  } else {
+    if (datapacks == null) loadDatapacks();
+    const current = status.store.datapack;
+    const rows = (datapacks || []).map(d => '<label class="dp' + (d.workshop ? '' : ' other') + '">' +
+      '<input type="radio" name="dpPick" value="' + esc(d.name) + '"' + ((dpPicked || current) === d.name ? ' checked' : '') + '>' +
+      '<span class="dp-n">' + esc(d.name) + '</span><span class="dp-m">' + esc(ago(d.created)) + '</span>' +
+      (d.name === current ? '<span class="pill ok">in use</span>' : '') +
+      (d.sharedBy ? '<span class="pill ok">shared with you by ' + esc(d.sharedBy) + '</span>'
+        : d.workshop ? '<span class="pill">workshop</span>' : '<span class="pill warn" title="It already holds context, so the stages would not start clean">has other content</span>') + '</label>').join('');
+    panel = '<div class="dp-panel">' + (datapacks == null ? '<div class="hint">Loading your datapacks…</div>'
+      : datapacks.length ? '<div class="dp-list">' + rows + '</div>' +
+        '<div class="row" style="margin-top:8px"><button class="btn primary" data-datapack="use"' + (busy ? ' disabled' : '') + '>Use selected</button>' +
+        (listOnly ? '<button class="btn" data-dpmode="existing">' + icon('refresh') + 'Refresh</button>' : '') +
+        '<span class="hint">Datapacks not created for the workshop already hold context: the first stages will not be empty.</span></div>'
+      : '<div class="hint">No datapacks in your account yet: create a new one.</div>') + '</div>';
+  }
+  return '<div style="width:100%">' + (listOnly ? '' : sw) + panel + '</div>';
+}
+
+// ---------------------------------------------------------------- output
+/** What a run's outcome amounts to: decided, handed to a person, or (for an audit) passed or not. */
+function verdict(r) {
+  // From the counts the agents recorded as they decided, not from the outcome's wording.
+  const n = k => (r.verdicts || {})[k] || 0;
+  if (r.audit) return n('findingsNotCompliant') ? ['bad', 'shield', 'Audit found issues'] : n('findingsUnverified') ? ['warn', 'shield', 'Could not be verified'] : ['ok', 'shield', 'Audit passed'];
+  if (n('handedToPerson') && n('decided')) return ['warn', 'user', n('decided') + ' decided, ' + n('handedToPerson') + ' handed to a person'];
+  if (n('handedToPerson')) return ['warn', 'user', 'Handed to a person'];
+  return ['ok', 'check', 'Decided'];
+}
+
+const LAYERS = [['memory', 'Memory recalled'], ['book', 'Uploaded documents used'], ['history', 'Memory written before this run used'], ['promote', 'Collective memory used']];
+
+function renderOutput() {
+  const c = catalog[selected];
+  const mine = runs[selected] || {};
+  if (shown == null) shown = STEPS[step].stage ?? Math.max(-1, ...Object.keys(mine).map(Number));
+  const track = '<h3>' + icon('route') + 'Stage by stage, as context is added <span class="count">pick a stage to see its run</span></h3>' +
+    '<div class="stages" style="grid-template-columns:repeat(' + [0, 1, 2, 3].filter(s => stageNeeded(s)).length + ',minmax(0,1fr))">' +
+    [0, 1, 2, 3].filter(s => stageNeeded(s)).map(s => stageCard(s, mine)).join('') + '</div>';
+  const r = mine[shown];
+  let detail;
+  if (!r) {
+    detail = '<div class="empty">' + icon('play', 'lg') + (shown >= 0 && stageNeeded(shown) ? stageName(shown) + ' has not been run yet. Go to its step and press Run.' : 'Run the use case to see what it sends to Meko and gets back.') + '</div>';
+  } else {
+    const v = verdict(r);
+    detail = '<div class="outcome ' + v[0] + '">' + icon(v[1], 'lg') + '<div><b>' + esc(v[2]) + '.</b> ' + esc(r.outcome) + '</div></div>' +
+      pillars(r) +
+      '<div class="detail">' +
+      '<div class="box"><h3>' + icon('user') + 'Conversation</h3><div class="chat">' + conversationHtml(r) + '</div></div>' +
+      '<div class="box"><h3>' + icon('play') + 'What the agents did</h3>' +
+        '<div class="legend"><span>' + icon('ask') + 'asked someone</span><span>' + icon('redo') + 'redid work</span><span>' + icon('database') + 'used context</span></div>' +
+        (r.steps || []).map(stepHtml).join('') + '</div>' +
+      '<div class="box" style="grid-column:1 / -1">' + callsHtml(r.calls || []) + '</div>' +
+      '</div>';
+  }
+  const audit = audits[selected] && audits[selected][shown];
+  el('output').innerHTML = track + detail + (audit ? auditHtml(c, audit) : '');
+  document.querySelectorAll('[data-stage]').forEach(b => b.onclick = () => { shown = Number(b.dataset.stage); renderOutput(); });
+}
+
+/** One stage: which layers of context it had, its verdict, its numbers and the change from the stage before. */
+function stageCard(s, mine) {
+  const c = catalog[selected];
+  const r = mine[s];
+  const note = (s === 1 && r && r.docsAs === 'one-line' ? 'One-line versions promoted (documents not uploaded)' : stageNote(s))
+    + (pairOn() && r && r.datapack ? ' · in ' + r.datapack : '');
+  const head = '<div class="h"><span class="t">' + esc(stageName(s)) + '</span><span class="n">' + 'step ' + stepNo(STEPS.findIndex(x => x.stage === s)) + '</span></div><div class="n">' + esc(note) + '</div>';
+  if (!stageNeeded(s)) return '<div class="stage skip">' + head + '<div class="none">Not needed for this use case.</div></div>';
+  if (!r) return '<button class="stage' + (s === shown ? ' sel' : '') + '" data-stage="' + s + '">' + head + '<div class="none">Not run yet.</div></button>';
+  // The learning use case compares like with like: the same case with the lesson against it without; case 1 is another case.
+  const prev = selected === LEARNS ? (s === 3 ? mine[0] : null)
+    : [s - 1, s - 2, s - 3].filter(p => p >= 0 && stageNeeded(p)).map(p => mine[p]).find(Boolean);
+  const comparable = prev && !prev.audit && !r.audit;
+  const layers = '<div class="layers">' + LAYERS.map((l, i) => '<span class="' + ((r.layers || [])[i] ? 'on' : '') + '" title="' + esc(l[1]) + ((r.layers || [])[i] ? '' : ': no') + '">' + icon(l[0]) + '</span>').join('') + '</div>';
+  const v = verdict(r);
+  const measures = r.headline || c.headline;
+  const nums = measures.map(h => {
+    const val = r.numbers[h[0]], p = comparable ? prev.numbers[h[0]] : null;
+    const d = p == null || val === p ? '' : '<span class="delta ' + ((h[2] === 'lower') === (val < p) ? 'win' : 'lose') + '">' + (val < p ? '↓' : '↑') + Math.abs(val - p) + '</span>';
+    return '<div class="metric"><span>' + esc(h[1]) + '</span><span><b>' + esc(val) + '</b>' + d + '</span></div>';
+  }).join('');
+  return '<button class="stage' + (s === shown ? ' sel' : '') + '" data-stage="' + s + '">' + head + layers +
+    '<span class="verdict ' + v[0] + '">' + icon(v[1]) + esc(v[2]) + '</span>' + nums + '</button>';
+}
+
+/**
+ * The four things Meko gives an agent, as this run actually got them: memory recalled (and who wrote it), knowledge
+ * found, what was retrieved but passed over (the right context), and the decisions written to the record.
+ */
+function pillars(r) {
+  const found = r.found || [], passed = r.passed || [], traces = r.traces || [];
+  // Shared knowledge is what agents find by searching knowledge: documents that were uploaded, and collective memory
+  // (facts promoted from memory). Memory proper is what agents wrote during the run, or other teams wrote before.
+  const inKnowledge = f => /knowledge/i.test(f.source);
+  const uploaded = f => /uploaded document/i.test(f.writtenBy);
+  const oneLine = f => f.writtenBy === 'org-knowledge:curator';
+  const mem = found.filter(f => !inKnowledge(f)), docs = found.filter(f => inKnowledge(f) && uploaded(f)), coll = found.filter(f => inKnowledge(f) && !uploaded(f));
+  // What the run wrote and nobody read back during it: a memory for later, or a lesson promoted for other teams.
+  const seen = t => found.some(f => String(f.text).slice(0, 60) === String(t).slice(0, 60));
+  const promoted = (r.written || []).filter(w => w.kind === 'promoted');
+  const wroteMem = (r.written || []).filter(w => w.kind === 'memory' && !seen(w.text) && !promoted.some(p => p.text === w.text));
+  const promotedNew = promoted.filter(w => !seen(w.text));
+  mem.push(...wroteMem.map(w => ({source: 'memory', writtenBy: w.agent, text: w.text, fresh: true, wrote: true})));
+  coll.push(...promotedNew.map(w => ({source: 'knowledge', writtenBy: w.agent, text: w.text, fresh: true, wrote: true})));
+  const item = (f, label) => '<div class="item"><div class="src">' + label + '</div>' + esc(f.text) + '</div>';
+  const card = (ico, n, body, empty, count) => '<div class="pillar' + (body ? '' : ' off') + '"><h3><span class="ico">' + icon(ico) + '</span>' + n +
+    (count ? ' <span class="count">' + count + '</span>' : '') + '</h3>' + (body || '<div class="note">' + empty + '</div>') + '</div>';
+  const part = (title, list, render, empty) => '<div class="part"><div class="part-t">' + title + (list.length ? ' <span class="count">' + list.length + '</span>' : '') + '</div>' +
+    (list.length ? list.map(render).join('') : '<div class="note">' + empty + '</div>') + '</div>';
+  const knowledge = docs.length || coll.length
+    ? part(icon('book') + 'Documents', docs, f => item(f, 'uploaded document'), 'No uploaded documents found.') +
+      part(icon('promote') + 'Collective memory', coll, f => item(f, 'promoted ' + (f.fresh ? 'during this run ' : '') + 'by ' + esc(f.writtenBy) + (f.wrote ? ', for others to find' : '') +
+        (oneLine(f) ? ' (a one-line version of a document)' : '')), 'Nothing promoted found.')
+    : '';
+  return '<div class="pillars">' +
+    card('memory', 'Memory', mem.map(f => item(f, f.wrote ? 'written by ' + esc(f.writtenBy) + ' during this run, for later' : esc(f.source) + ', written ' + (f.fresh ? 'during this run ' : '') + 'by ' + esc(f.writtenBy))).join(''),
+      'Nothing recalled: the agent had only what it was handed.', mem.length) +
+    card('book', 'Shared knowledge', knowledge, 'Nothing found in shared knowledge yet: no documents, no collective memory.', docs.length + coll.length) +
+    card('target', 'Right context', passed.map(p => '<div class="item passed"><div class="src">Passed over: ' + esc(p.reason) + '</div>' + esc(p.text) + '</div>').join(''), 'Nothing retrieved that had to be set aside.', passed.length) +
+    card('route', 'Decision traces', traces.map(t => traceHtml(t)).join(''), 'No decisions traced.', traces.length) +
+    '</div>';
+}
+
+const BASIS_NAME = {memory: 'Memory', documents: 'Documents', collective: 'Collective memory', 'set aside': 'Set aside'};
+
+/** A decision's answer in words: its fields, without the JSON. */
+function answerText(a) {
+  try {
+    const o = JSON.parse(a);
+    if (o === null || typeof o !== 'object') return String(o);
+    return Object.entries(o).filter(([, v]) => v !== null && v !== '' && !(Array.isArray(v) && !v.length))
+      .map(([k, v]) => k.replace(/([A-Z])/g, ' $1').toLowerCase() + ': ' + (Array.isArray(v) ? v.join('; ') : typeof v === 'boolean' ? (v ? 'yes' : 'no') : v)).join(' · ');
+  } catch (e) { return a; }
+}
+
+function traceHtml(t) {
+  // What it rested on, from the context it read: grouped by pillar, set-aside items last.
+  const groups = {};
+  (t.basis || []).forEach(b => (groups[b.pillar] = groups[b.pillar] || []).push(b.name));
+  const on = Object.keys(groups).length
+    ? Object.keys(BASIS_NAME).filter(k => groups[k]).map(k => BASIS_NAME[k] + ': ' + groups[k].join(', ')).join('; ')
+    : 'nothing retrieved: only what the agent was handed';
+  const how = String(t.decidedBy || '').replace(/^rule \((.*)\)$/, 'rule: $1');
+  return '<div class="item trace"><div class="q">' + esc(t.question) + '</div>' +
+    '<div class="a">' + esc(answerText(t.answer)) + '</div>' +
+    '<div class="m"><b>Based on</b> ' + esc(on) + '</div>' +
+    // How much a model was given, only when a model decided: a rule reads no tokens (the figure is an estimate, length / 4).
+    '<div class="m"><b>Decided by</b> ' + esc(how) + (t.byModel && t.context ? ', given about ' + esc(t.context) : '') + '</div></div>';
+}
+
+/**
+ * The run's conversation: what people and agents said, as chat bubbles. Where nobody speaks (the agents work a case
+ * between themselves), the case's conversation in Meko holds the agents' own records instead: shown as they wrote them.
+ */
+function conversationHtml(r) {
+  if ((r.lines || []).length) return r.lines.map(lineHtml).join('');
+  const records = (r.written || []).filter(w => w.kind === 'record');
+  if (!records.length) return '<div class="note">Nothing said or recorded in this run.</div>';
+  return '<div class="note" style="margin-bottom:6px">Nobody speaks in this use case: these are the records the agents wrote to the case\'s conversation in Meko.</div>' +
+    records.map(w => '<div class="bubble agent"><div class="who">' + esc(w.agent) + ' · ' + esc(String(w.label || '').replace(/^.*? · /, '')) + '</div>' + esc(w.text) + '</div>').join('');
+}
+
+/** A line of the conversation as a chat bubble: the person on the left, the agents on the right. */
+function lineHtml(l) {
+  if (l.sep) return '<div class="sep">' + esc(l.text) + '</div>';
+  const person = /^(customer|borrower|developer|reviewer)$/i.test(l.speaker);
+  return '<div class="bubble ' + (person ? 'person' : 'agent') + '"><div class="who">' + esc(l.speaker) + '</div>' + esc(l.text) + '</div>';
+}
+
+function stepHtml(s) {
+  const k = {ASK: 'ask', REWORK: 'redo', CONTEXT: 'database'}[s.kind] || 'dot';
+  return '<div class="did ' + esc(s.kind) + '"><span class="k">' + icon(k) + '</span><span><span class="p">' + esc(s.persona) + '.</span> ' + esc(s.text) + '</span><span class="m">' + esc(s.minutes) + ' min</span></div>';
+}
+
+const READS = new Set(['memory_search', 'knowledgebase_search', 'conversation_get', 'artifact_get', 'context_search']);
+function callsHtml(calls) {
+  const reads = calls.filter(x => READS.has(x.tool)).length, failed = calls.filter(x => !x.ok).length;
+  return '<h3>' + icon('database') + 'Meko calls <span class="count">' + calls.length + '</span></h3>' +
+    '<div class="sum"><span class="pill">' + icon('read') + reads + ' reads</span><span class="pill">' + icon('write') + (calls.length - reads) + ' writes</span>' +
+    (failed ? '<span class="pill warn">' + failed + ' failed</span>' : '') + '</div>' +
+    '<table><thead><tr><th>Agent</th><th>Call</th><th>What was sent</th><th>Came back</th><th>ms</th></tr></thead><tbody>' +
+    calls.map(x => '<tr><td>' + esc(x.agent) + '</td><td class="tool"><span class="' + (READS.has(x.tool) ? 'read' : 'write') + '">' + icon(READS.has(x.tool) ? 'read' : 'write') + esc(x.tool) + '</span></td>' +
+      '<td>' + esc(x.detail) + '</td><td' + (x.ok ? '' : ' class="fail"') + '>' + (x.ok ? esc(x.hits) : 'failed') + '</td><td>' + esc(x.millis) + '</td></tr>').join('') +
+    '</tbody></table>';
+}
+
+function auditHtml(c, a) {
+  const v = verdict(Object.assign({audit: true}, a));
+  return '<div class="box" style="margin-top:12px"><h3>' + icon('shield') + esc(c.followUp.label) + ' <span class="count">given only the ' + esc(c.followUp.subject) + ' id</span></h3>' +
+    '<div class="row">' + c.followUp.headline.map(h => '<span class="pill">' + esc(h[1]) + ': <b>' + esc(a.numbers[h[0]]) + '</b></span>').join('') + '</div>' +
+    '<div class="outcome ' + v[0] + '">' + icon(v[1], 'lg') + '<div>' + esc(a.outcome) + '</div></div>' +
+    '<div style="margin-top:10px">' + callsHtml(a.calls || []) + '</div></div>';
+}
+
+// ---------------------------------------------------------------- runs: the Meko lane only
+function stream(id, mode) {
+  return new Promise((resolve, reject) => {
+    let run = null, failed = null;
+    const source = new EventSource('/api/stories/' + id + '/stream?mode=' + mode + '&mekoOnly=true');
+    source.addEventListener('run', e => { run = JSON.parse(e.data).data; });
+    source.addEventListener('failed', e => { failed = JSON.parse(e.data).data; });
+    source.addEventListener('done', () => { source.close(); failed ? reject(new Error(failed)) : resolve(run); });
+    source.onerror = () => { source.close(); reject(new Error('the run stream closed')); };
+  });
+}
+
+const cut = (t, n) => { t = String(t == null ? '' : t); return t.length > n ? t.slice(0, n) + '…' : t; };
+
+/**
+ * What one decision rested on: the retrieved items that were in the context it read (found, or passed over), each with
+ * the pillar it belongs to. Read from the decision's own context, not assumed from what kind of decision it is.
+ */
+function basisOf(read, run) {
+  const flat = t => String(t || '').replace(/\s+/g, ' ').trim();
+  const ctx = flat(read);
+  if (!ctx) return [];
+  const inCtx = t => { const k = flat(t).slice(0, 50); return k.length > 10 && ctx.includes(k); };
+  const pillar = f => !/knowledge/i.test(f.source) ? 'memory' : /uploaded document/i.test(f.writtenBy) ? 'documents' : 'collective';
+  const name = t => (String(t).match(/\b([A-Z]{2,}(?:-[A-Z0-9]+)+)\b/) || [])[1] || cut(flat(t), 60);
+  const seen = new Set();
+  return run.found.filter(f => inCtx(f.text)).map(f => ({pillar: pillar(f), name: name(f.text)}))
+    .concat((run.passedOver || []).filter(p => inCtx(p.text)).map(p => ({pillar: 'set aside', name: name(p.text)})))
+    .filter(b => { const k = b.pillar + b.name; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+/** What a stage keeps of its run (or runs, for a series): numbers, dialogue, steps, the context Meko returned, every call. */
+function keepRun(list, headline) {
+  const numbers = {};
+  headline.forEach(h => numbers[h[0]] = list.reduce((t, r) => t + (r.metrics[h[0]] || 0), 0));
+  const many = list.length > 1;
+  // Context the agents wrote to Meko earlier in the same run is marked as such: an empty datapack still has what the run
+  // itself writes. Case memory is read scoped to this run's case, so all of it was written during the run; knowledge
+  // is fresh if this run promoted it (memory_add keeps the text as written, so the promoted text is what comes back).
+  const promotedHere = list.flatMap(r => (r.written || []).filter(w => w.kind === 'promoted').map(w => String(w.text).slice(0, 60)));
+  const fresh = f => f.source === 'case memory' || (/knowledge/i.test(f.source) && promotedHere.some(p => String(f.text).startsWith(p)));
+  const found = list.flatMap(r => r.found.map(f => ({source: f.source, writtenBy: f.writtenBy, text: cut(f.text, 300), fresh: fresh(f)}))).slice(0, 40);
+  const knowledge = found.filter(f => /knowledge/i.test(f.source));
+  const uploaded = f => /uploaded document/i.test(f.writtenBy);
+  const verdicts = {};
+  ['decided', 'handedToPerson', 'findingsCompliant', 'findingsNotCompliant', 'findingsUnverified']
+    .forEach(k => verdicts[k] = list.reduce((t, r) => t + (r.metrics[k] || 0), 0));
+  return {
+    numbers,
+    outcome: cut(list.map(r => r.outcome).join(' '), 600),
+    verdicts,
+    // How the run found its policies: as uploaded documents, or only as their promoted one-line versions.
+    docsAs: knowledge.some(uploaded) ? 'uploaded' : knowledge.some(f => f.writtenBy === 'org-knowledge:curator') ? 'one-line' : 'missing',
+    // Which context the run used, from what it found: memory recalled, uploaded documents, memory written before this
+    // run (another team's, or an earlier review), and collective memory.
+    layers: [found.some(f => !/knowledge/i.test(f.source)),
+      knowledge.some(uploaded),
+      found.some(f => !/knowledge/i.test(f.source) && !f.fresh),
+      knowledge.some(f => !uploaded(f))],
+    lines: list.flatMap((r, i) => (many ? [{sep: true, text: 'Case ' + (i + 1)}] : []).concat(
+      r.transcript.filter(l => l.dialogue).map(l => ({speaker: l.speaker, text: cut(l.text, 400)})))).slice(0, 150),
+    steps: list.flatMap(r => r.steps.map(s => ({persona: s.persona, text: cut(s.text, 300), kind: s.kind, minutes: s.minutes}))).slice(0, 120),
+    found,
+    // What the run itself wrote, in full: its records in the case's conversation, memories, and what it promoted.
+    written: list.flatMap(r => (r.written || []).filter(w => w.kind !== 'turn').map(w => ({agent: w.agent, kind: w.kind, label: w.label, text: cut(w.text, 400)}))).slice(0, 60),
+    passed: list.flatMap(r => r.passedOver.map(p => ({text: cut(p.text, 200), reason: p.reason}))).slice(0, 20),
+    calls: list.flatMap(r => r.receipts.map(x => ({agent: x.agent, tool: x.tool, detail: cut(x.detail, 160), hits: x.hits, ok: x.ok, millis: x.millis}))).slice(0, 200),
+    // Each decision the agents made, as traced to the record: the question, the answer, who decided and on how much context.
+    traces: list.flatMap(r => (r.decisions || []).map(d => ({gate: d.gate, persona: d.persona, question: cut(d.question, 260), answer: cut(d.answer, 600),
+      decidedBy: cut(d.decidedBy, 200), context: d.context, byModel: d.byModel, basis: basisOf(d.read, r)}))).slice(0, 30)};
+}
+
+async function runSelected() {
+  const id = selected, stage = STEPS[step].stage, c = catalog[id];
+  // The datapack may have changed outside this page (an upload in the Meko app): check it before running a stage.
+  status = await (await fetch('/api/workshop/status')).json();
+  if (pairOn() && pair.role === 'support' && stage === 3) await refreshLesson();
+  const blocked = earlierOpen(step) || stageBlocked(stage);
+  if (blocked) throw new Error(blocked);
+  if (stage === 3) {
+    const f = finale();
+    if (f.rerun) await runStage(id, 3);
+    if (f.audit) {
+      const a = keepRun([await stream(id, 'followup')], c.followUp.headline);
+      if (f.rerun) (audits[id] = audits[id] || {})[3] = a;
+      else (runs[id] = runs[id] || {})[3] = Object.assign(a, {audit: true, headline: c.followUp.headline});
+    }
+    shown = 3;
+    return 'Done: ' + c.title + ', ' + stageName(3) + (f.audit ? ' and ' + c.followUp.label.toLowerCase() : '') + '.';
+  }
+  await runStage(id, stage);
+  shown = stage;
+  return 'Done: ' + c.title + ', ' + stageName(stage) + '.';
+}
+
+async function runStage(id, stage) {
+  const c = catalog[id];
+  // A KYC review compares with the latest review: a new cycle keeps it from comparing with its own last run.
+  if (id === 'what-changed') await post('/api/stories/what-changed/reset');
+  let r;
+  if (id === LEARNS && pairOn()) {
+    // Pair: case 1 by the EU desk (a new epoch), the APAC desk's baseline (shares nothing), then its case again in
+    // the epoch of the lesson its partner promoted, as the shared datapack holds it.
+    const at = stage === 2 ? '?index=0&otherTeam=true' : stage === 0 ? '?index=1&share=false' : '?index=1&epoch=' + encodeURIComponent(lesson.epoch);
+    r = keepRun([(await post('/api/stories/' + LEARNS + '/case' + at)).run], c.headline);
+  } else if (id === LEARNS) {
+    // Case 2 without the lesson (a new epoch), case 1 by the other team (a new epoch, kept), case 2 again in that epoch.
+    const at = {0: '?index=1&share=false', 2: '?index=0&otherTeam=true', 3: '?index=1&epoch=' + encodeURIComponent(((runs[id] || {})[2] || {}).epoch || '')}[stage];
+    const res = await post('/api/stories/' + LEARNS + '/case' + at);
+    r = keepRun([res.run], c.headline);
+    if (stage === 2) r.epoch = res.epoch;
+  } else {
+    r = keepRun([await stream(id, 'compare')], c.headline);
+  }
+  // Which datapack the run used: the pair exercise compares runs across two.
+  r.datapack = status.store.datapack; r.datapackId = status.store.datapackId;
+  (runs[id] = runs[id] || {})[stage] = r;
+}
+
+/** Moves to the next (or previous) step the selected use case needs. */
+function go(dir) {
+  const mine = mySteps(), at = mine.indexOf(step);
+  step = mine[Math.max(0, Math.min(mine.length - 1, (at < 0 ? 0 : at) + dir))]; shown = STEPS[step].stage ?? shown; lastMessage = ''; save();
+}
+
+let lastMessage = '';
+/** What the datapack holds for the selected use case, in a line: its own documents and history, not the others'. */
+function datapackNote() {
+  const u = status.useCases.find(x => x.id === selected);
+  const docs = !u.documents.length ? null : u.documents.every(k => (status.documents[k] || 'missing') !== 'missing')
+    ? 'its documents are in the datapack' : 'its documents are not in the datapack yet';
+  const hist = !u.history ? null : status.history[selected] === 'seeded' ? 'last quarter\'s reviews are in it' : 'last quarter\'s reviews are not added yet';
+  const parts = [docs, hist].filter(Boolean);
+  return catalog[selected].title + ': ' + (parts.length ? parts.join('; ') : 'nothing to add to the datapack') + '.';
+}
+function say(m) { lastMessage = m || ''; if (el('status')) el('status').textContent = lastMessage; }
+
+async function busyWith(message, work) {
+  if (busy) return;
+  busy = true; render(); say(message);
+  try { say(await work()); } catch (e) { say('Error: ' + e.message); }
+  busy = false; save(); render();
+}
+
+async function act(what) {
+  if (what === 'shared') { pair.shared = true; save(); render(); say('Tell your partner the datapack\'s name: ' + (status.store.datapack || '') + '.'); return; }
+  if (what === 'restart') {
+    // A datapack is durable: nothing in it is cleared by a restart. A fresh start is a fresh datapack.
+    suggested = null; choosing = true;
+    step = STEPS.findIndex(x => x.t === 'Create your datapack'); shown = null; save(); render();
+    say('Name a new datapack and press Create and use: everything after this is written to it.'); return;
+  }
+  await busyWith(what === 'check' ? 'Checking your datapack…' : what === 'documents' ? 'Adding the documents…' : 'Adding last quarter\'s reviews…', async () => {
+    status = what === 'check' ? await (await fetch('/api/workshop/status')).json() : await post('/api/workshop/' + what + '?useCase=' + encodeURIComponent(selected));
+    if (status.store.contextId !== context) { loadRuns(status.store.contextId); resume(); }
+    // A step that adds to the datapack moves on once it is complete (on Check too, after an upload in the Meko app).
+    if (pairOn() && pair.role === 'support') await refreshLesson();
+    if (STEPS[step].done && STEPS[step].stage == null && step > 0 && STEPS[step].done()) go(1);
+    return datapackNote();
+  });
+}
+
+function bind() {
+  document.querySelectorAll('[data-run]').forEach(b => b.onclick = () => busyWith('Running ' + catalog[selected].title + ' with Meko…', runSelected));
+  document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act(b.dataset.act));
+  document.querySelectorAll('[data-pair]').forEach(b => b.onclick = () => b.dataset.pair === 'solo' ? setPair('solo') : setPair('pair', b.dataset.pair));
+  document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { go(Number(b.dataset.nav)); render(); });
+  document.querySelectorAll('[data-dpmode]').forEach(b => b.onclick = () => {
+    dpMode = b.dataset.dpmode;
+    if (dpMode === 'existing') datapacks = null;   // always the account's current list
+    render();
+  });
+  document.querySelectorAll('input[name="dpPick"]').forEach(r => r.onchange = () => { dpPicked = r.value; });
+  // What the participant types is the name: kept across re-renders (a busy state, an error), never replaced.
+  if (el('dpName') && !el('dpName').disabled) el('dpName').oninput = e => { suggested = e.target.value; };
+  document.querySelectorAll('[data-datapack]').forEach(b => b.onclick = () => {
+    const create = b.dataset.datapack === 'create';
+    const picked = document.querySelector('input[name="dpPick"]:checked');
+    const name = create ? el('dpName').value.trim() : (picked ? picked.value : '');
+    if (!name) { say('Pick a datapack from the list first.'); return; }
+    busyWith((create ? 'Creating ' : 'Switching to ') + name + '…', async () => {
+      const r = await fetch('/api/workshop/datapack?name=' + encodeURIComponent(name) + '&create=' + create, {method: 'POST'});
+      const body = await r.json();
+      if (!r.ok) throw new Error(body.error || r.statusText);
+      status = body;
+      suggested = null;   // the next new datapack gets a new name
+      choosing = false;   // the name is now the datapack in use
+      datapacks = null;   // the list now includes it
+      dpMode = 'new'; dpPicked = null;
+      // Another datapack: its own runs (none, for a new one).
+      loadRuns(status.store.contextId);
+      shown = null;
+      if (pairOn() && pair.role === 'support') await refreshLesson();
+      if (status.store.live && status.store.connected) resume();   // the first step this datapack still needs
+      return (create ? 'Created and using ' : 'Using ') + name + '. ' + datapackNote();
+    });
+  });
+}
+
+function renderStatus() {
+  const s = status.store;
+  el('storePill').innerHTML = icon('database') + esc(s.live ? (s.connected ? 'Meko live: ' + (s.datapack || '') : 'Meko not connected') : s.keyed ? 'Meko: no datapack yet' : 'Offline stand-in');
+  el('storePill').className = 'pill ' + (s.live && s.connected ? 'ok' : 'warn');
+  el('storePill').title = s.error || s.note || '';
+  // The workshop runs without model calls by design: only worth a word when models are on.
+  // (style.display, not the hidden attribute: the pill's own display rule would override that.)
+  el('modelPill').style.display = /^on/.test(s.models) ? '' : 'none';
+  el('modelPill').textContent = 'Models on';
+}
+
+function render() {
+  if (!status) return;
+  renderStatus(); renderTabs(); renderUseCase(); renderStepper();
+  el('guide').innerHTML = guide();
+  renderOutput(); bind(); say(lastMessage);
+}
+
+(async () => {
+  try {
+    (await (await fetch('/api/stories')).json()).forEach(s => catalog[s.id] = s);
+    status = await (await fetch('/api/workshop/status')).json();
+    if (!status.useCases.some(u => u.id === selected)) selected = status.useCases[0].id;
+    loadRuns(status.store.contextId);
+    if (pair.mode === 'pair' && pair.role === 'support') await refreshLesson();
+    resume();
+    lastMessage = '';
+    render();
+  } catch (e) { el('guide').textContent = 'Unable to load the workshop: ' + e.message; }
+})();
+</script>
+</body>
+</html>

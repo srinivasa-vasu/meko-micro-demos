@@ -49,6 +49,16 @@ public interface ContextStore {
     /** As {@link #addTurn(String, String, String, String, String)}, with the why behind the turn (Meko: the reasoning field). */
     void addTurn(String caseId, String agentId, String thread, String input, String output, String reasoning);
 
+    /**
+     * Appends an agent's own record (something it did or decided, not dialogue) to a conversation thread. Read back,
+     * it is a turn like any other, with {@code request} as its input. A store that derives memories from a turn's input
+     * side (Meko does) stores the short {@code label} there instead and keeps the request with the turn, so an agent's
+     * log line does not become a memory of its own.
+     */
+    default void addRecord(String caseId, String agentId, String thread, String label, String request, String output, String reasoning) {
+        addTurn(caseId, agentId, thread, request, output, reasoning);
+    }
+
     /** Every turn of a conversation thread, in order, with who wrote each (Meko: conversation_get). */
     List<Turn> transcript(String caseId, String agentId, String thread);
 
@@ -57,6 +67,14 @@ public interface ContextStore {
 
     /** Memories across all cases and agents (Meko: memory_search). */
     List<StoreRecord> searchMemory(String caseId, String agentId, String query);
+
+    /**
+     * As {@link #searchMemory(String, String, String)}, asking for up to {@code limit} results: for a lookup that knows
+     * how many memories its answer can be among (a customer's few earlier reviews).
+     */
+    default List<StoreRecord> searchMemory(String caseId, String agentId, String query, int limit) {
+        return searchMemory(caseId, agentId, query);
+    }
 
     /** Shared, curated knowledge (Meko: knowledgebase_search). */
     List<StoreRecord> searchKnowledge(String caseId, String agentId, String query);

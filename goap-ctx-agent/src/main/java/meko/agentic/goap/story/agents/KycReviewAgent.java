@@ -39,7 +39,8 @@ public class KycReviewAgent {
     public record PriorReview(String caseId, boolean found, String date, String writtenBy, String memoryId, String riskClass,
                               String address, String ownership, List<String> beneficiaries, String volumeBand) {}
 
-    public record ChangeSet(String caseId, List<String> material, List<String> immaterial) {}
+    /** @param beneficiaryEvidence what the standard says to request for a new beneficiary; null when no standard says */
+    public record ChangeSet(String caseId, List<String> material, List<String> immaterial, String beneficiaryEvidence) {}
 
     public record Evidence(String caseId, List<String> requests) {}
 
@@ -77,6 +78,31 @@ public class KycReviewAgent {
                 .map(m -> Double.parseDouble(m.group(1))).findFirst();
     }
 
+    /**
+     * What the standard in reach says about material change, read from its text.
+     *
+     * @param beneficiaryMaterial  a newly added beneficiary is material
+     * @param beneficiaryEvidence  what to request for one ("targeted source-of-funds evidence and sanctions screening")
+     * @param onlyUnchangedExempt  unchanged address and ownership need no new evidence, so a changed one does
+     * @param volumeThreshold      how far outside the previous band monthly volume becomes material, in percent
+     */
+    record KycRules(boolean beneficiaryMaterial, String beneficiaryEvidence, boolean onlyUnchangedExempt, Optional<Double> volumeThreshold) {}
+
+    private static final java.util.regex.Pattern BENEFICIARY_EVIDENCE = java.util.regex.Pattern.compile(
+            "beneficiary is a material change[^.]*?(?:request|requires?) (.+?)(?: for that beneficiary|[,;:.]| and (?:a |require ))", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /** The rules the standards in reach state; empty when none is in reach. Each rule is present only if its text states it. */
+    static Optional<KycRules> rules(List<StoreRecord> standard) {
+        if (standard.isEmpty()) return Optional.empty();
+        String text = String.join(" ", standard.stream().map(StoreRecord::text).toList()).replaceAll("\\s+", " ");
+        String lower = text.toLowerCase();
+        java.util.regex.Matcher evidence = BENEFICIARY_EVIDENCE.matcher(text);
+        return Optional.of(new KycRules(lower.contains("beneficiary is a material change"),
+                evidence.find() ? evidence.group(1).trim() : null,
+                lower.matches(".*unchanged (registered )?address and ownership need no new evidence.*"),
+                volumeThreshold(standard)));
+    }
+
     private final StorySupport support;
     private final DecisionService decisions;
     private final ProfileFingerprints fingerprints;
@@ -104,7 +130,8 @@ public class KycReviewAgent {
     public PriorReview retrievePriorReview(CurrentProfile profile, @Provided Ai ai) {
         StoryLedger ledger = support.ledger(profile.caseId());
         List<StoreRecord> found = support.store(profile.store())
-                .searchMemory(profile.caseId(), AGENT_ID, "KYC review of customer " + CUSTOMER + " risk class profile fingerprint");
+                // The top five: the customer's earlier reviews and, at most, this application's own from an earlier cycle.
+                .searchMemory(profile.caseId(), AGENT_ID, "KYC review of customer " + CUSTOMER + " risk class profile fingerprint", 5);
         // Reviews this application wrote in an earlier review cycle are set aside, so each cycle compares with the last one.
         List<StoreRecord> rows = new ArrayList<>();
         for (StoreRecord r : found) {
@@ -216,21 +243,24 @@ public class KycReviewAgent {
                 + ", " + diff.removedBeneficiaries() + " removed\n"
                 + "- monthly volume " + (prior.volumeBand() == null ? "not on record before" : String.format("%.0f%% outside the previous band %s USD", diff.volumeOutsidePercent(), prior.volumeBand())) + "\n"
                 + StorySupport.asContext("Review standards", standard);
-        Optional<Double> threshold = volumeThreshold(standard);
-        Materiality byRule = materialityByRule(diff, prior, threshold);
-        // Settled by rule when address and ownership are unchanged and volume stayed in its band: the standard states
-        // outright that a new beneficiary is material and unchanged details are not. The model weighs anything else.
+        Optional<KycRules> rules = rules(standard);
+        Materiality byRule = materialityByRule(diff, prior, rules);
+        // Settled by rule when a standard is in reach that states the beneficiary rule, and address and ownership are
+        // unchanged and volume stayed in its band. The model weighs anything else.
         Materiality materiality = decisions.decideUnlessClear(profile.caseId(),
                 PERSONA,
                 "decisions/kyc-materiality",
                 Map.of(),
                 context,
                 Materiality.class,
-                () -> !diff.addressChanged() && !diff.ownershipChanged() && diff.volumeOutsidePercent() == 0 ? Optional.of(byRule) : Optional.empty(),
-                "address and ownership unchanged, volume within its band; new beneficiaries are material by the standard",
+                () -> rules.isEmpty() || (rules.get().beneficiaryMaterial() && !diff.addressChanged() && !diff.ownershipChanged() && diff.volumeOutsidePercent() == 0)
+                        ? Optional.of(byRule) : Optional.empty(),
+                rules.isEmpty() ? "no written standard in reach: every change found goes to the reviewer"
+                        : "address and ownership unchanged, volume within its band; new beneficiaries are material by the standard",
                 () -> byRule,
-                // Every new beneficiary is material, and nothing unchanged is.
-                m -> m.material() != null && diff.newBeneficiaries().stream().allMatch(b -> m.material().stream().anyMatch(x -> x.contains(b)))
+                // Every new beneficiary the standard makes material is material, and nothing unchanged is.
+                m -> m.material() != null && (rules.isEmpty() || !rules.get().beneficiaryMaterial()
+                        || diff.newBeneficiaries().stream().allMatch(b -> m.material().stream().anyMatch(x -> x.contains(b))))
                         && m.material().stream().noneMatch(x -> x.toLowerCase().contains("unchanged")),
                 ai);
         List<String> material = materiality.material() == null ? List.of() : materiality.material().stream().map(x -> x.replace(';', ',')).toList();
@@ -244,7 +274,7 @@ public class KycReviewAgent {
         ledger.step(PERSONA, "diffAgainstPrior",
                 "Material: " + (material.isEmpty() ? NONE : String.join(", ", material)) + ". Not material: " + String.join(", ", immaterial) + ".",
                 support.effort("kyc-review", "diff-against-prior"), StoryLedger.Kind.WORK);
-        return new ChangeSet(profile.caseId(), List.copyOf(material), List.copyOf(immaterial));
+        return new ChangeSet(profile.caseId(), List.copyOf(material), List.copyOf(immaterial), rules.map(KycRules::beneficiaryEvidence).orElse(null));
     }
 
     /** What changed, from fingerprints: new beneficiaries by fingerprint, volume by how far it left the previous band. */
@@ -260,18 +290,34 @@ public class KycReviewAgent {
                 prior.volumeBand() == null ? 0 : ProfileFingerprints.percentOutside(prior.volumeBand(), profile.monthlyVolume()));
     }
 
-    private static Materiality materialityByRule(Diff diff, PriorReview prior, Optional<Double> threshold) {
+    /**
+     * Which changes are material, by the standard's own rules. With no standard in reach nothing can be judged
+     * immaterial: every change found goes to the reviewer as material, saying why.
+     */
+    static Materiality materialityByRule(Diff diff, PriorReview prior, Optional<KycRules> rules) {
         List<String> material = new ArrayList<>();
         List<String> immaterial = new ArrayList<>();
-        (diff.addressChanged() ? material : immaterial).add("address " + (diff.addressChanged() ? "changed" : "unchanged"));
-        (diff.ownershipChanged() ? material : immaterial).add("ownership " + (diff.ownershipChanged() ? "changed" : "unchanged"));
-        diff.newBeneficiaries().forEach(b -> material.add("new beneficiary " + b));
+        String unjudged = " (no written standard in reach to judge it)";
+        boolean detailsRule = rules.map(KycRules::onlyUnchangedExempt).orElse(false);
+        for (var d : List.of(Map.entry("address", diff.addressChanged()), Map.entry("ownership", diff.ownershipChanged()))) {
+            if (!d.getValue()) immaterial.add(d.getKey() + " unchanged");
+            else material.add(d.getKey() + " changed" + (detailsRule ? "" : rules.isEmpty() ? unjudged : " (the standard does not say: for the reviewer)"));
+        }
+        boolean beneficiaryRule = rules.map(KycRules::beneficiaryMaterial).orElse(false);
+        diff.newBeneficiaries().forEach(b -> material.add("new beneficiary " + b + (beneficiaryRule ? "" : rules.isEmpty() ? unjudged : " (the standard does not say: for the reviewer)")));
+        Optional<Double> threshold = rules.flatMap(KycRules::volumeThreshold);
         if (prior.volumeBand() != null) {
-            if (threshold.isPresent()) {
+            if (rules.isEmpty() && diff.volumeOutsidePercent() > 0) {
+                material.add(String.format("monthly volume %.0f%% outside the previous band", diff.volumeOutsidePercent()) + unjudged);
+            } else if (rules.isEmpty()) {
+                immaterial.add("monthly volume within the previous band");
+            } else if (threshold.isPresent()) {
                 (diff.volumeOutsidePercent() > threshold.get() ? material : immaterial).add(String.format(
                         "monthly volume %.0f%% outside the previous band (threshold %.0f%%)", diff.volumeOutsidePercent(), threshold.get()));
+            } else if (diff.volumeOutsidePercent() > 0) {
+                material.add(String.format("monthly volume %.0f%% outside the previous band (the standard states no threshold: for the reviewer)", diff.volumeOutsidePercent()));
             } else {
-                immaterial.add(String.format("monthly volume %.0f%% outside the previous band (no written threshold in reach to judge it)", diff.volumeOutsidePercent()));
+                immaterial.add("monthly volume within the previous band");
             }
         }
         return new Materiality(material, immaterial);
@@ -282,7 +328,8 @@ public class KycReviewAgent {
     public Evidence targetedEvidence(CurrentProfile profile, ChangeSet changes) {
         StoryLedger ledger = support.ledger(changes.caseId());
         List<String> requests = changes.material().stream()
-                .map(c -> c.toLowerCase().contains("beneficiar") ? "source of funds and sanctions screening (" + c + ")" : "evidence for " + c)
+                // What the standard says to request for a new beneficiary; for anything else, or with no standard, evidence for the change.
+                .map(c -> c.toLowerCase().contains("beneficiar") && changes.beneficiaryEvidence() != null ? changes.beneficiaryEvidence() + " (" + c + ")" : "evidence for " + c)
                 .toList();
         requests.forEach(r -> note(profile.store(), profile.caseId(), EVIDENCE, r));
         requests.forEach(r -> ledger.step(PERSONA, "targetedEvidence", "Requested " + r + ".", support.effort("kyc-review", "targeted-evidence"), StoryLedger.Kind.WORK));
@@ -325,6 +372,7 @@ public class KycReviewAgent {
                 + ", pending " + evidence.requests().size() + " evidence request(s); sent for human sign-off.";
         ledger.step(PERSONA, "signOff", decision, support.effort("kyc-review", "sign-off"), StoryLedger.Kind.WORK);
         ledger.outcome(decision);
+        ledger.count(riskClass == null ? "handedToPerson" : "decided", 1);
         note(profile.store(), profile.caseId(), SIGN_OFF, decision);
         // The result goes back to memory for the next review: the decision and the profile's fingerprints, not the profile.
         KycReviewMemory review = KycReviewMemory.of(fingerprints, CUSTOMER, java.time.LocalDate.now().toString(), profile.caseId(),

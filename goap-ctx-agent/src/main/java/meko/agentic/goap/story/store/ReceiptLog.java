@@ -19,16 +19,63 @@ public class ReceiptLog {
         }
     }
 
+    /**
+     * Something a run wrote to the context store, in full (a receipt keeps only a short detail).
+     *
+     * @param kind  {@code turn} (dialogue), {@code record} (an agent's record of what it did), {@code memory}, or
+     *              {@code promoted} (a memory moved to shared knowledge)
+     * @param label for a record, what it records; otherwise the conversation it went to, or null
+     */
+    public record Written(String agent, String kind, String label, String text) {}
+
     private final Map<String, List<Receipt>> receipts = new ConcurrentHashMap<>();
+    private final Map<String, List<Written>> written = new ConcurrentHashMap<>();
     private final RunEvents events;
 
     public ReceiptLog(RunEvents events) {
         this.events = events;
     }
 
+    /** Cases in the order first seen: only the most recent are kept, so a long session does not grow without bound. */
+    private final java.util.concurrent.ConcurrentLinkedQueue<String> order = new java.util.concurrent.ConcurrentLinkedQueue<>();
+    private static final int KEEP_CASES = 500;
+
+    private void seen(String caseId) {
+        if (receipts.containsKey(caseId) || written.containsKey(caseId)) return;
+        order.add(caseId);
+        while (order.size() > KEEP_CASES) {
+            String oldest = order.poll();
+            if (oldest == null) break;
+            receipts.remove(oldest);
+            written.remove(oldest);
+        }
+    }
+
+    /** Forgets a case's receipts and writes (a status check's, which is repeated and never shown as a run). */
+    public void clear(String caseId) {
+        receipts.remove(caseId);
+        written.remove(caseId);
+        order.remove(caseId);
+    }
+
     public void record(String caseId, Receipt receipt) {
+        seen(caseId);
         receipts.computeIfAbsent(caseId, k -> java.util.Collections.synchronizedList(new ArrayList<>())).add(receipt);
         events.publish(caseId, "receipt", receipt);
+    }
+
+    public void wrote(String caseId, Written item) {
+        seen(caseId);
+        written.computeIfAbsent(caseId, k -> java.util.Collections.synchronizedList(new ArrayList<>())).add(item);
+    }
+
+    /** What the run for {@code caseId} wrote, in the order it was written. */
+    public List<Written> writtenFor(String caseId) {
+        List<Written> list = written.get(caseId);
+        if (list == null) return List.of();
+        synchronized (list) {
+            return List.copyOf(list);
+        }
     }
 
     public List<Receipt> forCase(String caseId) {

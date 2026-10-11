@@ -42,6 +42,11 @@ public class DecisionService {
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             .build();
 
+    /** What a decision read, as kept with it: enough to tell which retrieved items were in its context. */
+    static String excerpt(String context) {
+        return context == null ? "" : context.length() <= 4000 ? context : context.substring(0, 4000);
+    }
+
     public DecisionService(LlmTiers tiers, StorySupport support, TemplateRenderer templates) {
         this.tiers = tiers;
         this.support = support;
@@ -79,21 +84,21 @@ public class DecisionService {
                 if (!valid.test(answer)) {
                     T ruled = rule.get();
                     ledger.decision(new StoryLedger.Decision(persona, gate, question, json.writeValueAsString(ruled),
-                            "rule (" + model + "'s answer did not match the context: " + abbreviate(json.writeValueAsString(answer)) + ")", contextSummary, true));
+                            "rule (" + model + "'s answer did not match the context: " + abbreviate(json.writeValueAsString(answer)) + ")", contextSummary, true, excerpt(context)));
                     return ruled;
                 }
-                ledger.decision(new StoryLedger.Decision(persona, gate, question, json.writeValueAsString(answer), model, contextSummary, true));
+                ledger.decision(new StoryLedger.Decision(persona, gate, question, json.writeValueAsString(answer), model, contextSummary, true, excerpt(context)));
                 return answer;
             } catch (RuntimeException e) {
                 T answer = rule.get();
                 ledger.decision(new StoryLedger.Decision(persona, gate, question, json.writeValueAsString(answer),
-                        "rule (" + model + " failed: " + abbreviate(e.getMessage()) + ")", contextSummary, false));
+                        "rule (" + model + " failed: " + abbreviate(e.getMessage()) + ")", contextSummary, false, excerpt(context)));
                 return answer;
             }
         }
         T answer = rule.get();
         ledger.decision(new StoryLedger.Decision(persona, gate, question, json.writeValueAsString(answer),
-                "rule (" + (tiers.enabled() ? tiers.status(DECIDER_TIER).diagnosis() : "model calls disabled") + ")", contextSummary, false));
+                tiers.enabled() ? "rule (" + tiers.status(DECIDER_TIER).diagnosis() + ")" : "rule", contextSummary, false, excerpt(context)));
         return answer;
     }
 
@@ -107,7 +112,7 @@ public class DecisionService {
         String contextSummary = context.isBlank() ? "no context" : (context.length() / 4) + " tokens of context";
         T answer = rule.get();
         support.ledger(caseId).decision(new StoryLedger.Decision(persona, template.substring(template.lastIndexOf('/') + 1), question(prompt),
-                json.writeValueAsString(answer), "rule (" + check + ")", contextSummary, false));
+                json.writeValueAsString(answer), "rule (" + check + ")", contextSummary, false, excerpt(context)));
         return answer;
     }
 

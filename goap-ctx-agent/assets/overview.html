@@ -494,7 +494,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
     </ol>
     <div class="example" id="howExample"></div>
   </div>
-  <p class="quote">The planner decides what to do next from what the agent knows. Meko decides what the agent knows.</p>
+  <p class="quote">The planner decides what to do next. Meko gives every agent the right context to decide it.</p>
 </section>
 
 <!-- ============================================================ 5-9. use cases (rendered from data) -->
@@ -592,7 +592,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
     ['bot', 'Vendor → you', "A vendor's chatbot escalates to your specialist. Only the CRM ticket crosses.", 'The customer repeats everything', 'customer re-asked'],
     ['bot', 'Vendor system → you', "A vendor's loan-origination system refers the application with its file. The borrower's explanations don't cross.", 'The borrower explains it all again, with the proof', 'explanation lost'],
     ['clock', 'Desk → desk, over time', "Last quarter's review was done by another desk's agent.", 'The whole review is redone', 'review redone'],
-    ['globe', 'Team → organization', 'Another team solved the failure that keeps reaching you.', 'Every team rediscovers the fix', 'fix rediscovered'],
+    ['globe', 'Team → organization', 'Another desk solved the failure that keeps reaching you.', 'Every team rediscovers the fix', 'fix rediscovered'],
     ['team', 'Team → team', "One team's agent dies mid-incident; another team's agent takes over.", 'Finished checks are redone', 'checks redone'],
     ['code', 'Tools → your assistant', 'Decisions and requests were written by coding tools and bots.', 'The open request is missed', 'request missed']
   ];
@@ -657,7 +657,7 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
         num: '0', unit: 'customer re-asks · 19 min', min: 19, wait: 6, why: "Your specialist recalls what the vendor's bot established and the right policy, so the asks never enter the plan."}
     },
     {
-      id: 'loan', ladder: ["The borrowers’ explanations, recalled by case id; the conversation, keyed by the application id", "The underwriting policy; and credit risk’s ruling on a bill of sale, promoted from the underwriter’s memory into shared knowledge as precedent", "LEND-UW-05 for a salaried borrower, not the look-alike self-employed policy LEND-UW-09", "Each underwriting decision in the application’s conversation, with who made it; a fair-lending reviewer reads it back by application id"], title: 'I already explained this', eyebrow: 'BFSI / Lending', line: 'The documents crossed. The explanations didn’t.', story: 'Two borrowers apply for personal loans through a vendor’s loan-origination system. The first explains an 8,000 USD deposit (the sale of their car, with the bill of sale) and a 92-day employment gap (parental leave, with the employer’s letter); the second, a later borrower, a deposit from selling a motorcycle, also with a bill of sale. Each application goes to your underwriter with its whole file.',
+      id: 'loan', ladder: ["The borrowers’ explanations, recalled by case id; the conversation, keyed by the application id", "The underwriting policy; and credit risk’s ruling on a bill of sale, promoted from the underwriter’s memory into shared knowledge as precedent", "LEND-UW-05 for a salaried borrower, not the look-alike self-employed policy LEND-UW-09", "Each underwriting decision in the application’s conversation, with who made it; a fair-lending reviewer reads it back by application id"], title: 'Same proof, twice', eyebrow: 'BFSI / Lending', line: 'The documents crossed. The explanations didn’t.', story: 'Two borrowers apply for personal loans through a vendor’s loan-origination system. The first explains an 8,000 USD deposit (the sale of their car, with the bill of sale) and a 92-day employment gap (parental leave, with the employer’s letter); the second, a later borrower, a deposit from selling a motorcycle, also with a bill of sale. Each application goes to your underwriter with its whole file.',
       a: {icon: 'bot', name: 'Loan-origination system', where: 'A vendor product, its own store', does: 'Takes each application and the borrower’s explanations, runs the checks.'},
       b: {icon: 'person', name: 'Your credit underwriter', where: 'Your application', does: 'Clears the policy’s conditions, shares rulings as precedent, makes the credit call.', yours: true},
       later: {icon: 'shield', name: 'Fair-lending reviewer', where: 'Your compliance desk, later', does: 'Checks the conditions, the evidence basis and the credit call against the policy, from the application id.', crosses: 'The application id'},
@@ -681,13 +681,13 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
         num: '1', unit: 'evidence request · 41 min', min: 41, why: 'The agent picks the 2026 review of this customer (not the 2025 one, not CUST-7789) and checks only what changed.'}
     },
     {
-      id: 'learned', ladder: ["The EU team’s root cause, written as it closes case 1", "Promoted from memory into shared knowledge for every application", "Checked against each case before reuse; a look-alike case is rejected",, "Each pattern-fit judgement, cited in the resolution note"], title: 'The organization learned', eyebrow: 'BFSI / Payments ops', line: 'Every silo pays once. With Meko, the organization pays once.', story: 'The same payment failure keeps arriving from different customers. The EU payments-ops team cracked case 1 after testing every hypothesis. Cases 2 and 3 land in your support app, a different application.',
-      a: {icon: 'globe', name: 'EU payments-ops agent', where: "Another team's application", does: 'Solves case 1 the hard way.'},
-      b: {icon: 'person', name: 'Your support agents', where: 'Your support app', does: 'Handle cases 2 and 3.', yours: true},
-      crosses: 'Nothing: another team', db: {text: '199 minutes for 3 cases (reuses its own lesson)', min: 199},
+      id: 'learned', ladder: ["The EU desk’s root cause, written as it closes case 1", "Promoted from memory into shared knowledge for every application", "Checked against each case before reuse; a look-alike case is rejected",, "Each pattern-fit judgement, cited in the resolution note"], title: 'The organization learned', eyebrow: 'BFSI / Payments ops', line: 'Every silo pays once. With Meko, the organization pays once.', story: 'The same payment failure keeps arriving from different customers. The EU payments-ops team cracked case 1 after testing every hypothesis. Cases 2 and 3 land in your support app, a different application.',
+      a: {icon: 'globe', name: 'EU payments desk', where: "The EU desk's application", does: 'Solves case 1 the hard way.'},
+      b: {icon: 'person', name: 'APAC payments desk', where: "The APAC desk's application", does: 'Handles cases 2 and 3.', yours: true},
+      crosses: 'Nothing: another desk', db: {text: '199 minutes for 3 cases (reuses its own lesson)', min: 199},
       writes: ['Root cause, promoted to shared knowledge'], recalls: ['The lesson, by EU ops', 'Checked against this case first'],
       without: {plan: [['Gather signals', ''], ['Look up lessons (none)', 'miss'], ['Test hypothesis 1', 'rework'], ['Test hypothesis 2', 'rework'], ['Test hypothesis 3', 'rework'], ['Resolve', '']],
-        num: '264', unit: 'minutes for 3 cases', min: 264, why: 'Each case is investigated from scratch. What the EU team learned stays with the EU team.'},
+        num: '264', unit: 'minutes for 3 cases', min: 264, why: 'Each case is investigated from scratch. What the EU desk learned stays with the EU desk.'},
       with: {plan: [['Gather signals', ''], ['Look up lessons', 'ctx'], ['Validate the lesson: 8 min', ''], ['Resolve', '']],
         num: '131', unit: 'minutes for 3 cases', min: 131, why: 'From case 2 your app validates the EU lesson instead of investigating. A look-alike case is rejected, not misdiagnosed.'}
     },
@@ -787,10 +787,11 @@ kbd { font: 12px var(--mono); border: 1px solid var(--rule); border-bottom-width
   const PROJ = {support: 'customer re-asks avoided', incident: 'repeated investigation steps avoided', kyc: 'evidence requests avoided', loan: 'borrower re-explanations avoided',
     catchup: 'missed review requirements avoided', learned: 'hypothesis tests avoided (after the first case)'};
   const perCase = {learned: 3};  // steady state: without Meko 3 hypotheses per case, with Meko 0
+  const casesPerRun = {loan: 2};  // the loan run is two applications: the projection counts per application
   document.getElementById('projection').style.setProperty('--cases', CASES.length);
   document.getElementById('projection').innerHTML = '<div class="ph"><b>At ' + VOLUME.toLocaleString() + ' cases a month</b>per use case, counted from the plans</div>' +
     CASES.map(c => {
-      const d = perCase[c.id] ?? (Number(c.without.num) - Number(c.with.num));
+      const d = perCase[c.id] ?? (Number(c.without.num) - Number(c.with.num)) / (casesPerRun[c.id] || 1);
       return '<div class="pc"><b>' + (d * VOLUME).toLocaleString() + '</b><span>' + esc(PROJ[c.id]) + '</span></div>';
     }).join('');
 

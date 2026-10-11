@@ -29,5 +29,7 @@ public record StoryRun(
         /** The measured metrics to lead with, as {key, label, betterWhen}. */
         List<List<String>> headline,
         /** A follow-up's audit trail, entry by entry; empty for a story's own run. */
-        List<StoryLedger.AuditEntry> auditTrail) {
+        List<StoryLedger.AuditEntry> auditTrail,
+        /** What the run wrote to the context store, in full and in order: records, dialogue, memories, promotions. */
+        List<meko.agentic.goap.story.store.ReceiptLog.Written> written) {
 }

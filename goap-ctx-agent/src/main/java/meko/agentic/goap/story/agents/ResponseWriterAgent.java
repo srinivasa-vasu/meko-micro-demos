@@ -102,7 +102,7 @@ public class ResponseWriterAgent {
 		boolean generated = false;
 		if (!tiers.enabled()) {
 			text = task.fallbackText();
-			ledger.step(task.persona(), "write", "Model calls disabled: used the template for the " + task.purpose() + ".", support.effort("response-writer", "write"), StoryLedger.Kind.WORK);
+			ledger.step(task.persona(), "write", "Wrote the " + task.purpose() + " from its template.", support.effort("response-writer", "write"), StoryLedger.Kind.WORK);
 		}
 		else if (!tiers.available(tier)) {
 			text = task.fallbackText();
@@ -116,7 +116,8 @@ public class ResponseWriterAgent {
 						.replaceFirst("^\\[case [^]]+]\\s*", "");
 				generated = !text.isBlank();
 				if (!generated) text = task.fallbackText();
-				ledger.step(task.persona(), "write", "Wrote the " + task.purpose() + " with " + label + ".", support.effort("response-writer", "write"), StoryLedger.Kind.WORK);
+				ledger.step(task.persona(), "write", generated ? "Wrote the " + task.purpose() + " with " + label + "."
+						: label + " returned no text: used the template.", support.effort("response-writer", "write"), StoryLedger.Kind.WORK);
 			}
 			catch (RuntimeException e) {
 				text = task.fallbackText();

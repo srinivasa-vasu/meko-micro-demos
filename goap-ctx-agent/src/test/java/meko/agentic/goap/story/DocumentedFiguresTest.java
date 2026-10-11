@@ -38,7 +38,7 @@ class DocumentedFiguresTest {
             new Documented("what-changed", "What Changed Since Last Review?", "kyc", "evidenceRequests"),
             new Documented("vacation-catch-up", "I Was on Vacation. Catch Me Up.", "catchup", "missedRequirements"),
             new Documented("organization-learned", "The Organization Learned", "learned", null),
-            new Documented("loan-underwriting", "I Already Explained This", "loan", "borrowerReexplained"));
+            new Documented("loan-underwriting", "Same Proof, Twice", "loan", "borrowerReexplained"));
 
     static final List<Lane> LANES = List.of(Lane.WITHOUT, Lane.DATABASE, Lane.MEKO);
     static final int SERIES_CASES = 3;
@@ -205,15 +205,30 @@ class DocumentedFiguresTest {
             Map<Lane, Map<String, Integer>> run = measured.get(d.storyId());
             assertThat(number(block, "db: \\{text: '[^']*', min: (\\d+)")).as("%s, database minutes in the deck", d.deckId())
                     .isEqualTo(run.get(Lane.DATABASE).get("minutes"));
+            // The figures written into the database lane's text: its headline count, any rulings, and its minutes.
+            Matcher dbText = Pattern.compile("db: \\{text: '([^']*)'").matcher(block);
+            assertThat(dbText.find()).isTrue();
+            String text = dbText.group(1);
+            Map<String, Integer> db = run.get(Lane.DATABASE);
+            assertThat(number(text, "^(\\d+)")).as("%s, database lane's leading figure in the deck", d.deckId())
+                    .isEqualTo(d.count() == null ? db.get("minutes") : db.getOrDefault(d.count(), 0));
+            Matcher rulings = Pattern.compile("(\\d+) rulings?").matcher(text);
+            if (rulings.find()) assertThat(Integer.parseInt(rulings.group(1))).as("%s, database rulings in the deck", d.deckId()).isEqualTo(db.getOrDefault("rulingsRequested", 0));
+            Matcher dbMin = Pattern.compile("(\\d+) min").matcher(text);
+            if (dbMin.find()) assertThat(Integer.parseInt(dbMin.group(1))).as("%s, database minutes in the deck's text", d.deckId()).isEqualTo(db.get("minutes"));
             for (var lane : Map.of("without", Lane.WITHOUT, "with", Lane.MEKO).entrySet()) {
-                Matcher m = Pattern.compile("\\b" + lane.getKey() + ": \\{plan: .*?num: '(\\d+)', unit: '[^']*', min: (\\d+)(?:, wait: (\\d+))?", Pattern.DOTALL).matcher(block);
+                Matcher m = Pattern.compile("\\b" + lane.getKey() + ": \\{plan: .*?num: '(\\d+)', unit: '([^']*)', min: (\\d+)(?:, wait: (\\d+))?", Pattern.DOTALL).matcher(block);
                 assertThat(m.find()).as("%s %s in the deck", d.deckId(), lane.getKey()).isTrue();
                 Map<String, Integer> metrics = run.get(lane.getValue());
-                assertThat(Integer.parseInt(m.group(2))).as("%s, %s minutes in the deck", d.deckId(), lane.getKey()).isEqualTo(metrics.get("minutes"));
+                assertThat(Integer.parseInt(m.group(3))).as("%s, %s minutes in the deck", d.deckId(), lane.getKey()).isEqualTo(metrics.get("minutes"));
+                // Minutes written into the unit label ("customer re-asks · 56 min") are the same run's minutes.
+                Matcher unitMin = Pattern.compile("(\\d+) min").matcher(m.group(2));
+                if (unitMin.find()) assertThat(Integer.parseInt(unitMin.group(1))).as("%s, %s minutes in the unit label", d.deckId(), lane.getKey())
+                        .isEqualTo(metrics.get("minutes"));
                 assertThat(Integer.parseInt(m.group(1))).as("%s, %s headline number in the deck", d.deckId(), lane.getKey())
                         .isEqualTo(metrics.getOrDefault(d.count() == null ? "minutes" : d.count(), 0));
-                if (m.group(3) != null) {
-                    assertThat(Integer.parseInt(m.group(3))).as("%s, %s waiting minutes in the deck", d.deckId(), lane.getKey()).isEqualTo(metrics.get("waitingMinutes"));
+                if (m.group(4) != null) {
+                    assertThat(Integer.parseInt(m.group(4))).as("%s, %s waiting minutes in the deck", d.deckId(), lane.getKey()).isEqualTo(metrics.get("waitingMinutes"));
                 }
             }
         }

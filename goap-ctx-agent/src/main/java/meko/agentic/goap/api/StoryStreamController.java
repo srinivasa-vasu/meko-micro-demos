@@ -42,15 +42,17 @@ public class StoryStreamController {
 
     @GetMapping(value = "/{id}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@PathVariable String id, @RequestParam(defaultValue = "compare") String mode,
-                             @RequestParam(defaultValue = "false") boolean db) {
+                             @RequestParam(defaultValue = "false") boolean db,
+                             @RequestParam(defaultValue = "false") boolean mekoOnly) {
         SseEmitter emitter = new SseEmitter(15 * 60 * 1000L);
         List<Lane> lanes = new ArrayList<>();
         // A follow-up runs in every lane like a comparison, on what each lane last handled for the story.
         boolean followUp = mode.equals("followup");
         boolean compare = mode.equals("compare") || followUp;
         java.util.function.Supplier<String> newCaseId = () -> followUp ? stories.newFollowUpCaseId(id) : StoryService.newCaseId(id);
-        if (compare || mode.equals("without")) lanes.add(new Lane("without", ContextStores.Lane.WITHOUT, newCaseId.get()));
-        if ((compare && db) || mode.equals("db")) lanes.add(new Lane("db", ContextStores.Lane.DATABASE, newCaseId.get()));
+        // The workshop follows the Meko lane alone, stage by stage: mekoOnly drops the other lanes from a comparison.
+        if ((compare && !mekoOnly) || mode.equals("without")) lanes.add(new Lane("without", ContextStores.Lane.WITHOUT, newCaseId.get()));
+        if ((compare && db && !mekoOnly) || mode.equals("db")) lanes.add(new Lane("db", ContextStores.Lane.DATABASE, newCaseId.get()));
         if (compare || mode.equals("with") || mode.equals("mismatch")) lanes.add(new Lane("with", ContextStores.Lane.MEKO, newCaseId.get()));
 
         send(emitter, "lanes", lanes);

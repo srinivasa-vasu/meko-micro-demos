@@ -39,6 +39,15 @@ public class StorySeeder {
         }
     }
 
+    /**
+     * Whether an uploaded chunk belongs to the document {@code key}: the first policy id the chunk names is that key. A
+     * document that only mentions another (LEND-UW-05 refers to LEND-UW-09) does not make the other one uploaded.
+     */
+    static boolean isOf(StoreRecord chunk, String key) {
+        return meko.agentic.goap.story.agents.StorySupport.extract(List.of(chunk), meko.agentic.goap.story.agents.StorySupport.POLICY_ID)
+                .map(key::equalsIgnoreCase).orElse(false);
+    }
+
     static final List<Seed> KNOWLEDGE = List.of(
             new Seed(CURATOR, "CARD-DISPUTE-07 failed capture refund policy",
                     "Demo policy CARD-DISPUTE-07: when card authorization succeeds but the merchant capture times out and no settled capture exists, "
@@ -93,11 +102,16 @@ public class StorySeeder {
     private final ContextStores stores;
     private final KnowledgeDocuments documents;
     private final ProfileFingerprints fingerprints;
+    private final Workshop workshop;
+    private final meko.agentic.goap.story.store.ReceiptLog receipts;
 
-    public StorySeeder(ContextStores stores, KnowledgeDocuments documents, ProfileFingerprints fingerprints) {
+    public StorySeeder(ContextStores stores, KnowledgeDocuments documents, ProfileFingerprints fingerprints, Workshop workshop,
+                       meko.agentic.goap.story.store.ReceiptLog receipts) {
+        this.receipts = receipts;
         this.stores = stores;
         this.documents = documents;
         this.fingerprints = fingerprints;
+        this.workshop = workshop;
     }
 
     /**
@@ -126,9 +140,13 @@ public class StorySeeder {
         return all;
     }
 
-    /** The stand-in is in memory, so it is seeded on every start, with the documents as if they had been uploaded. */
+    /**
+     * The stand-in is in memory, so it is seeded on every start, with the documents as if they had been uploaded. In the
+     * workshop it starts empty: participants add the documents and the history stage by stage.
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void seedStandIn() {
+        if (workshop.enabled()) return;
         documents.all().forEach(d -> d.chunks().forEach(c -> stores.standIn().seedDocumentChunk(d.filename(), c)));
         KNOWLEDGE.stream().filter(s -> !documents.covers(s.docKey()))
                 .forEach(s -> stores.standIn().seedKnowledge(s.agentId(), s.text()));
@@ -138,10 +156,12 @@ public class StorySeeder {
     /** Seeds the live datapack. Entries already present are skipped, so this is safe to repeat. */
     public Map<String, String> seedLive() {
         ContextStore store = stores.byKind(ContextStore.Kind.MEKO_LIVE);
+        // Nothing cached by an earlier seeding (another datapack, or before an upload) answers this one.
+        store.flush(SEED_CASE);
         Map<String, String> outcome = new LinkedHashMap<>();
         for (Seed seed : KNOWLEDGE) {
             List<StoreRecord> rows = store.searchKnowledge(SEED_CASE, seed.agentId(), seed.text());
-            if (rows.stream().anyMatch(r -> r.uploadedDocument() && r.text().contains(seed.docKey()))) {
+            if (rows.stream().anyMatch(r -> r.uploadedDocument() && isOf(r, seed.docKey()))) {
                 outcome.put(seed.query(), "already in knowledge base (uploaded document " + seed.docKey() + ")");
                 continue;
             }
@@ -163,8 +183,9 @@ public class StorySeeder {
                         ? "removed: a KYC review stored as plain text (written by " + r.writtenBy() + ")" : "could not remove a KYC review stored as plain text");
             }
         }
+        java.util.Set<String> inMemory = foundInMemory(store, SEED_CASE, memories());
         for (Seed seed : memories()) {
-            if (present(store.searchMemory(SEED_CASE, seed.agentId(), seed.text()), seed.text())) {
+            if (inMemory.contains(seed.text())) {
                 outcome.put(seed.query(), "already in memory (written by " + seed.agentId() + ")");
                 continue;
             }
@@ -172,6 +193,130 @@ public class StorySeeder {
                     ? "memory written by " + seed.agentId() : "memory_add stored nothing");
         }
         return outcome;
+    }
+
+    // ------------------------------------------------------------------ the workshop's stages
+
+    private static final String WORKSHOP_CASE = "workshop";
+
+    /** The status checks' own threads: they wait on the network, so they do not borrow the common pool's few. */
+    private static final java.util.concurrent.ExecutorService CHECKS = java.util.concurrent.Executors.newFixedThreadPool(8, r -> {
+        Thread t = new Thread(r, "workshop-check");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** The organizational history a use case reads: what other teams' agents wrote before the run. */
+    List<Seed> historyFor(String useCaseId) {
+        return switch (useCaseId) {
+            case "what-changed" -> kycReviews();
+            case "vacation-catch-up" -> MEMORIES;
+            default -> List.of();
+        };
+    }
+
+    /**
+     * Whether each document is in the datapack the Meko lane uses (the live one, or the stand-in): "uploaded" when its
+     * text is there as an uploaded document, "one-line version" when only the promoted summary is, else "missing".
+     */
+    public Map<String, String> documentStatus(List<String> keys) {
+        ContextStore store = stores.forLane(ContextStores.Lane.MEKO);
+        // Always asked afresh: an answer kept from an earlier check (or another datapack) would hide an upload or a switch.
+        store.flush(WORKSHOP_CASE);
+        receipts.clear(WORKSHOP_CASE);
+        Map<String, java.util.concurrent.CompletableFuture<String>> checks = new LinkedHashMap<>();
+        for (String key : keys) {
+            String title = documents.all().stream().filter(d -> d.key().equals(key)).map(KnowledgeDocuments.Document::title).findFirst().orElse(key);
+            String summary = KNOWLEDGE.stream().filter(k -> key.equals(k.docKey())).map(Seed::text).findFirst().orElse(null);
+            checks.put(key, java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                List<StoreRecord> rows = store.searchKnowledge(WORKSHOP_CASE, CURATOR, title);
+                if (rows.stream().anyMatch(r -> r.uploadedDocument() && isOf(r, key))) return "uploaded";
+                return summary != null && present(rows, summary) ? "one-line version" : "missing";
+            }, CHECKS));
+        }
+        Map<String, String> status = new LinkedHashMap<>();
+        checks.forEach((k, f) -> status.put(k, f.join()));
+        return status;
+    }
+
+    /** Whether each use case's organizational history is in the datapack: "seeded", "partly seeded (n of m)" or "missing". */
+    public Map<String, String> historyStatus(List<String> useCaseIds) {
+        ContextStore store = stores.forLane(ContextStores.Lane.MEKO);
+        Map<String, String> status = new LinkedHashMap<>();
+        for (String id : useCaseIds) {
+            List<Seed> seeds = historyFor(id);
+            java.util.Set<String> inMemory = foundInMemory(store, WORKSHOP_CASE, seeds);
+            long found = seeds.stream().filter(seed -> inMemory.contains(seed.text())).count();
+            status.put(id, found == seeds.size() ? "seeded" : found == 0 ? "missing" : "partly seeded (" + found + " of " + seeds.size() + ")");
+        }
+        return status;
+    }
+
+    /**
+     * Adds documents the participant could not upload. In the stand-in, the full documents, as an upload would; in a
+     * live datapack, a one-line version of each, written as a memory and promoted (uploading the file in the Meko app
+     * is the real step, and gives the full text).
+     */
+    public Map<String, String> addDocuments(List<String> keys) {
+        Map<String, String> outcome = new LinkedHashMap<>();
+        Map<String, String> status = documentStatus(keys);
+        ContextStore store = stores.forLane(ContextStores.Lane.MEKO);
+        for (String key : keys) {
+            if (!"missing".equals(status.get(key))) {
+                outcome.put(key, "already in the datapack (" + status.get(key) + ")");
+                continue;
+            }
+            if (store.kind() == ContextStore.Kind.LOCAL_STAND_IN) {
+                documents.all().stream().filter(d -> d.key().equals(key))
+                        .forEach(d -> d.chunks().forEach(c -> stores.standIn().seedDocumentChunk(d.filename(), c)));
+                outcome.put(key, "document added to the stand-in");
+                continue;
+            }
+            Seed seed = KNOWLEDGE.stream().filter(k -> key.equals(k.docKey())).findFirst().orElse(null);
+            outcome.put(key, seed == null ? "no one-line version: upload the document in the Meko app"
+                    : store.remember(WORKSHOP_CASE, seed.agentId(), seed.text())
+                    .map(id -> store.promote(WORKSHOP_CASE, seed.agentId(), List.of(id))
+                            ? "one-line version promoted to knowledge (upload the document for the full text)"
+                            : "stored as memory; promotion failed (owner or maintainer rights needed)")
+                    .orElse("memory_add stored nothing"));
+        }
+        return outcome;
+    }
+
+    /** Seeds the organizational history the given use cases read, as other teams' agents wrote it. Safe to repeat. */
+    public Map<String, String> seedHistory(List<String> useCaseIds) {
+        ContextStore store = stores.forLane(ContextStores.Lane.MEKO);
+        Map<String, String> outcome = new LinkedHashMap<>();
+        for (String id : useCaseIds) {
+            java.util.Set<String> inMemory = store.kind() == ContextStore.Kind.LOCAL_STAND_IN ? java.util.Set.of() : foundInMemory(store, WORKSHOP_CASE, historyFor(id));
+            for (Seed seed : historyFor(id)) {
+                if (store.kind() == ContextStore.Kind.LOCAL_STAND_IN) {
+                    stores.standIn().seedMemory(seed.agentId(), seed.text());
+                    outcome.put(seed.query(), "memory written by " + seed.agentId() + " (stand-in)");
+                } else if (inMemory.contains(seed.text())) {
+                    outcome.put(seed.query(), "already in memory (written by " + seed.agentId() + ")");
+                } else {
+                    outcome.put(seed.query(), store.remember(WORKSHOP_CASE, seed.agentId(), seed.text()).isPresent()
+                            ? "memory written by " + seed.agentId() : "memory_add stored nothing");
+                }
+            }
+        }
+        return outcome;
+    }
+
+    /**
+     * The seeds' texts that memory holds, as written. One search per seed, all at once, and the results pooled: Meko's
+     * memory_search does not return the memory whose text is the query itself (measured on a live datapack: each
+     * review's own search returned the other reviews, never it), so a seed is found by the other seeds' searches.
+     */
+    private java.util.Set<String> foundInMemory(ContextStore store, String caseId, List<Seed> seeds) {
+        // By each seed's text and by its topic (so a single seed, which no other seed's search returns, is still found).
+        List<java.util.concurrent.CompletableFuture<List<StoreRecord>>> searches = seeds.stream()
+                .flatMap(seed -> java.util.stream.Stream.of(seed.text(), seed.query()).map(q -> java.util.concurrent.CompletableFuture.supplyAsync(
+                        () -> store.searchMemory(caseId, seed.agentId(), q, 5), CHECKS))).toList();
+        java.util.Set<String> texts = new java.util.HashSet<>();
+        searches.forEach(f -> f.join().forEach(r -> texts.add(r.text())));
+        return texts;
     }
 
     /**

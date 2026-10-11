@@ -1,0 +1,21 @@
+# The hands-on workshop: SPRING_PROFILES_ACTIVE=workshop. Same agents, planner and Meko calls as the demo.
+# No model key needed: gates decide by rule and the response writer uses its template.
+# Each participant creates a fresh datapack from the workshop page; MEKO_DATAPACK_NAME picks an existing one instead.
+# (The demo's default datapack name does not apply here.)
+meko:
+  datapack-name: ${MEKO_DATAPACK_NAME:}
+
+goap:
+  llm:
+    enabled: false
+  # With no written policy in reach, an escalation goes to a person and nothing is decided (no simulated answer):
+  # the empty-datapack stage then shows what an agent without the knowledge can actually do.
+  escalation:
+    answered: false
+
+workshop:
+  enabled: true
+  # The use cases the workshop walks through, in order. Each is the clearest example of one kind of context, and
+  # together they cover every stage: memory across a handoff and shared knowledge (the dispute), other teams' memory
+  # (the KYC review), collective memory (the learning series). Add loan-underwriting for a longer session.
+  use-cases: dont-make-me-explain,what-changed,organization-learned

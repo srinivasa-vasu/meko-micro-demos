@@ -145,7 +145,7 @@ public class SreTakeoverAgent {
     @Action(description = "Verify connection-pool saturation on the payments service", pre = {"deployKnown", "databaseKnown"},
             post = {"poolVerified"}, cost = 0.10, canRerun = false)
     public PoolFinding verifyConnectionPool(Recovered state) {
-        String finding = "Connection pool exhausted (50/50 in use); v2.14.0 lowered maxPoolSize from 200 to 50.";
+        String finding = "The simulated payments service reports the connection pool exhausted (50/50 in use); v2.14.0 lowered maxPoolSize from 200 to 50.";
         support.ledger(state.caseId()).step(PERSONA, "verifyConnectionPool", finding, support.effort("sre-takeover", "verify-connection-pool"), StoryLedger.Kind.WORK);
         support.recordEvent(support.store(state.store()), state.caseId(), AGENT_ID, state.caseId(), POOL_VERIFIED, null,
                 "Verify connection-pool saturation on payments-api", finding);
@@ -157,11 +157,12 @@ public class SreTakeoverAgent {
             post = {"incidentResolved"}, cost = 0.05, canRerun = false)
     public IncidentResolved mitigate(Recovered state, PoolFinding pool) {
         StoryLedger ledger = support.ledger(state.caseId());
-        String summary = "Rolled back maxPoolSize to 200; p99 latency back under 400 ms.";
+        String summary = "Rolled back maxPoolSize to 200; the simulated service reports p99 latency back under 400 ms.";
         ledger.step(PERSONA, "mitigate", summary, support.effort("sre-takeover", "mitigate"), StoryLedger.Kind.WORK);
         support.recordEvent(support.store(state.store()), state.caseId(), AGENT_ID, state.caseId(), MITIGATED, null,
                 "Mitigate the incident", summary);
         ledger.outcome(summary);
+        ledger.count("decided", 1);
         int repeated = ledger.counters().getOrDefault("repeatedSteps", 0);
         java.util.List<String> facts = new java.util.ArrayList<>(state.findings());
         facts.add(pool.finding());

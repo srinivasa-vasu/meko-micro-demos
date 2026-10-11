@@ -37,6 +37,13 @@ public class MekoController {
 
     public record Status(boolean connected, int toolCount, List<String> tools, String agentId) {}
 
+    /** Arguments to start a raw call from, built from the tool's own input schema. */
+    @GetMapping("/tool-template")
+    public MekoClient.ToolTemplate toolTemplate(@RequestParam String tool,
+                                                @RequestParam(required = false) String datapackId) {
+        return meko.template(tool, datapackId);
+    }
+
     @GetMapping("/datapacks")
     public McpCall datapacks() {
         return meko.listDatapacks();
@@ -96,6 +103,25 @@ public class MekoController {
     @PostMapping("/memory/promote")
     public McpCall promote(@RequestBody Promote body) {
         return meko.promoteMemories(body.datapackId(), body.memoryIds(), body.asAgent());
+    }
+
+    @GetMapping("/memory")
+    public McpCall getMemory(@RequestParam String datapackId, @RequestParam String memoryId,
+                             @RequestParam(required = false) String asAgent) {
+        return meko.getMemory(datapackId, memoryId, asAgent);
+    }
+
+    @PostMapping("/context/search")
+    public McpCall searchContext(@RequestBody ContextQuery body) {
+        return meko.searchContext(body.datapackId(), body.query(), body.limitOrDefault(),
+                body.forceSource(), body.asAgent());
+    }
+
+    public record ContextQuery(String datapackId, String query, Integer limit, String forceSource,
+                               String asAgent) {
+        int limitOrDefault() {
+            return limit == null || limit < 1 ? 10 : limit;
+        }
     }
 
     @PostMapping("/knowledge/search")

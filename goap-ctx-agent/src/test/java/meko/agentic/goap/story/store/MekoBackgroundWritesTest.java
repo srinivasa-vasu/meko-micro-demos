@@ -37,7 +37,7 @@ class MekoBackgroundWritesTest {
             return switch (tool) {
                 case "conversation_add_message" -> {
                     conversations.computeIfAbsent(conversation, k -> java.util.Collections.synchronizedList(new ArrayList<>()))
-                            .add(Map.of("input", args.get("input"), "output", args.get("output")));
+                            .add(sent(args));
                     yield json.readTree("{}");
                 }
                 case "conversation_get" -> json.valueToTree(Map.of("messages", conversations.getOrDefault(conversation, List.of())));
@@ -52,6 +52,28 @@ class MekoBackgroundWritesTest {
                 default -> json.readTree("{}");
             };
         }
+    }
+
+    /** What a message holds as Meko keeps it: the input, output, reasoning and metadata that were sent. */
+    static Map<String, Object> sent(Map<String, Object> args) {
+        Map<String, Object> m = new java.util.HashMap<>();
+        for (String k : List.of("input", "output", "reasoning", "metadata")) if (args.get(k) != null) m.put(k, args.get(k));
+        return m;
+    }
+
+    @Test
+    void anAgentsRecordSendsNothingToExtractAsItsInputAndReadsBackTheRequest() {
+        SlowMeko meko = new SlowMeko();
+        MekoContextStore store = new MekoContextStore(meko, new ReceiptLog(new RunEvents()), new OutageSwitch());
+        store.addRecord("CASE-R", "agent:a", "TX-R", "TX-R · settlement check", "Check settlement for TX-R", "no settled capture", "agent:a · settlement check");
+        store.addTurn("CASE-R", "agent:a", "TX-R", "My card was charged twice.", "Let me check.");
+        List<ContextStore.Turn> turns = store.transcript("CASE-R", "agent:b", "TX-R");
+        // What Meko holds as the record's input has nothing to extract a memory from (the label is in the metadata);
+        // dialogue stays natural.
+        assertThat(meko.conversations.get("conv-TX-R")).extracting(m -> m.get("input")).containsExactly(MekoContextStore.RECORD_INPUT, "My card was charged twice.");
+        // Read back, the record's input is the request again.
+        assertThat(turns).extracting(ContextStore.Turn::input).containsExactly("Check settlement for TX-R", "My card was charged twice.");
+        assertThat(turns.getFirst().isEvent("agent:a", "settlement check")).isTrue();
     }
 
     @Test

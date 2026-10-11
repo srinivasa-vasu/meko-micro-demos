@@ -195,7 +195,11 @@ public class DisputeAuditorAgent {
     public AuditFinding fileFinding(AuditRecord record, PolicyText policy, AuditChecked checked) {
         StoryLedger ledger = support.ledger(record.caseId());
         Compliance c = checked.compliance();
-        String verdict = record.transaction() + ": " + verdict(c);
+        // What was audited, as the record states it (the resolution), then the verdict on how it was reached.
+        String decided = record.turns().stream().filter(t -> t.isEvent(SPECIALIST, PaymentsSpecialistAgent.RESOLUTION))
+                .map(Turn::output).reduce((a, b) -> b).map(o -> o + " ").orElse("");
+        String verdict = record.transaction() + ": " + decided + verdict(c);
+        ledger.count(c.compliant() == null ? "findingsUnverified" : c.compliant() ? "findingsCompliant" : "findingsNotCompliant", 1);
         ledger.step(PERSONA, "fileFinding", "Filed the finding: " + verdict, support.effort("compliance-auditor", "file-finding"), StoryLedger.Kind.WORK);
         ledger.outcome(verdict);
         List<String> sources = record.turns().stream().map(Turn::writtenBy).distinct().toList();
@@ -279,8 +283,11 @@ public class DisputeAuditorAgent {
         List<Turn> traces = StorySupport.decisionTraces(turns, SPECIALIST);
         String applied = policyOnRecord(turns).orElse(null);
         List<String> findings = new ArrayList<>();
-        if (settlementFirst != null) findings.add(settlementFirst ? "The settlement was checked before the refund was approved."
-                : "The refund was approved before the settlement was checked.");
+        // What the resolution decided, as the record states it: a refund approved, refused, or nothing decided.
+        String decided = resolution < 0 ? "" : turns.get(resolution).output().startsWith("Provisional refund") ? "the refund was approved"
+                : "the case was resolved";
+        if (settlementFirst != null) findings.add(settlementFirst ? "The settlement was checked before " + decided + "."
+                : "The " + decided.replaceFirst("^the ", "") + " before the settlement was checked.");
         if (settlement >= 0) findings.add("Settlement check on record: " + turns.get(settlement).output() + ".");
         findings.add(reasked == 0 ? "The customer was not asked to repeat anything after the handoff."
                 : "The customer was asked to repeat information " + reasked + " times after the handoff.");

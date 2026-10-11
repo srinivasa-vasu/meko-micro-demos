@@ -172,7 +172,10 @@ public class KycReviewCheckAgent {
     public CheckFinding fileFinding(ReviewRecord record, StandardText standard, ReviewChecked checked) {
         StoryLedger ledger = support.ledger(record.caseId());
         Check c = checked.check();
-        String verdict = record.review() + ": " + verdict(c, standard);
+        // What was checked, as the record states it (the sign-off), then the verdict.
+        String decided = events(record.turns(), KycReviewAgent.SIGN_OFF).stream().map(Turn::output).reduce((a, b) -> b).map(o -> o + " ").orElse("");
+        String verdict = record.review() + ": " + decided + verdict(c, standard);
+        ledger.count(c.compliant() == null ? "findingsUnverified" : c.compliant() ? "findingsCompliant" : "findingsNotCompliant", 1);
         ledger.step(PERSONA, "fileFinding", "Filed the finding: " + verdict, support.effort("kyc-review-checker", "file-finding"), StoryLedger.Kind.WORK);
         ledger.outcome(verdict);
         List<String> facts = new ArrayList<>(List.of(
@@ -276,12 +279,23 @@ public class KycReviewCheckAgent {
                 ? material.size() + " material change" + (material.size() == 1 ? "" : "s") + " (" + (material.isEmpty() ? "none" : String.join("; ", material)) + "), "
                 + targeted + " evidence request" + (targeted == 1 ? "" : "s") + "."
                 : fullReview + " full re-review request" + (fullReview == 1 ? "" : "s") + ".");
+        // The materiality judgement itself, re-checked against the rules the standard's own text states.
+        List<String> notMaterial = events(turns, KycReviewAgent.MATERIAL).stream().findFirst()
+                .map(t -> after(t.output(), "not material: ").split(" \\| ")[0])
+                .filter(m -> !m.equals(KycReviewAgent.NONE)).map(m -> List.of(m.split("; "))).orElse(List.of());
+        Optional<KycReviewAgent.KycRules> rules = KycReviewAgent.rules(standard.text());
+        List<String> misjudged = rules.map(r -> notMaterial.stream().filter(n -> {
+            java.util.regex.Matcher volume = java.util.regex.Pattern.compile("monthly volume (\\d+)% outside").matcher(n);
+            boolean overThreshold = volume.find() && r.volumeThreshold().map(t -> Double.parseDouble(volume.group(1)) > t).orElse(false);
+            return overThreshold || (r.beneficiaryMaterial() && n.startsWith("new beneficiary"));
+        }).toList()).orElse(List.of());
+        if (!misjudged.isEmpty()) findings.add("Judged not material, but material by the standard's text: " + String.join("; ", misjudged) + ".");
         boolean signedOff = !events(turns, KycReviewAgent.SIGN_OFF).isEmpty();
         List<Turn> traces = StorySupport.decisionTraces(turns, ANALYST);
         findings.add(traces.size() + " decision trace" + (traces.size() == 1 ? "" : "s") + " from the KYC analyst agent are on record.");
         findings.addAll(StorySupport.traceFindings(traces));
         Boolean compliant = standard.text().isEmpty() ? null
-                : signedOff && Boolean.TRUE.equals(proportionate) && (!priorOnRecord || Boolean.TRUE.equals(comparedAgainstLatest));
+                : signedOff && Boolean.TRUE.equals(proportionate) && misjudged.isEmpty() && (!priorOnRecord || Boolean.TRUE.equals(comparedAgainstLatest));
         return new Check(comparedAgainstLatest, proportionate, signedOff, compliant, findings);
     }
 

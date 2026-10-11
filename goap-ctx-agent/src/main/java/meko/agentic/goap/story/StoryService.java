@@ -137,7 +137,7 @@ public class StoryService {
                     new CatchUpAgent.CatchUpRequest(caseId, kind, catchUpRound)));
             case "organization-learned" -> {
                 String[] next = FAILURE_CASES.get(Math.floorMod(failureCase.getAndIncrement(), FAILURE_CASES.size()));
-                phases.add(runner.run("Payments investigator · case for " + next[0], "PaymentFailureAgent", ledger,
+                phases.add(runner.run("APAC payments desk · case for " + next[0], "PaymentFailureAgent", ledger,
                         new PaymentFailureAgent.FailureCase(caseId, kind, next[0], next[1], learningEpoch)));
             }
             default -> throw new IllegalArgumentException("Unknown story: " + storyId);
@@ -148,6 +148,7 @@ public class StoryService {
     /** One loan application: the vendor's origination system takes it, then your underwriter, given the referral and its file. */
     private void underwrite(String label, String caseId, ContextStore.Kind kind, ContextStore.Kind otherSide, String precedents,
                             StoryLedger ledger, List<StoryRunner.Phase> phases) {
+        ledger.count("cases", 1); // a run of this story is several applications: projections count per application
         StoryRunner.Phase intake = runner.run(label + " · loan-origination system, a vendor's product with its own store", "LoanIntakeAgent", ledger,
                 new LoanIntakeAgent.LoanApplicationStart(caseId, otherSide));
         phases.add(intake);
@@ -299,6 +300,7 @@ public class StoryService {
         long rulings = stores.forLane(ContextStores.Lane.MEKO).searchKnowledge("precedent-reset", UnderwriterAgent.AGENT_ID,
                         UnderwriterAgent.RULING_MARKER + " acceptable evidence " + UnderwriterAgent.precedentTag(previous))
                 .stream().filter(r -> r.text().contains(UnderwriterAgent.RULING_MARKER) && r.text().contains(UnderwriterAgent.precedentTag(previous))).count();
+        stores.forLane(ContextStores.Lane.MEKO).flush("precedent-reset"); // the count is read fresh next time
         precedentSet = Long.toString(System.currentTimeMillis(), 36);
         return Map.of("precedentSet", precedentSet, "note", "Started a new precedent set. "
                 + (rulings == 0 ? "No rulings had been promoted in the previous one" : rulings + " ruling" + (rulings == 1 ? "" : "s")
@@ -351,18 +353,19 @@ public class StoryService {
         String probe = "probe-" + UUID.randomUUID().toString().substring(0, 6);
         boolean learned = store.searchKnowledge(probe, "payments:pattern-probe", PaymentFailureAgent.PATTERN_MARKER + " capture timeout after successful authorization")
                 .stream().anyMatch(r -> r.text().contains(PaymentFailureAgent.PATTERN_MARKER) && r.text().contains("[learning epoch " + learningEpoch + "]"));
+        store.flush(probe); // a probe's search is used once
         if (meko && !learned) run("organization-learned", true);
         StoryLedger ledger = ledgers.forCase(caseId);
         if (meko && !learned) ledger.note("Note", "Nothing was learned in this epoch yet, so one normal case ran first to teach the pattern.");
-        StoryRunner.Phase phase = runner.run("Payments investigator · a case that only looks similar", "PaymentFailureAgent", ledger,
+        StoryRunner.Phase phase = runner.run("APAC payments desk · a case that only looks similar", "PaymentFailureAgent", ledger,
                 new PaymentFailureAgent.FailureCase(caseId, store.kind(), "CUST-7202", "TX-99415", learningEpoch, true, ""));
         return assemble(catalog.get("organization-learned"), lane(meko), store.kind(), caseId, ledger, List.of(phase));
     }
 
     /**
-     * Resets, then runs {@code cases} consecutive cases in each lane. Case 1 is handled by another team's agent (the EU
-     * payments-ops team, a different application): what it learns lands in the shared datapack with Meko, but in that
-     * team's own database in the database lane, where this application cannot see it.
+     * Resets, then runs {@code cases} consecutive cases in each lane. Case 1 is handled by another desk's agent (the EU
+     * payments desk, a different application): what it learns lands in the shared datapack with Meko, but in that
+     * desk's own database in the database lane, where this application cannot see it.
      * <p>
      * Synchronized, with the epoch captured once and case numbers explicit, so a concurrent run or a second click cannot
      * change the epoch halfway through a series.
@@ -373,11 +376,16 @@ public class StoryService {
 
     /** @param includeDatabase whether to add the "your own database" lane */
     public synchronized Map<String, List<StoryRun>> learningSeries(int cases, boolean includeDatabase) {
+        return learningSeries(cases, includeDatabase, true);
+    }
+
+    /** @param includeWithout whether to run the lane without Meko (the workshop follows the Meko lane alone) */
+    public synchronized Map<String, List<StoryRun>> learningSeries(int cases, boolean includeDatabase, boolean includeWithout) {
         resetLearning();
         String epoch = learningEpoch;
         Map<String, List<StoryRun>> series = new LinkedHashMap<>();
         List<Map.Entry<String, ContextStores.Lane>> lanes = new ArrayList<>();
-        lanes.add(Map.entry("withoutMeko", ContextStores.Lane.WITHOUT));
+        if (includeWithout) lanes.add(Map.entry("withoutMeko", ContextStores.Lane.WITHOUT));
         if (includeDatabase) lanes.add(Map.entry("database", ContextStores.Lane.DATABASE));
         lanes.add(Map.entry("withMeko", ContextStores.Lane.MEKO));
         for (var entry : lanes) {
@@ -388,16 +396,59 @@ public class StoryService {
         return series;
     }
 
+    /**
+     * The newest learned pattern in the Meko lane's shared knowledge: its epoch, who promoted it, and when. The pair
+     * exercise's last run reads it, so it does not depend on the browser that ran case 1. Empty when there is none.
+     */
+    public Map<String, Object> latestLesson() {
+        ContextStore store = stores.forLane(ContextStores.Lane.MEKO);
+        String probe = "lesson-" + UUID.randomUUID().toString().substring(0, 6);
+        java.util.regex.Pattern epochOf = java.util.regex.Pattern.compile("\\[learning epoch ([a-z0-9]+)]");
+        try {
+            return store.searchKnowledge(probe, "payments:lesson-lookup", PaymentFailureAgent.PATTERN_MARKER + " capture timeout after successful authorization")
+                    .stream().filter(r -> r.text().contains(PaymentFailureAgent.PATTERN_MARKER))
+                    .map(r -> Map.entry(r, epochOf.matcher(r.text())))
+                    .filter(e -> e.getValue().find())
+                    .max(java.util.Comparator.comparing(e -> String.valueOf(e.getKey().createdAt())))
+                    .<Map<String, Object>>map(e -> Map.of("epoch", e.getValue().group(1), "writtenBy", String.valueOf(e.getKey().writtenBy()),
+                            "createdAt", String.valueOf(e.getKey().createdAt())))
+                    .orElse(Map.of());
+        } finally {
+            store.flush(probe);
+        }
+    }
+
+    /**
+     * One case of the series in the Meko lane, for the workshop's separate steps. {@code index} picks the customer (0 is
+     * case 1); {@code epoch} is the learning epoch the case reads and writes, and null starts a new one, so nothing learned
+     * before is in reach. Returns the epoch with the run, so a later case can read what this one promoted.
+     */
+    public synchronized Map<String, Object> learningCase(int index, String epoch, boolean otherTeam) {
+        return learningCase(index, epoch, otherTeam, true);
+    }
+
+    /** @param share whether the case promotes what it learns; off for the workshop's baseline (the case without the lesson) */
+    public synchronized Map<String, Object> learningCase(int index, String epoch, boolean otherTeam, boolean share) {
+        if (epoch != null && !epoch.matches("[a-z0-9]{1,20}")) throw new IllegalArgumentException("Unknown learning epoch: " + epoch);
+        // A new epoch of its own, so the workshop's steps never change the epoch the demo page's runs use.
+        String use = epoch != null ? epoch : Long.toString(System.currentTimeMillis(), 36) + Integer.toString(java.util.concurrent.ThreadLocalRandom.current().nextInt(1296), 36);
+        return Map.of("epoch", use, "run", failureCase(ContextStores.Lane.MEKO, Math.floorMod(index, FAILURE_CASES.size()), use, otherTeam, share));
+    }
+
     private StoryRun failureCase(ContextStores.Lane lane, int index, String epoch, boolean otherTeam) {
+        return failureCase(lane, index, epoch, otherTeam, true);
+    }
+
+    private StoryRun failureCase(ContextStores.Lane lane, int index, String epoch, boolean otherTeam, boolean share) {
         String caseId = newCaseId("organization-learned");
         ContextStore.Kind kind = otherTeam && lane == ContextStores.Lane.DATABASE
                 ? ContextStore.Kind.OTHER_SYSTEM_DB : stores.forLane(lane).kind();
         String[] customer = FAILURE_CASES.get(index % FAILURE_CASES.size());
         StoryLedger ledger = ledgers.forCase(caseId);
-        String label = (otherTeam ? "EU payments-ops agent · another team's application" : "Support payments investigator · this application")
+        String label = (otherTeam ? "EU payments desk · its own application" : "APAC payments desk · this application")
                 + " · case for " + customer[0];
         StoryRunner.Phase phase = runner.run(label, "PaymentFailureAgent", ledger, new PaymentFailureAgent.FailureCase(
-                caseId, kind, customer[0], customer[1], epoch, false, otherTeam ? "EU payments-ops team" : ""));
+                caseId, kind, customer[0], customer[1], epoch, false, otherTeam ? PaymentFailureAgent.EU_DESK : "", share));
         return assemble(catalog.get("organization-learned"), lane, kind, caseId, ledger, List.of(phase));
     }
 
@@ -467,7 +518,7 @@ public class StoryService {
         // Only hands-on minutes are labour; waiting on a customer or another team's queue is not priced.
         metrics.put("effortUsd", Math.round(ledger.handsOnMinutes() / 60.0 * hourlyRateUsd * 100) / 100.0);
         return new StoryRun(story.id(), story.title(), lane == ContextStores.Lane.MEKO, lane.name(), kind.name(), caseId, ledger.outcome(), phases,
-                ledger.steps(), ledger.transcript(), ledger.found(), ledger.passedOver(), ledger.decisions(), calls, models, metrics, headline, ledger.auditTrail());
+                ledger.steps(), ledger.transcript(), ledger.found(), ledger.passedOver(), ledger.decisions(), calls, models, metrics, headline, ledger.auditTrail(), receipts.writtenFor(caseId));
     }
 
     public static String newCaseId(String storyId) {

@@ -35,17 +35,32 @@ see the exact JSON.
 |---|---|---|---|
 | Search memory | `memory_search` | **query**, limit (10) | `query`, `limit`, `datapack_id`⚙, `conversation_id`⚙, `agent_id`⚙ |
 | List memories | `memory_get_all` | collection: private / promoted | `promoted`, `datapack_id`⚙, `conversation_id`⚙, `agent_id`⚙. There is no `page`; sending one throws. |
+| Get memory | `memory_get_by_id` | **memory id**, as agent | `memory_id`, `agent_id` (must be the writer), `datapack_id`⚙, `conversation_id`⚙. Returns one bare object, which the console reads as one row. |
 | Add memory | `memory_add` | **text**, write-as agent (default: the console) | `text`, `datapack_id`⚙, `conversation_id`⚙, `agent_id` |
 | Update memory | `memory_update` | **memory id**, **replacement text**, as agent | `memory_id`, `text`, `agent_id` (must be the writer), `datapack_id`⚙, `conversation_id`⚙ |
 | Delete memory | `memory_delete_by_id` | **memory id**, as agent | `memory_id`, `agent_id` (must be the writer), `datapack_id`⚙, `conversation_id`⚙ |
 | Promote to shared | `memory_promote` | **memory ids**, one per line, as agent | `memory_ids` (array), `agent_id`, `datapack_id`⚙, `conversation_id`⚙. One way. Needs owner or maintainer rights. |
 | Delete ALL memories | `memory_delete_all` | **the datapack id, retyped**, as agent | `agent_id`, `datapack_id`⚙, `conversation_id`⚙. Deletes only that agent's memories, not the whole datapack. If the retyped id doesn't match, the server refuses and nothing reaches Meko. |
 
-### Knowledge
+### Search
 
 | Operation | Tool | You fill in | Sent on the wire |
 |---|---|---|---|
+| Context search | `context_search` | **query**, limit per source (10), sources (auto), as agent | `query`, `limit`, `force_source`, `agent_id`, `datapack_id`⚙, `conversation_id`⚙ |
 | Search knowledge base | `knowledgebase_search` | **query**, limit (5), as agent | `query`, `limit`, `agent_id` (the schema says it scopes the search), `datapack_id`⚙, `conversation_id`⚙ |
+
+`context_search` searches the conversation cache, memory and the knowledge base in parallel, and
+the result view shows **one table per source**, keeping a source that found nothing as an empty
+table. Each source has its own floor, so the same query can return different rows than the
+single-source tools:
+
+- **Memory:** on `auto` it keeps the full list, including rows `memory_search` drops below its
+  minimum score. Forcing the source to `memory` puts that floor back.
+- **Knowledge base:** it applies an absolute cutoff, so an irrelevant query can return nothing,
+  where `knowledgebase_search` always returns at least one chunk.
+
+The bucket names are read from the response rather than hard-coded, because no live payload has
+been captured yet.
 
 ### Conversations
 
@@ -69,11 +84,12 @@ does nothing, which looks the same as the row not existing.
 
 | `agent_id` filters or must match | `agent_id` is trace attribution only |
 |---|---|
-| `memory_update`, `memory_delete_by_id` (must be the writer) | `memory_search` (searches every agent) |
+| `memory_get_by_id`, `memory_update`, `memory_delete_by_id` (must be the writer) | `memory_search` (searches every agent) |
 | `memory_delete_all` (deletes only that agent's memories) | `memory_get_all` (lists every agent) |
 | `memory_promote` | `conversation_list` |
 | `memory_add` (picks the store the memory lands in) | |
 | `knowledgebase_search` (the schema says it scopes the search) | |
+| `context_search` (scopes the memory and conversation lookups) | |
 | `conversation_create` (sets the owner) | |
 | `conversation_get`, `_update`, `_delete` (ownership filter) | |
 | `conversation_add_message` (must be the creator) | |
@@ -93,10 +109,21 @@ listing.
 
 | Operation | Tool | You fill in | Sent on the wire |
 |---|---|---|---|
-| Raw tool call | any registered tool | **tool name**, arguments (JSON object) | Exactly what you typed. Nothing is added, not even `conversation_id`, so supply whatever the tool needs yourself. |
+| Raw tool call | any registered tool | **tool name**, arguments (JSON object) | Exactly what you typed. Nothing is added at send time, not even `conversation_id`. |
 
-A tool name matches with or without Spring AI's connection prefix. An unknown name fails and
-lists the registered tools.
+The tool field suggests every registered tool, and clicking a name under **Registered tools**
+opens it here. Picking a tool fills in the arguments from that tool's own input schema:
+
+- **The schema's required arguments**, as typed placeholders: `"<name>"` for strings, the schema
+  default or `0` for numbers, `["<name>"]` for arrays. Replace anything in angle brackets.
+- **`conversation_id`, `datapack_id` and `agent_id`, wherever the tool has them**, filled with the
+  live values the console uses. The schemas mark these optional, but the server needs them.
+- **Nothing the schema lacks.** Every tool rejects unknown arguments, so `datapack_list` gets no
+  `agent_id`. The one deliberate omission is `conversation_id` on `conversation_list`.
+- **Optional arguments are listed below the field, not sent.** Add only the ones you mean to test.
+
+**Reset arguments from schema** fills the template in again. A tool name matches with or without
+Spring AI's connection prefix, and an unknown name fails and lists the registered tools.
 
 ### Use the width, and the keyboard
 
@@ -172,6 +199,8 @@ a distinctive token buried in a long sentence.
 
 ## Tests
 
-`mvn test` — ten tests pinning response handling against payloads captured from a live datapack:
-every collection shape, both transports, an unknown payload field, and an error body that must
-not be mistaken for an empty result.
+`mvn test` runs 29 tests. Response handling is tested against payloads captured from a live
+datapack: every collection shape, both transports, an unknown payload field, and an error body
+that must not be mistaken for an empty result. Other tests cover `context_search` buckets (with
+illustrative payloads, since none has been captured yet), `memory_get_by_id`'s bare object, raw
+call templates built from tool schemas, and the confirmation guards on the deletes.
