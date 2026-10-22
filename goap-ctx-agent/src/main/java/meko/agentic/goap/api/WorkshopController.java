@@ -156,6 +156,18 @@ public class WorkshopController {
         return stories.latestLesson();
     }
 
+    /**
+     * Uploads a use case's documents to the datapack through Meko's MCP (knowledgebase_upload_document); Meko indexes
+     * them on its own, and the status reports each as indexing until it is searchable.
+     */
+    @PostMapping("/upload")
+    public Map<String, Object> upload(@org.springframework.web.bind.annotation.RequestParam(required = false) String useCase) {
+        Map<String, Object> r = new LinkedHashMap<>(Map.of("uploaded",
+                seeder.uploadDocuments(useCase == null ? workshop.documents() : workshop.useCase(useCase).documents())));
+        r.putAll(status());
+        return r;
+    }
+
     /** Stage 1 when the documents cannot be uploaded in the Meko app (see {@link StorySeeder#addDocuments}). */
     @PostMapping("/documents")
     public Map<String, Object> addDocuments(@org.springframework.web.bind.annotation.RequestParam(required = false) String useCase) {

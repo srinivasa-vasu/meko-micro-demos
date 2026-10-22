@@ -65,6 +65,25 @@ public interface ContextStore {
     /** Memories written during this case by any agent (Meko: memory_search scoped by run_id). */
     List<StoreRecord> recallCase(String caseId, String agentId, String query);
 
+    /**
+     * A document upload to shared knowledge: the document's key, whether identical content was already there, or why it
+     * failed (then {@code key} is null).
+     */
+    record Uploaded(String key, boolean alreadyThere, String error) {}
+
+    /**
+     * Uploads a document to shared knowledge (Meko: knowledgebase_upload_document, then the file to the storage URL it
+     * issues). Meko indexes it on its own; {@link #documentState} follows that. Empty where the store has no upload.
+     */
+    default Optional<Uploaded> uploadDocument(String caseId, String agentId, String filename, byte[] bytes) {
+        return Optional.empty();
+    }
+
+    /** An uploaded document's state (Meko: knowledgebase_document_status), as the store reports it; empty if unknown. */
+    default Optional<String> documentState(String caseId, String agentId, String key) {
+        return Optional.empty();
+    }
+
     /** Memories across all cases and agents (Meko: memory_search). */
     List<StoreRecord> searchMemory(String caseId, String agentId, String query);
 

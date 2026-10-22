@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Synthetic organizational context the stories rely on. All content is fictional.
@@ -106,8 +107,10 @@ public class StorySeeder {
     private final meko.agentic.goap.story.store.ReceiptLog receipts;
 
     public StorySeeder(ContextStores stores, KnowledgeDocuments documents, ProfileFingerprints fingerprints, Workshop workshop,
-                       meko.agentic.goap.story.store.ReceiptLog receipts) {
+                       meko.agentic.goap.story.store.ReceiptLog receipts, meko.agentic.goap.context.MekoMcpClient meko) {
         this.receipts = receipts;
+        // Upload keys belong to a datapack: another datapack starts with none.
+        meko.beforeDatapackSwitch(uploadKeys::clear);
         this.stores = stores;
         this.documents = documents;
         this.fingerprints = fingerprints;
@@ -165,12 +168,20 @@ public class StorySeeder {
                 outcome.put(seed.query(), "already in knowledge base (uploaded document " + seed.docKey() + ")");
                 continue;
             }
-            if (present(rows, seed.text())) {
-                outcome.put(seed.query(), "already in knowledge base (promoted one-line version; upload the "
-                        + seed.docKey() + " document for the full text)");
+            // The document itself, uploaded through Meko's MCP (even where its one-line version is already promoted: the
+            // full text is what the stories read); its one-line version only if the upload fails.
+            Optional<ContextStore.Uploaded> uploaded = upload(store, SEED_CASE, seed.docKey());
+            if (uploaded.isPresent() && uploaded.get().error() == null) {
+                outcome.put(seed.query(), uploaded.get().alreadyThere() ? "already in knowledge base (document " + seed.docKey() + " uploaded earlier)"
+                        : "uploaded the " + seed.docKey() + " document (Meko indexes it)");
                 continue;
             }
-            outcome.put(seed.query(), store.remember(SEED_CASE, seed.agentId(), seed.text())
+            String why = uploaded.map(u -> "upload failed (" + u.error() + "); ").orElse("");
+            if (present(rows, seed.text())) {
+                outcome.put(seed.query(), why + "already in knowledge base as a promoted one-line version");
+                continue;
+            }
+            outcome.put(seed.query(), why + store.remember(SEED_CASE, seed.agentId(), seed.text())
                     .map(id -> store.promote(SEED_CASE, seed.agentId(), List.of(id))
                             ? "promoted to knowledge base" : "stored as memory; promotion failed (owner or maintainer rights needed)")
                     .orElse("memory_add stored nothing"));
@@ -231,12 +242,57 @@ public class StorySeeder {
             checks.put(key, java.util.concurrent.CompletableFuture.supplyAsync(() -> {
                 List<StoreRecord> rows = store.searchKnowledge(WORKSHOP_CASE, CURATOR, title);
                 if (rows.stream().anyMatch(r -> r.uploadedDocument() && isOf(r, key))) return "uploaded";
-                return summary != null && present(rows, summary) ? "one-line version" : "missing";
+                if (summary != null && present(rows, summary)) return "one-line version";
+                // Uploaded from here but not searchable yet: what Meko says its indexing is doing.
+                String uploadKey = uploadKeys.get(key);
+                return uploadKey == null ? "missing" : store.documentState(WORKSHOP_CASE, CURATOR, uploadKey).map(st -> "indexing (" + st + ")").orElse("missing");
             }, CHECKS));
         }
         Map<String, String> status = new LinkedHashMap<>();
         checks.forEach((k, f) -> status.put(k, f.join()));
         return status;
+    }
+
+    /**
+     * Uploads a curated document, by key, to the Meko lane's knowledge base, and remembers its document key so its
+     * indexing can be followed. Empty when there is no such document or the store has no upload (the stand-in).
+     */
+    private Optional<ContextStore.Uploaded> upload(ContextStore store, String caseId, String key) {
+        return documents.all().stream().filter(d -> d.key().equals(key)).findFirst().flatMap(d -> {
+            Optional<ContextStore.Uploaded> uploaded = store.uploadDocument(caseId, CURATOR, d.filename(), d.markdown().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            uploaded.filter(u -> u.key() != null && !u.key().isBlank()).ifPresent(u -> uploadKeys.put(key, u.key()));
+            return uploaded;
+        });
+    }
+
+    /** Each uploaded document's key in Meko, by document key, for the datapack in use (forgotten on a switch). */
+    private final Map<String, String> uploadKeys = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Uploads the given documents to the datapack the Meko lane uses (the workshop's *Upload the documents*): the live
+     * datapack through Meko's MCP, the stand-in by loading them as an upload would. Documents already there are skipped.
+     */
+    public Map<String, String> uploadDocuments(List<String> keys) {
+        Map<String, String> outcome = new LinkedHashMap<>();
+        Map<String, String> status = documentStatus(keys);
+        ContextStore store = stores.forLane(ContextStores.Lane.MEKO);
+        for (String key : keys) {
+            if ("uploaded".equals(status.get(key))) {
+                outcome.put(key, "already in the datapack (uploaded)");
+                continue;
+            }
+            if (store.kind() == ContextStore.Kind.LOCAL_STAND_IN) {
+                documents.all().stream().filter(d -> d.key().equals(key))
+                        .forEach(d -> d.chunks().forEach(c -> stores.standIn().seedDocumentChunk(d.filename(), c)));
+                outcome.put(key, "document added to the stand-in");
+                continue;
+            }
+            outcome.put(key, upload(store, WORKSHOP_CASE, key)
+                    .map(u -> u.error() != null ? "upload failed: " + u.error()
+                            : u.alreadyThere() ? "already in the datapack (Meko had identical content)" : "uploaded; Meko is indexing it")
+                    .orElse("no such document to upload"));
+        }
+        return outcome;
     }
 
     /** Whether each use case's organizational history is in the datapack: "seeded", "partly seeded (n of m)" or "missing". */

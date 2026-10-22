@@ -105,10 +105,12 @@ nothing is kept across a restart. Useful for practice; the live datapack is the 
 * **Run** runs the use case with Meko, once per stage, and only while the datapack holds exactly that stage's context:
   an earlier stage cannot be reproduced once later context is in the datapack (for example, *No context* after the
   documents are uploaded). To run a stage again, *Start over with a new datapack*.
-* **Documents.** Upload the files the step lists from `src/main/resources/kb/` in the Meko app, then press **Check my
-  datapack** until each shows *uploaded*. If uploading is not possible, *Add one-line versions* promotes a short
-  version of that use case's documents instead; those are facts promoted from memory, so they show under *Shared
-  knowledge* as collective memory, not as documents.
+* **Documents.** Press **Upload the documents**: the app uploads the files the step lists, from
+  `src/main/resources/kb/`, to your datapack through Meko's MCP (`knowledgebase_upload_document`), and Meko indexes
+  them. Press **Check my datapack** until each shows *uploaded* (meanwhile it shows *indexing*). You can also upload
+  them yourself in the Meko app. If an upload fails, the page says why; *Upload failed? Add one-line versions* then
+  promotes a short version of that use case's documents instead. Those are facts promoted from memory, so they show
+  under *Shared knowledge* as collective memory, not as documents.
 
 The output has two parts:
 
@@ -141,7 +143,7 @@ crosses between them.
 |---|---|---|---|
 | 1. Create your datapack | Create or choose it | | |
 | 2. Run with no context | Press **Run** | The chatbot writes what the customer established to Meko during the run; the specialist recalls it. No policy is in reach, so the case goes to payments operations, undecided. | Under *Memory*: who wrote what the specialist knew. Was the customer asked again? Why is nothing decided? |
-| 3. Add the documents | Upload `card-dispute-07-failed-capture-policy.md` and `card-dispute-03-chargeback-policy.md`, then **Check my datapack** | The step is done when both show *uploaded* (or *one-line version*). | |
+| 3. Add the documents | Press **Upload the documents** (`card-dispute-07-failed-capture-policy.md` and `card-dispute-03-chargeback-policy.md`), then **Check my datapack** | The step is done when both show *uploaded* (or *one-line version*). | |
 | 4. Run with shared knowledge | Press **Run** | The specialist finds the policies, picks the one whose scope covers this case, and decides by that policy's own rule on a provisional refund. | Which steps disappeared? Did the outcome change? Under *Right context*: the look-alike chargeback policy, and why it was set aside. |
 | 5. Audit | Press **Audit** | A compliance auditor, given only the transaction id, reads the whole record back from the conversation and checks it against the policy. | How many records did it have to request? Was the settlement checked before the decision? |
 
@@ -159,7 +161,7 @@ alone changes nothing (with no earlier review there is nothing to compare with),
 | 1. Create your datapack | Create or choose it | | |
 | 2. Run with no context | Press **Run** | With no earlier review to compare with, the review re-verifies everything and leaves the risk class to the reviewer. | How many evidence requests? Under *What the agents did*: which work is redone. |
 | 3. Add last quarter's reviews | Press **Add their reviews** | Another desk's agent reviewed this customer last quarter, in its own application, and wrote the reviews to memory. They go into your datapack as that agent wrote them: the right one to compare with, and two look-alikes. | |
-| 4. Add the documents | Upload `kyc-periodic-review-standard.md`, then **Check my datapack** | | |
+| 4. Add the documents | Press **Upload the documents** (`kyc-periodic-review-standard.md`), then **Check my datapack** | | |
 | 5. Run with the standard and their reviews | Press **Run** | The review compares with the latest review of exactly this customer, and judges each change by the standard's own rules: what is material, and what to request for it. | Under *Memory*: who wrote the review it compared with. Under *Right context*: the older review and the other customer's review, and why each was set aside. Under *Shared knowledge*: the rules it judged by. Compare the evidence requests with step 2. |
 | 6. Audit | Press **Audit** | A model-risk reviewer, given only the review id, reads the record back and re-checks the materiality judgement against the standard's text. | Did the review compare against the latest review? Were the requests proportionate? |
 
@@ -220,8 +222,9 @@ ids?
 ## Exercises (15 minutes, pick any)
 
 1. **Change a policy.** In `card-dispute-07-failed-capture-policy.md`, change the scope so the policy applies when
-   the merchant capture "was declined by the acquirer" instead of "timed out at the gateway". Re-upload it to a fresh
-   datapack and run *Don't Make Me Explain It Again*. Before you run: what will the specialist decide? The decision
+   the merchant capture "was declined by the acquirer" instead of "timed out at the gateway". Restart the workshop (it
+   reads the documents when it starts; with the jar, rebuild it first), create a fresh datapack, upload the documents,
+   and run *Don't Make Me Explain It Again*. Before you run: what will the specialist decide? The decision
    follows the document's text, not the code.
 2. **Break Meko.** In the demo view (`/index.html`), press *Simulate Meko outage* and run a use case: the Meko lane
    falls back to what an agent without context does, and every failed call is listed.
@@ -235,7 +238,10 @@ ids?
 * **Common problems.**
   * *Meko: no datapack yet*: create one at step 1. If the datapack in use was deleted in the Meko app, step 1 says so:
     create a new one. (`MEKO_DATAPACK_NAME` is not needed for the workshop.)
-  * *A document stays missing after upload*: indexing takes a moment; press *Check my datapack* again.
+  * *A document stays at indexing*: indexing takes a moment; press *Check my datapack* again.
+  * *An upload fails with a storage limit*: the Meko account's knowledge-base quota is full; free space or upgrade, or
+    use *Add one-line versions*.
+  * *Exercise 1 (a changed policy)*: changed content is a new upload, so it goes into a fresh datapack.
   * *No context does not look empty*: the datapack is not new. Use a fresh one.
   * *Promotion failed*: the key is not the datapack's owner or a maintainer.
   * *Run with the lesson keeps waiting (shared datapack)*: the EU desk has not run case 1 yet, or has not shared the

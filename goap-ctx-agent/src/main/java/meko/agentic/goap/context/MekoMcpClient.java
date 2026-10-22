@@ -63,7 +63,8 @@ public class MekoMcpClient {
     private final Map<String, String> conversations = new ConcurrentHashMap<>();
     private final Map<String, Object> creating = new ConcurrentHashMap<>();
     /** Reads that change nothing, so a timeout or a server error can be retried once. */
-    private static final java.util.Set<String> IDEMPOTENT = java.util.Set.of("memory_search", "knowledgebase_search", "conversation_get", "artifact_get");
+    private static final java.util.Set<String> IDEMPOTENT = java.util.Set.of("memory_search", "knowledgebase_search", "conversation_get", "artifact_get",
+            "knowledgebase_document_status");
     /**
      * Per-tool timeouts. Calls that make model calls on Meko's side (fact extraction) get longer than the default;
      * conversation_get (about 1.4 s measured) is retried once, so it gets a short one.
@@ -445,6 +446,70 @@ public class MekoMcpClient {
 
     public ObjectMapper objectMapper() {
         return objectMapper;
+    }
+
+    /**
+     * An upload to the datapack's knowledge base: its document key (for {@link #documentStatus}), and whether Meko
+     * already held identical content (then nothing was sent).
+     */
+    public record Upload(String key, boolean alreadyUploaded) {}
+
+    /**
+     * Uploads a file to the knowledge base of the datapack in use. Meko issues a presigned storage URL for exactly these
+     * bytes (their size and SHA-256, with the first 3,072 bytes to check the type against the extension); the file is
+     * then posted there as a form, Meko's fields first and the file last. Meko registers and indexes it on its own;
+     * {@link #documentStatus} follows that. Identical content already in the datapack is not sent again.
+     */
+    public Upload uploadKnowledgeDocument(String conversationId, String agentId, String filename, byte[] bytes) throws Exception {
+        String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
+        byte[] head = java.util.Arrays.copyOf(bytes, Math.min(3072, bytes.length));
+        JsonNode issued = callTool("knowledgebase_upload_document", args(
+                "filename", filename,
+                "size", bytes.length,
+                "content_hash", hash,
+                "content_head_base64", java.util.Base64.getEncoder().encodeToString(head),
+                "conversation_id", conversationId,
+                "agent_id", agentId,
+                "datapack_id", datapack()));
+        String key = issued.path("key").asString("");
+        if (issued.path("already_uploaded").asBoolean(false)) return new Upload(key, true);
+        String url = issued.path("url").asString("");
+        if (url.isBlank()) throw new IllegalStateException("knowledgebase_upload_document issued no upload URL for " + filename);
+        postForm(url, issued.path("fields"), filename, bytes);
+        return new Upload(key, false);
+    }
+
+    /** The upload and indexing state of a document uploaded with {@link #uploadKnowledgeDocument}, as Meko reports it. */
+    public JsonNode documentStatus(String conversationId, String agentId, String documentKey) throws Exception {
+        return callTool("knowledgebase_document_status", args(
+                "document_key", documentKey,
+                "conversation_id", conversationId,
+                "agent_id", agentId,
+                "datapack_id", datapack()));
+    }
+
+    /** A multipart form POST to presigned storage: every field in the order given, then the file, named "file". */
+    void postForm(String url, JsonNode fields, String filename, byte[] bytes) throws Exception {
+        String boundary = "----meko-" + java.util.UUID.randomUUID();
+        java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
+        java.util.function.Consumer<String> write = text -> body.writeBytes(text.getBytes(StandardCharsets.UTF_8));
+        for (String name : fields.propertyNames()) {
+            write.accept("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n"
+                    + fields.path(name).asString("") + "\r\n");
+        }
+        write.accept("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + filename
+                + "\"\r\nContent-Type: application/octet-stream\r\n\r\n");
+        body.writeBytes(bytes);
+        write.accept("\r\n--" + boundary + "--\r\n");
+        HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(60))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() / 100 != 2) {
+            throw new IllegalStateException("Uploading " + filename + " to storage failed: HTTP " + response.statusCode()
+                    + " " + abbreviate(response.body() == null ? "" : response.body()));
+        }
     }
 
     public Map<String, Object> args(Object... values) {

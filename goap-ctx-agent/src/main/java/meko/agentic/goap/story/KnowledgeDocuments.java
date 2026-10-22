@@ -15,8 +15,9 @@ import java.util.stream.Collectors;
 
 /**
  * The curated documents in {@code src/main/resources/kb/}: policies, a runbook, review standards and an ADR,
- * written by people rather than agents. For live Meko they are uploaded to the datapack's knowledge base through the
- * Meko app (MCP has no upload tool); the offline stand-in loads them from the classpath.
+ * written by people rather than agents. For live Meko they are uploaded to the datapack's knowledge base through
+ * Meko's MCP (knowledgebase_upload_document; see StorySeeder), or by people in the Meko app; the offline stand-in loads
+ * them from the classpath.
  * <p>
  * Each document's title starts with its key ({@code CARD-DISPUTE-07: ...}). Meko prefixes every chunk with the
  * document title, so a chunk retrieved on its own still says which document it came from.

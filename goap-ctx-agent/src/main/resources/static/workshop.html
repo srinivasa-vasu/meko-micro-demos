@@ -282,13 +282,15 @@ async function refreshLesson() {
 const STAGES = ['No context', 'Shared knowledge', 'Another desk\'s reviews', 'Collective memory & audit'];
 const STAGE_NOTES = ['Empty datapack: only what the agents write during the run', 'Documents uploaded', 'Last quarter\'s reviews, in memory', 'Lessons promoted; records audited'];
 /** How the state of the earlier reviews reads on the page ("seeded" is the server's word for it). */
+/** A document is in the datapack once it is searchable: uploaded, or its one-line version promoted (not while indexing). */
+const docIn = v => v === 'uploaded' || v === 'one-line version';
 const reviewsState = v => v === 'seeded' ? 'added' : v === 'missing' || !v ? 'not added yet' : String(v).replace('partly seeded', 'partly added');
 const STEPS = [
   // Done once a datapack is connected; on the offline stand-in (no key) there is nothing to create.
   {t: 'Create your datapack', icon: 'database', done: () => status && ((status.store.live && status.store.connected) || !status.store.keyed)},
   {t: 'Run with no context', icon: 'play', stage: 0},
   // Per use case: what this use case reads, not everything the workshop's use cases read together.
-  {t: 'Add the documents', icon: 'upload', done: () => status && myDocs().length > 0 && myDocs().every(k => (status.documents[k] || 'missing') !== 'missing')},
+  {t: 'Add the documents', icon: 'upload', done: () => status && myDocs().length > 0 && myDocs().every(k => docIn(status.documents[k]))},
   {t: 'Run with shared knowledge', icon: 'play', stage: 1},
   {t: 'Add last quarter\'s reviews', icon: 'history', done: () => status && status.history[selected] === 'seeded'},
   {t: 'Run with their reviews', icon: 'play', stage: 2},
@@ -387,7 +389,7 @@ function renderUseCase() {
   const u = status.useCases.find(x => x.id === selected);
   // What the datapack holds for this use case right now: lit only when it is actually there.
   const docState = u.documents.map(k => [k, status.documents[k] || 'missing']);
-  const docsIn = docState.length > 0 && docState.every(d => d[1] !== 'missing');
+  const docsIn = docState.length > 0 && docState.every(d => docIn(d[1]));
   const histIn = u.history && status.history[selected] === 'seeded';
   const reads = [
     ['memory', 'Memory', histIn ? 'in' : u.history ? 'not' : handsOff(selected) ? 'run' : 'none',
@@ -469,10 +471,12 @@ function guide() {
       ['Your datapack is empty: no documents, no earlier memory. The agents still write to Meko during the run, and the next agent can recall it.',
        'What did the agent know, and what could it still not decide? Do this for each use case: pick its tab at the top, then press Run.'], run],
     ['Add the documents: policies and standards',
-      [live ? 'In the Meko app, upload these files from <code>src/main/resources/kb/</code> to your datapack: ' + docs.map(([k]) => '<code>' + esc((status.files || {})[k] || k) + '</code>').join(', ') + '.'
-            : 'On the stand-in, press <b>Add the documents</b>: it loads them as an upload would.',
-       'Press <b>Check my datapack</b> until each shows uploaded. Now: ' + docs.map(([k, v]) => '<code>' + esc(k) + '</code> ' + esc(v)).join(' · ') + '.'],
-      check + '<button class="btn" data-act="documents"' + (busy || blocked ? ' disabled' : '') + '>' + icon('upload') + (live ? 'Can\'t upload? Add one-line versions' : 'Add the documents') + '</button>' + wait],
+      [live ? 'Press <b>Upload the documents</b>: the app uploads ' + docs.map(([k]) => '<code>' + esc((status.files || {})[k] || k) + '</code>').join(', ')
+              + ' from <code>src/main/resources/kb/</code> to your datapack through Meko\'s MCP, and Meko indexes them. (Or upload them yourself in the Meko app.)'
+            : 'On the stand-in, press <b>Upload the documents</b>: it loads them as an upload would.',
+       'Press <b>Check my datapack</b> until each shows uploaded: indexing takes a moment. Now: ' + docs.map(([k, v]) => '<code>' + esc(k) + '</code> ' + esc(v)).join(' · ') + '.'],
+      '<button class="btn primary" data-act="upload"' + (busy || blocked ? ' disabled' : '') + '>' + icon('upload') + 'Upload the documents</button>' + check +
+      (live ? '<button class="btn" data-act="documents"' + (busy || blocked ? ' disabled' : '') + ' title="Promotes a short version of each document instead">Upload failed? Add one-line versions</button>' : '') + wait],
     ['Run ' + title + ' with shared knowledge',
       ['Which steps disappeared? Under Shared knowledge, what did Meko return, and under Right context, what did the agent set aside?', 'Did the outcome change?'], run],
     ['Add last quarter\'s reviews',
@@ -557,7 +561,7 @@ function stageBlocked(s) {
   if (selected === LEARNS) return s === 3 && !(runs[LEARNS] && runs[LEARNS][2] && runs[LEARNS][2].epoch)
     ? 'Run step ' + stepNo(5) + ' first: the EU desk solves case 1.' : null;
   const u = status.useCases.find(x => x.id === selected);
-  const docsIn = u.documents.length > 0 && u.documents.every(k => (status.documents[k] || 'missing') !== 'missing');
+  const docsIn = u.documents.length > 0 && u.documents.every(k => docIn(status.documents[k]));
   const histIn = u.history && status.history[selected] === 'seeded';
   const rerun = ' This stage cannot be reproduced in it: start over with a new datapack to run it.';
   if (s === 0 && docsIn) return 'Your datapack already has the documents.' + rerun;
@@ -962,7 +966,7 @@ let lastMessage = '';
 /** What the datapack holds for the selected use case, in a line: its own documents and history, not the others'. */
 function datapackNote() {
   const u = status.useCases.find(x => x.id === selected);
-  const docs = !u.documents.length ? null : u.documents.every(k => (status.documents[k] || 'missing') !== 'missing')
+  const docs = !u.documents.length ? null : u.documents.every(k => docIn(status.documents[k]))
     ? 'its documents are in the datapack' : 'its documents are not in the datapack yet';
   const hist = !u.history ? null : status.history[selected] === 'seeded' ? 'last quarter\'s reviews are in it' : 'last quarter\'s reviews are not added yet';
   const parts = [docs, hist].filter(Boolean);
@@ -985,12 +989,14 @@ async function act(what) {
     step = STEPS.findIndex(x => x.t === 'Create your datapack'); shown = null; save(); render();
     say('Name a new datapack and press Create and use: everything after this is written to it.'); return;
   }
-  await busyWith(what === 'check' ? 'Checking your datapack…' : what === 'documents' ? 'Adding the documents…' : 'Adding last quarter\'s reviews…', async () => {
+  await busyWith(what === 'check' ? 'Checking your datapack…' : what === 'documents' ? 'Adding the one-line versions…' : what === 'upload' ? 'Uploading the documents…' : 'Adding last quarter\'s reviews…', async () => {
     status = what === 'check' ? await (await fetch('/api/workshop/status')).json() : await post('/api/workshop/' + what + '?useCase=' + encodeURIComponent(selected));
     if (status.store.contextId !== context) { loadRuns(status.store.contextId); resume(); }
     // A step that adds to the datapack moves on once it is complete (on Check too, after an upload in the Meko app).
     if (pairOn() && pair.role === 'support') await refreshLesson();
     if (STEPS[step].done && STEPS[step].stage == null && step > 0 && STEPS[step].done()) go(1);
+    // An upload says what became of each document (a failure says why, such as a storage quota).
+    if (what === 'upload' && status.uploaded) return Object.entries(status.uploaded).map(([k, v]) => k + ': ' + v).join(' · ') + '.';
     return datapackNote();
   });
 }

@@ -300,6 +300,37 @@ public class MekoContextStore implements ContextStore {
     }
 
     @Override
+    public Optional<Uploaded> uploadDocument(String caseId, String agentId, String filename, byte[] bytes) {
+        long start = System.nanoTime();
+        String detail = filename + " (" + bytes.length + " bytes)";
+        try {
+            if (outage.on()) throw new IllegalStateException("Meko unreachable (simulated outage)");
+            MekoMcpClient.Upload upload = meko.uploadKnowledgeDocument(conversation(caseId), agentId, filename, bytes);
+            // Shared knowledge is about to change: searches made earlier in this case no longer stand.
+            knowledgeCache.keySet().removeIf(k -> k.startsWith(caseId + "\u0000"));
+            receipts.record(caseId, new ReceiptLog.Receipt(agentId, "knowledgebase_upload_document",
+                    detail + (upload.alreadyUploaded() ? ": already in the datapack" : ": uploaded, indexing"), 1, millis(start), true, kind().name(), IN_BACKGROUND.get()));
+            return Optional.of(new Uploaded(upload.key(), upload.alreadyUploaded(), null));
+        } catch (Exception e) {
+            String error = "knowledgebase_upload_document failed: " + e.getMessage();
+            meko.recordError(error);
+            receipts.record(caseId, new ReceiptLog.Receipt(agentId, "knowledgebase_upload_document", detail + " — " + error, 0, millis(start), false, kind().name(), IN_BACKGROUND.get()));
+            return Optional.of(new Uploaded(null, false, e.getMessage()));
+        }
+    }
+
+    @Override
+    public Optional<String> documentState(String caseId, String agentId, String key) {
+        return call(caseId, agentId, "knowledgebase_document_status", key, () -> {
+            JsonNode status = meko.documentStatus(conversation(caseId), agentId, key);
+            // The state Meko reports, by whichever name it uses for it.
+            String state = java.util.stream.Stream.of("state", "status", "indexing_status").map(f -> status.path(f).asString(""))
+                    .filter(v -> !v.isBlank()).findFirst().orElse(status.isString() ? status.asString("") : "");
+            return new Result<>(Optional.of(state.isBlank() ? "unknown" : state), 1);
+        }, Optional.empty());
+    }
+
+    @Override
     public Optional<String> putArtifact(String caseId, String agentId, String filename, Object content) {
         return call(caseId, agentId, "artifact_put", filename, () -> {
             JsonNode result = meko.callTool("artifact_put", meko.args(

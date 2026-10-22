@@ -216,8 +216,9 @@ mvn spring-boot:run
 
 Then:
 
-1. Upload the eight documents in `src/main/resources/kb/` to the datapack's knowledge base in the Meko app.
-2. Press **Seed datapack** in the app header (or `POST /api/meko/seed`). It writes what other agents and tools wrote
+1. Press **Seed datapack** in the app header (or `POST /api/meko/seed`). It uploads the eight documents in
+   `src/main/resources/kb/` to the datapack's knowledge base through Meko's MCP (`knowledgebase_upload_document`;
+   Meko then indexes them), and writes what other agents and tools wrote
    (a prior KYC review in fingerprint form, notes from a coding assistant, a PR review bot and an incident bot) and the
    distractors. It is safe to repeat. It also removes any KYC review stored in the datapack as plain text, and reports any it
    could not remove.
@@ -226,7 +227,7 @@ The header shows the datapack and how many documents its knowledge base holds.
 
 #### Knowledge base documents
 
-Meko's shared knowledge has two sources, and the demo uses both: **documents** people upload through the Meko app, and
+Meko's shared knowledge has two sources, and the demo uses both: **documents** uploaded to the datapack (by the app through Meko's MCP, or by people in the Meko app), and
 **lessons** agents promote from memory (the root cause the EU desk's agent promotes in *The Organization Learned*, and the
 credit-risk ruling the underwriter promotes in *Same Proof, Twice*). Knowledge search covers
 both. The documents are fictional and short:
@@ -242,8 +243,10 @@ both. The documents are fictional and short:
 | `LEND-UW-05` salaried personal-loan underwriting policy | Your underwriter chooses it and applies its thresholds, and the fair-lending review checks against it (loan story) |
 | `LEND-UW-09` self-employed personal-loan underwriting policy | The look-alike it must pass over (loan story) |
 
-Upload the documents before seeding. Where a document is missing, the seed promotes a one-line version instead, so the
-stories still work.
+The seed uploads each document unless the datapack already holds identical content. Where an upload fails (a storage
+quota, say), the seed promotes a one-line version of that document instead, so the stories still work, and says why. A
+document is searchable once Meko has indexed it, which takes a moment: re-run a story after the header shows the
+documents.
 
 A failed Meko call never stops a run: it is recorded, and the planner takes the path an agent without that context
 would take.
