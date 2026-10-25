@@ -80,4 +80,16 @@ class DecisionRulesTest {
         assertThat(PaymentFailureAgent.misfit(timeout, "LEARNED PATTERN something: refund it.")).isPresent();
         assertThat(PaymentFailureAgent.rootCauseOf(pattern)).isEqualTo(PaymentFailureAgent.CAPTURE_TIMEOUT);
     }
+
+    @Test
+    void aPassiveRefusalRefusesAndPercentagesKeepTheirDecimal() {
+        var timedOut = new PaymentsSpecialistAgent.SettlementCheck("c", true, false, false);
+        assertThat(PaymentsSpecialistAgent.refundRule("Scope: chargebacks. A provisional refund must not be issued while the chargeback is open.", timedOut).getKey())
+                .isEqualTo(PaymentsSpecialistAgent.Refund.REFUSE);
+        assertThat(PaymentsSpecialistAgent.refundRule("A provisional refund should never be issued from our side.", timedOut).getKey())
+                .isEqualTo(PaymentsSpecialistAgent.Refund.REFUSE);
+        // 25.4% is not 25%: the record keeps the decimal the judgement used.
+        assertThat(KycReviewAgent.pct(25.4)).isEqualTo("25.4%");
+        assertThat(KycReviewAgent.pct(30)).isEqualTo("30%");
+    }
 }

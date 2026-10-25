@@ -47,7 +47,14 @@ public class MekoContextStore implements ContextStore {
         this.outage = outage;
         // Another datapack: what is still queued for this one is written to it first, and nothing cached carries over.
         meko.beforeDatapackSwitch(() -> {
-            pendingByCase.values().forEach(list -> list.forEach(java.util.concurrent.CompletableFuture::join));
+            // Bounded: a write that cannot finish (Meko unreachable) does not hold up the switch for ever.
+            pendingByCase.values().forEach(list -> list.forEach(f -> {
+                try {
+                    f.get(30, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    // Recorded as a failed write by its own call; the switch goes ahead.
+                }
+            }));
             knowledgeCache.clear();
             rememberedText.clear();
         });

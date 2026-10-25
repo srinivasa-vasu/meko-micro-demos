@@ -526,7 +526,7 @@ public class UnderwriterAgent {
                 lookup.policy() == null ? "no written policy: the call is refer" : "the policy's thresholds, compared exactly with the file's figures",
                 byRule, ai);
         // A condition still waiting on a credit-risk ruling leaves only one call: refer, saying which.
-        List<String> pending = file.flags().stream().map(Flag::clearedFrom).filter(c -> c != null && c.startsWith(RULING_PENDING)).toList();
+        List<String> pending = (file.flags() == null ? List.<Flag>of() : file.flags()).stream().map(Flag::clearedFrom).filter(c -> c != null && c.startsWith(RULING_PENDING)).toList();
         String decision = lookup.policy() == null || !pending.isEmpty() ? "refer" : normalize(judgement.decision());
         if (!pending.isEmpty()) judgement = new CallJudgement("refer", judgement.thresholdsApplied(), String.join("; ", pending) + ": refer to a human underwriter");
         boolean sent = CREDIT_RISK.equals(lookup.writtenBy());

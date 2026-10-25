@@ -86,6 +86,14 @@ public class KycReviewAgent {
      * @param onlyUnchangedExempt  unchanged address and ownership need no new evidence, so a changed one does
      * @param volumeThreshold      how far outside the previous band monthly volume becomes material, in percent
      */
+    /**
+     * A percentage as the record states it: whole when it is whole, else to one decimal, so a check that reads it back
+     * compares the value the judgement used (25.4% is not 25%).
+     */
+    static String pct(double v) {
+        return (v == Math.rint(v) ? String.format("%.0f", v) : String.format("%.1f", v)) + "%";
+    }
+
     record KycRules(boolean beneficiaryMaterial, String beneficiaryEvidence, boolean onlyUnchangedExempt, Optional<Double> volumeThreshold) {}
 
     private static final java.util.regex.Pattern BENEFICIARY_EVIDENCE = java.util.regex.Pattern.compile(
@@ -241,7 +249,7 @@ public class KycReviewAgent {
                 + "- ownership " + (diff.ownershipChanged() ? "changed" : "unchanged") + "\n"
                 + "- beneficiaries: " + (diff.newBeneficiaries().isEmpty() ? "no new ones" : diff.newBeneficiaries().size() + " new (" + String.join(", ", diff.newBeneficiaries()) + ")")
                 + ", " + diff.removedBeneficiaries() + " removed\n"
-                + "- monthly volume " + (prior.volumeBand() == null ? "not on record before" : String.format("%.0f%% outside the previous band %s USD", diff.volumeOutsidePercent(), prior.volumeBand())) + "\n"
+                + "- monthly volume " + (prior.volumeBand() == null ? "not on record before" : pct(diff.volumeOutsidePercent()) + " outside the previous band " + prior.volumeBand() + " USD") + "\n"
                 + StorySupport.asContext("Review standards", standard);
         Optional<KycRules> rules = rules(standard);
         Materiality byRule = materialityByRule(diff, prior, rules);
@@ -308,14 +316,14 @@ public class KycReviewAgent {
         Optional<Double> threshold = rules.flatMap(KycRules::volumeThreshold);
         if (prior.volumeBand() != null) {
             if (rules.isEmpty() && diff.volumeOutsidePercent() > 0) {
-                material.add(String.format("monthly volume %.0f%% outside the previous band", diff.volumeOutsidePercent()) + unjudged);
+                material.add("monthly volume " + pct(diff.volumeOutsidePercent()) + " outside the previous band" + unjudged);
             } else if (rules.isEmpty()) {
                 immaterial.add("monthly volume within the previous band");
             } else if (threshold.isPresent()) {
                 (diff.volumeOutsidePercent() > threshold.get() ? material : immaterial).add(String.format(
-                        "monthly volume %.0f%% outside the previous band (threshold %.0f%%)", diff.volumeOutsidePercent(), threshold.get()));
+                        "monthly volume %s outside the previous band (threshold %s)", pct(diff.volumeOutsidePercent()), pct(threshold.get())));
             } else if (diff.volumeOutsidePercent() > 0) {
-                material.add(String.format("monthly volume %.0f%% outside the previous band (the standard states no threshold: for the reviewer)", diff.volumeOutsidePercent()));
+                material.add("monthly volume " + pct(diff.volumeOutsidePercent()) + " outside the previous band (the standard states no threshold: for the reviewer)");
             } else {
                 immaterial.add("monthly volume within the previous band");
             }

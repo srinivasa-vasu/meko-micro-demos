@@ -291,7 +291,7 @@ details summary{cursor:pointer;color:var(--muted);font-size:11px;text-transform:
         <span class="title">Agents that don't lose the plot</span>
         <span class="subtitle"><b>GOAP</b> decides what to do next. <b>Meko</b> gives every agent the right context to decide it.</span>
       </div>
-      <div class="status-row"><div class="pill" id="mekoStatus">Meko: checking…</div><div class="pill" id="llmStatus">Models: checking…</div><div class="pill" title="Six agent workflows across system boundaries. Same agents, same planner, same code, run with and without Meko (and with your application's own database). Counts are measured from what the planner did; minutes are estimates.">Synthetic data</div><button class="btn iconbtn" id="seedBtn" hidden aria-label="Seed datapack" title="Seed datapack: write the use cases' synthetic organizational context into the live datapack. Safe to repeat: entries already there are skipped."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></button><button class="btn iconbtn danger" id="outageBtn" aria-label="Simulate Meko outage" title="Simulate Meko outage: make every Meko call fail, as if Meko were down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l20 20"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.9a10 10 0 0 1 5.2-2.8"/><path d="M19 12.9a10 10 0 0 0-2.3-1.6"/><path d="M2 8.8a15 15 0 0 1 4.2-2.7"/><path d="M22 8.8a15 15 0 0 0-11.9-3.7"/><path d="M12 20h.01"/></svg></button><button class="btn iconbtn" id="themeBtn" aria-label="Switch theme" title="Switch theme"></button></div>
+      <div class="status-row"><div class="pill" id="mekoStatus">Meko: checking…</div><div class="pill" id="llmStatus">Models: checking…</div><div class="pill" title="Six agent workflows across system boundaries. Same agents, same planner, same code, run with and without Meko (and with your application's own database). Counts are measured from what the planner did; minutes are estimates.">Synthetic data</div><button class="btn iconbtn" id="seedBtn" hidden aria-label="Seed datapack" title="Seed datapack: upload the eight documents through Meko's MCP and write the other agents' context into the live datapack. Safe to repeat: entries already there are skipped."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></button><button class="btn iconbtn danger" id="outageBtn" aria-label="Simulate Meko outage" title="Simulate Meko outage: make every Meko call fail, as if Meko were down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l20 20"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.9a10 10 0 0 1 5.2-2.8"/><path d="M19 12.9a10 10 0 0 0-2.3-1.6"/><path d="M2 8.8a15 15 0 0 1 4.2-2.7"/><path d="M22 8.8a15 15 0 0 0-11.9-3.7"/><path d="M12 20h.01"/></svg></button><button class="btn iconbtn" id="themeBtn" aria-label="Switch theme" title="Switch theme"></button></div>
     </div>
     <nav id="storyList" class="story-list" aria-label="Use cases"></nav>
   </header>
@@ -321,6 +321,8 @@ details summary{cursor:pointer;color:var(--muted);font-size:11px;text-transform:
       </details>
     </section>
     <section id="results"></section>
+    <!-- New Session, Same Context: its own page, shown in place of a story. -->
+    <section id="sessionsView" hidden><iframe id="sessionsFrame" title="New session. Same context." style="width:100%;height:1400px;border:0;display:block"></iframe></section>
   </main>
 </div>
 <script>
@@ -398,21 +400,51 @@ function metricLabel(key) {
   return labels[key] || key;
 }
 
+/** "New Session, Same Context": not a GOAP story (no lanes, no planner), its own page; a card first in the SDLC group. */
+let sessionsOpen = false;
+const SESSIONS_CARD = () => '<button class="story-card ' + (sessionsOpen ? 'active' : '') + '" data-sessions title="An AI harness\'s next session starts empty; connected to Meko, it starts with what the last one established"' +
+  (sessionsOpen ? ' aria-current="true"' : '') + '><div class="k">AI ASSISTANTS</div><div class="t">New Session, Same Context</div></button>';
+
 function renderCatalog() {
   // A group label before the first story of each domain (BFSI, SDLC), from the domain's prefix.
   const group = s => String(s.domain).split(' / ')[0];
-  el('storyList').innerHTML = stories.map((s, i) =>
-    (i === 0 || group(stories[i - 1]) !== group(s) ? '<span class="story-group' + (i ? ' next' : '') + '">' + esc(group(s)) + '</span>' : '') +
-    '<button class="story-card ' + (s.id === selected.id ? 'active' : '') + '" data-id="' + esc(s.id) + '" title="' + esc(s.hook) + '"' +
-    (s.id === selected.id ? ' aria-current="true"' : '') + '><div class="k">' + esc(s.domain) + '</div><div class="t">' + esc(s.title) + '</div></button>').join('');
-  document.querySelectorAll('.story-card').forEach(node => node.onclick = () => {
+  // The vertical stands beside its cards: each card names only its area (PAYMENTS, KYC).
+  const area = s => String(s.domain).split(' / ').slice(1).join(' / ') || s.domain;
+  const hasSdlc = stories.some(s => group(s) === 'SDLC');
+  el('storyList').innerHTML = stories.map((s, i) => {
+    const first = i === 0 || group(stories[i - 1]) !== group(s);
+    return (first ? '<span class="story-group' + (i ? ' next' : '') + '">' + esc(group(s)) + '</span>' : '') +
+      (first && group(s) === 'SDLC' ? SESSIONS_CARD() : '') +
+      '<button class="story-card ' + (s.id === selected.id && !sessionsOpen ? 'active' : '') + '" data-id="' + esc(s.id) + '" title="' + esc(s.hook) + '"' +
+      (s.id === selected.id && !sessionsOpen ? ' aria-current="true"' : '') + '><div class="k">' + esc(area(s)) + '</div><div class="t">' + esc(s.title) + '</div></button>';
+  }).join('') + (hasSdlc ? '' : '<span class="story-group next">SDLC</span>' + SESSIONS_CARD());
+  document.querySelectorAll('.story-card[data-id]').forEach(node => node.onclick = () => {
     if (liveSource) { liveSource.close(); liveSource = null; }
     selected = stories.find(s => s.id === node.dataset.id);
     activeButton = null;
+    showSessions(false);
     renderCatalog(); renderStory(); el('results').innerHTML = '';
     renderButtonsEnabled();
   });
+  document.querySelector('.story-card[data-sessions]').onclick = () => {
+    if (liveSource) { liveSource.close(); liveSource = null; }
+    showSessions(true); renderCatalog();
+  };
 }
+
+/** Shows New Session, Same Context in place of the story view, or the story view again. */
+function showSessions(on) {
+  sessionsOpen = on;
+  // (style.display, not the hidden attribute: .story's own display rule would override that.)
+  document.querySelector('main section.panel.story').style.display = on ? 'none' : '';
+  el('results').style.display = on ? 'none' : '';
+  el('sessionsView').hidden = !on;
+  if (on && !el('sessionsFrame').src) el('sessionsFrame').src = '/sessions.html?embedded';
+}
+// The embedded page reports its height: the frame takes it, so the page scrolls as one.
+window.addEventListener('message', e => {
+  if (e.origin === location.origin && e.data && e.data.sessionsHeight) el('sessionsFrame').style.height = e.data.sessionsHeight + 'px';
+});
 
 function renderStory() {
   el('domain').textContent = selected.domain;
@@ -900,7 +932,7 @@ function projectionHtml(a, b) {
   cells.push(['', usd(m(a, 'modelUsd') * n) + ' → ' + usd(m(b, 'modelUsd') * n), 'LLM spend (' + esc(providers) + ' list price)', 'reply writer + gate decisions; Meko calls are not model calls']);
   return '<div class="proj-head"><b>Per month at</b><input id="projVolume" type="number" min="1" step="100" value="' + esc(n) + '" aria-label="Cases per month"> cases' +
     '<span>Per-case difference × volume. Counts are measured; hours and dollars use the effort estimates.</span></div>' +
-    '<div class="proj-grid">' + cells.map(c => '<div class="p"><div class="v ' + c[0] + '">' + c[1] + '</div><div class="l">' + c[2] + '<br><span style="opacity:.75">' + c[3] + '</span></div></div>').join('') + '</div>';
+    '<div class="proj-grid">' + cells.map(c => '<div class="p"><div class="v ' + c[0] + '">' + c[1] + '</div><div class="l">' + esc(c[2]) + '<br><span style="opacity:.75">' + c[3] + '</span></div></div>').join('') + '</div>';
 }
 
 // The input lives inside the re-rendered block, so listen on the document.
@@ -1081,7 +1113,7 @@ async function loadMekoStatus() {
       pill.textContent = 'Meko: live · ' + s.datapackName + (k.documents != null ? ' · ' + k.documents + ' KB doc' + (k.documents === 1 ? '' : 's') : '');
       pill.className = 'pill live';
       pill.title = (s.datapackId || '') + (k.documents != null ? '\nKnowledge base: ' + k.documents + ' uploaded document(s), ' + (k.promoted ?? '?') + ' promoted memories' : '') +
-        (k.documents === 0 ? '\nUpload src/main/resources/kb/*.md through the Meko app, then seed.' : '');
+        (k.documents === 0 ? '\nPress Seed datapack: it uploads the documents through Meko\'s MCP.' : '');
     }
     else { pill.textContent = s.configured ? 'Meko: unreachable · using stand-in' : 'Meko: offline · using stand-in'; pill.className = 'pill down'; pill.title = s.diagnosis || ''; }
   } catch (e) { pill.textContent = 'Meko: unknown'; pill.className = 'pill down'; }

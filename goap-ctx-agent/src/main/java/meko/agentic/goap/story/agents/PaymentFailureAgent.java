@@ -25,8 +25,8 @@ import java.util.Map;
 @Agent(planner = PlannerType.GOAP, description = "Payments investigator for a recurring card-payment failure")
 public class PaymentFailureAgent {
     /** The APAC payments desk's investigator and curator; the EU payments desk's application writes under its own ids. */
-    public static final String AGENT_ID = "payments:investigator-agent";
-    public static final String CURATOR_ID = "payments:knowledge-curator";
+    public static final String AGENT_ID = "apac-payments-ops:investigator-agent";
+    public static final String CURATOR_ID = "apac-payments-ops:knowledge-curator";
     public static final String EU_AGENT_ID = "eu-payments-ops:investigator-agent";
     public static final String EU_CURATOR_ID = "eu-payments-ops:knowledge-curator";
     /** The two desks, as people read them: the one that sees the failure first, and the one that sees it next. */

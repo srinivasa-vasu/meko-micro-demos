@@ -56,11 +56,11 @@ public class WorkshopController {
      * everything already there): only what may have changed is asked again. The rest is asked at once, not in turn.
      */
     private Map<String, Object> status(Map<String, String> knownDocuments, Map<String, String> knownHistory) {
-        var store = java.util.concurrent.CompletableFuture.supplyAsync(this::storeStatus);
+        var store = java.util.concurrent.CompletableFuture.supplyAsync(this::storeStatus, CHECKS);
         var docs = knownDocuments != null ? java.util.concurrent.CompletableFuture.completedFuture(knownDocuments)
-                : java.util.concurrent.CompletableFuture.supplyAsync(() -> seeder.documentStatus(workshop.documents()));
+                : java.util.concurrent.CompletableFuture.supplyAsync(() -> seeder.documentStatus(workshop.documents()), CHECKS);
         var hist = knownHistory != null ? java.util.concurrent.CompletableFuture.completedFuture(knownHistory)
-                : java.util.concurrent.CompletableFuture.supplyAsync(() -> seeder.historyStatus(workshop.historyUseCases()));
+                : java.util.concurrent.CompletableFuture.supplyAsync(() -> seeder.historyStatus(workshop.historyUseCases()), CHECKS);
         Map<String, String> documents = docs.join();
         Map<String, String> history = hist.join();
         Map<String, Object> status = new LinkedHashMap<>();
@@ -77,6 +77,13 @@ public class WorkshopController {
                 history.values().stream().allMatch(v -> v.equals("seeded"))));
         return status;
     }
+
+    /** The status checks' own threads: they wait on Meko, so they do not borrow the common pool's few. */
+    private static final java.util.concurrent.ExecutorService CHECKS = java.util.concurrent.Executors.newFixedThreadPool(6, r -> {
+        Thread t = new Thread(r, "workshop-status");
+        t.setDaemon(true);
+        return t;
+    });
 
     /** The stand-in is emptied on every start, so its runs belong to this start of the application only. */
     private static final String STAND_IN_ID = "stand-in-" + java.util.UUID.randomUUID();
@@ -134,17 +141,30 @@ public class WorkshopController {
     /** Step 1: create a fresh datapack (or use an existing one by name), and point the Meko lane at it. */
     @PostMapping("/datapack")
     public Map<String, Object> datapack(@org.springframework.web.bind.annotation.RequestParam String name,
-                                        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "true") boolean create) throws Exception {
+                                        @org.springframework.web.bind.annotation.RequestParam(defaultValue = "true") boolean create,
+                                        @org.springframework.web.bind.annotation.RequestParam(required = false) String id) throws Exception {
         if (!name.matches("[a-z0-9][a-z0-9-]{2,62}")) {
             throw new IllegalArgumentException("Use 3 to 63 lowercase letters, digits and hyphens, starting with a letter or digit.");
         }
-        meko.useDatapack(name, create);
+        // A known id must be the named datapack's, as this key sees them: never one name shown and another datapack used.
+        if (!create && id != null && !id.isBlank() && meko.listDatapacks().stream()
+                .noneMatch(d -> name.equals(d.get("name")) && id.equals(d.get("id")))) {
+            throw new IllegalArgumentException("No datapack " + name + " with that id in this account: choose it again.");
+        }
+        meko.useDatapack(name, create, id);
         return status();
     }
 
-    @org.springframework.web.bind.annotation.ExceptionHandler({IllegalArgumentException.class, IllegalStateException.class})
+    /** A request this application cannot act on (a bad name, an unknown datapack): 400. */
+    @org.springframework.web.bind.annotation.ExceptionHandler(IllegalArgumentException.class)
     public org.springframework.http.ResponseEntity<Map<String, String>> badRequest(RuntimeException e) {
         return org.springframework.http.ResponseEntity.badRequest().body(Map.of("error", String.valueOf(e.getMessage())));
+    }
+
+    /** Meko refused or failed (an error from its tools, an HTTP 5xx): 502, the error as Meko gave it. */
+    @org.springframework.web.bind.annotation.ExceptionHandler(IllegalStateException.class)
+    public org.springframework.http.ResponseEntity<Map<String, String>> mekoFailed(RuntimeException e) {
+        return org.springframework.http.ResponseEntity.status(502).body(Map.of("error", String.valueOf(e.getMessage())));
     }
 
     /**
@@ -168,7 +188,7 @@ public class WorkshopController {
         return r;
     }
 
-    /** Stage 1 when the documents cannot be uploaded in the Meko app (see {@link StorySeeder#addDocuments}). */
+    /** The fallback when uploading through Meko's MCP fails: a one-line version of each document, promoted (see {@link StorySeeder#addDocuments}). */
     @PostMapping("/documents")
     public Map<String, Object> addDocuments(@org.springframework.web.bind.annotation.RequestParam(required = false) String useCase) {
         // Only the use case's own documents: another use case's earlier stages stay as they are.

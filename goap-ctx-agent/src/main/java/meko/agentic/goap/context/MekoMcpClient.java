@@ -153,6 +153,20 @@ public class MekoMcpClient {
      * One conversation per session key (a case id, a transaction id), deduplicated server-side on session_id: any
      * process that knows the key reaches the same conversation.
      */
+    /** Bumped when the datapack changes: a conversation created for the old one is not kept for the new one. */
+    private volatile long generation;
+
+    private void forgetConversations() {
+        generation++;
+        conversations.clear();
+        creating.clear();
+    }
+
+    /** Keeps a created conversation only if the datapack it was created in is still the one in use. */
+    private void keep(String sessionKey, String id, long createdIn) {
+        if (generation == createdIn) conversations.put(sessionKey, id);
+    }
+
     public String conversation(String sessionKey, String title, Map<String, Object> metadata) throws Exception {
         String existing = conversations.get(sessionKey);
         if (existing != null) return existing;
@@ -164,7 +178,38 @@ public class MekoMcpClient {
         }
     }
 
+    /**
+     * A conversation owned by {@code agentId} rather than this application's records owner: a harness's session, so the
+     * facts Meko extracts from it are attributed to that harness. One create per key, as {@link #conversation}.
+     */
+    public String conversationAs(String sessionKey, String agentId, String title) throws Exception {
+        String existing = conversations.get(sessionKey);
+        if (existing != null) return existing;
+        synchronized (creating.computeIfAbsent(sessionKey, k -> new Object())) {
+            existing = conversations.get(sessionKey);
+            if (existing != null) return existing;
+            long createdIn = generation;
+            JsonNode created = callTool("conversation_create", args(
+                    "agent_id", agentId,
+                    "session_id", sessionKey,
+                    "title", title,
+                    "run_id", sessionKey,
+                    "metadata", json(Map.of("session", sessionKey, "harness", agentId)),
+                    "datapack_id", datapack()));
+            String id = created.path("id").asString(null);
+            if (id == null) throw new IllegalStateException("conversation_create returned no id: " + created);
+            keep(sessionKey, id, createdIn);
+            return id;
+        }
+    }
+
+    /** The conversation already created for {@code sessionKey}, or null. */
+    public String conversationIfKnown(String sessionKey) {
+        return conversations.get(sessionKey);
+    }
+
     private String create(String sessionKey, String title, Map<String, Object> metadata) throws Exception {
+        long createdIn = generation;
         JsonNode created = callTool("conversation_create", args(
                 "agent_id", CONVERSATION_OWNER,
                 "session_id", sessionKey,
@@ -174,7 +219,7 @@ public class MekoMcpClient {
                 "datapack_id", datapack()));
         String id = created.path("id").asString(null);
         if (id == null) throw new IllegalStateException("conversation_create returned no id: " + created);
-        conversations.put(sessionKey, id);
+        keep(sessionKey, id, createdIn);
         return id;
     }
 
@@ -187,7 +232,23 @@ public class MekoMcpClient {
      * empty datapack). Conversations are per datapack, so the ones this client knew are forgotten.
      */
     public synchronized String useDatapack(String name, boolean create) throws Exception {
+        return useDatapack(name, create, null);
+    }
+
+    /**
+     * As {@link #useDatapack(String, boolean)}; with {@code knownId}, an existing datapack whose id the caller already
+     * has (the workshop's per-use-case datapacks, switched between tabs) is used without looking it up by name. A
+     * wrong id is caught like a deleted datapack, by {@link #datapackStillExists}.
+     */
+    public String useDatapack(String name, boolean create, String knownId) throws Exception {
         if (!properties.keyed()) throw new IllegalStateException("No Meko API key: set MEKO_API_KEY and restart.");
+        // Writes still queued for the datapack in use finish first, outside this client's lock: a queued writer may need
+        // the lock itself (re-initialising an expired MCP session), so draining under it could wait forever.
+        beforeSwitch.forEach(Runnable::run);
+        return switchTo(name, create, knownId);
+    }
+
+    private synchronized String switchTo(String name, boolean create, String knownId) throws Exception {
         String created = null;
         if (create) {
             JsonNode result = callTool("datapack_create", args("name", name, "conversation_id", lookupConversation()));
@@ -196,11 +257,11 @@ public class MekoMcpClient {
             }
             if (created == null && result.path("datapack").path("id").isString()) created = result.path("datapack").path("id").asString();
         }
-        beforeSwitch.forEach(Runnable::run);
         properties.setDatapackName(name);
         properties.setDatapackId(null);
-        conversations.clear();
-        datapackId = created;
+        forgetConversations();
+        // A known id applies to an existing datapack only; a new one is resolved by name if its create gave no id.
+        datapackId = created != null ? created : (create || knownId == null || knownId.isBlank() ? null : knownId);
         confirmedAt = System.currentTimeMillis();
         lastError = null;
         // A datapack just created may take a moment to appear in the listing the name is resolved from.
@@ -235,6 +296,7 @@ public class MekoMcpClient {
         } catch (Exception e) {
             return true; // unreachable is not the same as deleted: keep it
         }
+        beforeSwitch.forEach(Runnable::run);   // outside the lock, as in useDatapack
         synchronized (this) {
             if (!id.equals(datapackId)) return true; // switched meanwhile: the new one stands
             forgetDeleted();
@@ -243,11 +305,10 @@ public class MekoMcpClient {
     }
 
     private void forgetDeleted() {
-        beforeSwitch.forEach(Runnable::run);
         datapackId = null;
         properties.setDatapackId(null);
         properties.setDatapackName(null);
-        conversations.clear();
+        forgetConversations();
         lastError = "The datapack in use no longer exists: create or choose another.";
     }
 
@@ -497,7 +558,7 @@ public class MekoMcpClient {
             write.accept("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name + "\"\r\n\r\n"
                     + fields.path(name).asString("") + "\r\n");
         }
-        write.accept("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + filename
+        write.accept("--" + boundary + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"" + filename.replace("\"", "").replace("\r", "").replace("\n", "")
                 + "\"\r\nContent-Type: application/octet-stream\r\n\r\n");
         body.writeBytes(bytes);
         write.accept("\r\n--" + boundary + "--\r\n");

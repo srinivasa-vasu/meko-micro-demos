@@ -350,7 +350,7 @@ public class StoryService {
 
     public StoryRun patternMismatch(boolean meko, String caseId) {
         ContextStore store = stores.forRun(meko);
-        String probe = "probe-" + UUID.randomUUID().toString().substring(0, 6);
+        String probe = "pattern-probe";   // one key: a probe's search reuses one conversation, not a new one each time
         boolean learned = store.searchKnowledge(probe, "payments:pattern-probe", PaymentFailureAgent.PATTERN_MARKER + " capture timeout after successful authorization")
                 .stream().anyMatch(r -> r.text().contains(PaymentFailureAgent.PATTERN_MARKER) && r.text().contains("[learning epoch " + learningEpoch + "]"));
         store.flush(probe); // a probe's search is used once
@@ -402,7 +402,7 @@ public class StoryService {
      */
     public Map<String, Object> latestLesson() {
         ContextStore store = stores.forLane(ContextStores.Lane.MEKO);
-        String probe = "lesson-" + UUID.randomUUID().toString().substring(0, 6);
+        String probe = "lesson-lookup";   // one key: each lookup reuses one conversation, not a new one each time
         java.util.regex.Pattern epochOf = java.util.regex.Pattern.compile("\\[learning epoch ([a-z0-9]+)]");
         try {
             return store.searchKnowledge(probe, "payments:lesson-lookup", PaymentFailureAgent.PATTERN_MARKER + " capture timeout after successful authorization")

@@ -3,7 +3,8 @@
 Six relatable agent workflows **across system boundaries**, each run by the **same agents, the same Embabel GOAP
 planner and the same code**, with and without **[Meko](https://mekodata.ai/)**. A toggle (*Show the build-it-yourself
 comparison*) adds a third lane, **your application's own database**, to show what Meko adds over what you would build
-yourself.
+yourself. An opener, *New Session, Same Context*, shows the simplest context silo: an AI assistant's next session
+starts empty, and connected to Meko it starts with what the last one established.
 
 > **GOAP decides what to do next. Meko gives every agent the right context to decide it.**
 
@@ -51,6 +52,11 @@ exist only where an agent wrote them: in Meko, or in your own database for your 
 | **Check this review** | 2 records requested · 0 decision traces · 102 min | 1 · 1 decision trace · 42 min | 0 · 2 decision traces · 22 min |
 
 ## Workshop
+
+**New session, same context.** `/sessions.html` (the first SDLC card in the demo's story list, and the workshop's first tab) shows the simplest
+case: an AI harness's next session starts empty, and connected to a Meko datapack, it starts with what the last session
+established, even in another harness. A minimal harness built into the page stands in for real ones; the facts are what
+Meko extracts from what you type.
 
 The same application runs a hands-on workshop for groups: `SPRING_PROFILES_ACTIVE=workshop` opens a workshop page
 where each participant adds context to their own empty datapack stage by stage (shared knowledge, then another desk's earlier reviews,
@@ -111,8 +117,8 @@ not reuse: each lane names what it passed over and why.
 
 **Distractors.** The seed adds six look-alikes: an outdated 2025 review of the same customer, a review of a
 near-identical customer id, a superseded early decision on the same pull request, an open request on a different pull
-request, a look-alike chargeback policy, and a look-alike underwriting policy for self-employed borrowers. The agents pick the right item in each case. Choosing among what was
-retrieved is a decision, not a code filter.
+request, a look-alike chargeback policy, and a look-alike underwriting policy for self-employed borrowers. The agent chooses among what was retrieved, and each run
+shows what it used and what it passed over, with why. Choosing among what was retrieved is a decision, not a code filter.
 
 **Every story writes its result back.** The payments specialist records its resolution. The incident's conversation
 holds the timeline: what each agent did, what was redone and why, the finding and the mitigation. The catch-up agent
@@ -195,9 +201,12 @@ review, full re-verifications); each one's estimate and basis is in the file. To
 
 ## Run
 
-Java 21+, Spring Boot 4.1.1, Embabel Agent 1.5.1.
+You need Java 21 or later, Maven and Git (Spring Boot 4.1.1, Embabel Agent 1.5.1). For live Meko, a Meko account and
+an API key: sign up at [cloud.mekodata.ai/signup](https://cloud.mekodata.ai/signup), then create a key in the Meko app.
 
 ```bash
+git clone https://github.com/srinivasa-vasu/meko-micro-demos.git
+cd meko-micro-demos/goap-ctx-agent
 mvn spring-boot:run           # offline: "With Meko" uses an in-memory stand-in
 ```
 
@@ -304,8 +313,17 @@ POST /api/stories/{id}/reset
 POST /api/stories/agent-died-2am/start         {"meko": true}
 POST /api/stories/agent-died-2am/takeover      {"caseId": "INC-…", "meko": true}
 POST /api/stories/organization-learned/series?cases=3[&db=true]
-POST /api/stories/organization-learned/case?index=1[&epoch=...][&otherTeam=true]   (one case, with Meko; the workshop's steps)
+POST /api/stories/organization-learned/case?index=1[&epoch=...][&otherTeam=true][&share=false]   (one case, with Meko; the workshop's steps: otherTeam = the EU desk, share=false = a baseline that promotes nothing)
 POST /api/stories/organization-learned/mismatch {"meko": true}
+POST /api/sessions/start?harness=claude_code:payments-api              (New session, same context: a harness session)
+POST /api/sessions/{id}/say {"text": "..."}                             (what the person says; with Meko, a conversation turn)
+POST /api/sessions/{id}/end                                             (the session's context is discarded)
+GET  /api/sessions/{id}/facts                                           (what Meko extracted from that session)
+POST /api/sessions/begin?harness=...&meko=true&after={id} {"task": "..."} (a new session: what it knows before anything is typed)
+GET  /api/workshop/status | preflight | datapacks | lesson                (the workshop: what the datapack holds, the datapack in use, the account's datapacks, the newest lesson)
+POST /api/workshop/datapack?name=...&create=true|false[&id=...]           (create or use a datapack)
+POST /api/workshop/upload?useCase=...                                    (upload a use case's documents through Meko's MCP)
+POST /api/workshop/documents?useCase=... | history?useCase=...            (one-line versions as a fallback; last quarter's reviews)
 GET  /api/meko/status
 POST /api/meko/seed
 POST /api/meko/outage?on=true|false

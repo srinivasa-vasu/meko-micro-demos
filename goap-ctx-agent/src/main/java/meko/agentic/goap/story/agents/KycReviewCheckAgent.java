@@ -285,7 +285,7 @@ public class KycReviewCheckAgent {
                 .filter(m -> !m.equals(KycReviewAgent.NONE)).map(m -> List.of(m.split("; "))).orElse(List.of());
         Optional<KycReviewAgent.KycRules> rules = KycReviewAgent.rules(standard.text());
         List<String> misjudged = rules.map(r -> notMaterial.stream().filter(n -> {
-            java.util.regex.Matcher volume = java.util.regex.Pattern.compile("monthly volume (\\d+)% outside").matcher(n);
+            java.util.regex.Matcher volume = java.util.regex.Pattern.compile("monthly volume (\\d+(?:\\.\\d+)?)% outside").matcher(n);
             boolean overThreshold = volume.find() && r.volumeThreshold().map(t -> Double.parseDouble(volume.group(1)) > t).orElse(false);
             return overThreshold || (r.beneficiaryMaterial() && n.startsWith("new beneficiary"));
         }).toList()).orElse(List.of());

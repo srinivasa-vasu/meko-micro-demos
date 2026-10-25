@@ -40,14 +40,18 @@ public class ReceiptLog {
     private final java.util.concurrent.ConcurrentLinkedQueue<String> order = new java.util.concurrent.ConcurrentLinkedQueue<>();
     private static final int KEEP_CASES = 500;
 
+    /** The cases in {@code order}: added once, even when two calls for a new case arrive at the same moment. */
+    private final java.util.Set<String> known = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private void seen(String caseId) {
-        if (receipts.containsKey(caseId) || written.containsKey(caseId)) return;
+        if (!known.add(caseId)) return;
         order.add(caseId);
         while (order.size() > KEEP_CASES) {
             String oldest = order.poll();
             if (oldest == null) break;
             receipts.remove(oldest);
             written.remove(oldest);
+            known.remove(oldest);
         }
     }
 
@@ -56,6 +60,7 @@ public class ReceiptLog {
         receipts.remove(caseId);
         written.remove(caseId);
         order.remove(caseId);
+        known.remove(caseId);
     }
 
     public void record(String caseId, Receipt receipt) {

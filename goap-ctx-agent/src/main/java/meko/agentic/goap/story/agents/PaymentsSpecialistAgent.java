@@ -118,7 +118,9 @@ public class PaymentsSpecialistAgent {
             String lower = sentence.toLowerCase();
             if (!lower.contains("provisional refund")) continue;
             String clause = sentence.trim();
-            if (lower.matches(".*\\b(do not|don't|must not|never) (issue|approve|grant|give|offer)\\b.*provisional refund.*|.*\\bno provisional refund\\b.*")) return Map.entry(Refund.REFUSE, clause);
+            // A refusal, active ("do not issue a provisional refund") or passive ("a provisional refund must not be issued").
+            if (lower.matches(".*\\b(do not|don't|must not|never) (issue|approve|grant|give|offer)\\b.*provisional refund.*|.*\\bno provisional refund\\b.*"
+                    + "|.*provisional refund.*\\b(must not|may not|should not|shall not|cannot|can't|is not to|will not|never) (be )?(approved|issued|granted|given)\\b.*")) return Map.entry(Refund.REFUSE, clause);
             if (lower.matches(".*provisional refund.*\\b(may|can|should|is to) be (approved|issued)\\b.*")) {
                 // A condition on settlement the policy states must hold for what the check found.
                 boolean needsNoSettled = lower.contains("no settled capture") || lower.contains("nothing settled") || lower.contains("not settled");

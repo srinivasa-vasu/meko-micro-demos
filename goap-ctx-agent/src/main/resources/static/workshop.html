@@ -168,6 +168,8 @@ td.fail{color:var(--bad);font-weight:700}
 
   <nav class="tabs" id="tabs" aria-label="Use cases"></nav>
   <section class="panel" id="usecase"></section>
+  <!-- Start here: "New session. Same context.", its own page, shown in place of a use case. -->
+  <section id="starthere" hidden><iframe id="startFrame" title="New session. Same context." style="width:100%;height:2100px;border:0;display:block"></iframe></section>
 
   <section class="panel guide">
     <nav class="track" id="stepper" aria-label="Workshop steps"></nav>
@@ -229,6 +231,8 @@ let catalog = {};                  // use case id → catalog entry
 let busy = false;
 let step = 0;                      // set on load to where the selected use case should resume
 let selected = keep.get('workshop.tab');
+/** The Start here tab (New session, same context) is shown in place of the selected use case. */
+let startHere = keep.get('workshop.start') !== false;
 let shown = null;                  // the stage whose run is shown in detail
 // Runs are saved per datapack (and per start of the offline stand-in): they only mean something for the context they ran against.
 let context = null;
@@ -239,7 +243,8 @@ const runs = {}, audits = {};                             // use case id → {st
  * own datapack, switches to the shared one, and runs again. A partner's runs are kept per role, not per datapack, so
  * the baseline stays on the page across the switch.
  */
-let pair = Object.assign({mode: 'solo', role: 'support', shared: false}, keep.get('workshop.pair') || {});
+let pair = Object.assign({mode: 'solo', role: 'apac', shared: false}, keep.get('workshop.pair') || {});
+if (pair.role === 'support') pair.role = 'apac';   // saved before the desks were named
 let soloLearn = null;   // the solo runs of the learning use case, set aside while pair mode is on
 let lesson = null;      // the newest lesson in the datapack in use, as /api/workshop/lesson reports it (pair, support)
 const pairRuns = () => keep.get('workshop.pairruns.' + pair.role) || {};
@@ -260,17 +265,37 @@ function save() {
   }
   keep.set('workshop.runs9.' + context, mine); keep.set('workshop.audits9.' + context, audits);
   keep.set('workshop.tab', selected); keep.set('workshop.pair', pair);
+  keep.set('workshop.layout', layout); keep.set('workshop.dpmap', dpMap); keep.set('workshop.dpstem', dpStem);
+}
+
+/**
+ * A use case's runs wherever they are kept: the pair role's for the learning use case in pair mode, and per use case,
+ * those kept under that use case's own datapack (not the one in use).
+ */
+function runsOf(id) {
+  if (id === LEARNS && pair.mode === 'pair') return id === selected ? (runs[id] || {}) : pairRuns();
+  const m = perCase() && dpMap[id];
+  if (m && m.id !== status.store.datapackId) return (keep.get('workshop.runs9.' + m.id) || {})[id] || {};
+  return runs[id] || {};
 }
 
 /** Switches the learning use case between solo and a pair role; each keeps its own runs. */
+/** Pair mode starts over: this role's runs and the shared flag go (a new datapack, or Start over). */
+function resetPair() {
+  keep.set('workshop.pairruns.' + pair.role, {});
+  pair.shared = false;
+  if (pair.mode === 'pair') runs[LEARNS] = {};
+}
+
 function setPair(mode, role) {
+  if (busy) return;
   if (pair.mode === 'pair') keep.set('workshop.pairruns.' + pair.role, runs['organization-learned'] || {});
   else soloLearn = runs['organization-learned'] || null;
   pair = Object.assign({}, pair, {mode, role: role || pair.role});
   runs['organization-learned'] = mode === 'pair' ? pairRuns() : (soloLearn || {});
   lesson = null; lastMessage = '';
   resume(); save(); render();
-  if (mode === 'pair' && pair.role === 'support') refreshLesson().then(render);
+  if (mode === 'pair' && pair.role === 'apac') refreshLesson().then(render);
 }
 
 /** The newest lesson promoted in the datapack in use (the partner's case 1), or null. */
@@ -287,7 +312,7 @@ const docIn = v => v === 'uploaded' || v === 'one-line version';
 const reviewsState = v => v === 'seeded' ? 'added' : v === 'missing' || !v ? 'not added yet' : String(v).replace('partly seeded', 'partly added');
 const STEPS = [
   // Done once a datapack is connected; on the offline stand-in (no key) there is nothing to create.
-  {t: 'Create your datapack', icon: 'database', done: () => status && ((status.store.live && status.store.connected) || !status.store.keyed)},
+  {t: 'Create your datapack', icon: 'database', done: () => status && !choosing && ((status.store.live && status.store.connected && mineInUse()) || !status.store.keyed)},
   {t: 'Run with no context', icon: 'play', stage: 0},
   // Per use case: what this use case reads, not everything the workshop's use cases read together.
   {t: 'Add the documents', icon: 'upload', done: () => status && myDocs().length > 0 && myDocs().every(k => docIn(status.documents[k]))},
@@ -310,13 +335,14 @@ function switchedToShared() {
  * yet), the EU payments desk's agent on case 1 (it promotes the root cause), then the APAC desk's again.
  */
 const LEARNS = 'organization-learned';
-const pairOn = (id = selected) => id === LEARNS && pair.mode === 'pair';
+// Pair mode needs two Meko accounts: without a key (the stand-in), the use case runs solo whatever was saved.
+const pairOn = (id = selected) => id === LEARNS && pair.mode === 'pair' && !!(status && status.store.keyed);
 /** Whether the learning use case's lesson is in the datapack: for the APAC partner, as the datapack reports it. */
-const learnPromoted = () => selected === LEARNS && (pairOn() && pair.role === 'support' ? !!lesson : !!(runs[LEARNS] && runs[LEARNS][2]));
+const learnPromoted = () => selected === LEARNS && (pairOn() && pair.role === 'apac' ? !!lesson : !!(runs[LEARNS] && runs[LEARNS][2]));
 /** Each partner's steps, in the order they do them. */
 const pairSteps = () => pair.role === 'eu' ? [0, 5, 7] : [0, 1, 8, 6];
 const PAIR_TITLES = {eu: {0: 'Create your datapack', 5: 'Solve case 1', 7: 'Share it with your partner'},
-  support: {0: 'Create your own datapack', 1: 'Run without the lesson', 8: 'Switch to the shared datapack', 6: 'Run with the lesson'}};
+  apac: {0: 'Create your own datapack', 1: 'Run without the lesson', 8: 'Switch to the shared datapack', 6: 'Run with the lesson'}};
 const LEARN_STAGES = {0: ['Without the lesson', 'Your investigator, case 2: nothing promoted yet'],
   2: ['The EU desk\'s case 1', 'The EU payments desk\'s agent solves it and promotes the root cause'],
   3: ['With the lesson', 'Your investigator, case 2 again: the root cause is collective memory']};
@@ -362,6 +388,12 @@ function whyNotNeeded(i) {
 const promotes = id => id === 'organization-learned' || id === 'loan-underwriting';
 
 /** Where the selected use case resumes: the first step it needs that is not done yet (the last step once all are). */
+/** Opening a use case (its tab, or the page): one not run yet opens at its step 1, its datapack; one already started resumes. */
+function openUseCase() {
+  if (Object.keys(runs[selected] || {}).length > 0) resume();
+  else { step = mySteps()[0]; shown = null; }
+}
+
 function resume() {
   const open = mySteps().find(i => !stepDone(i));
   step = open == null ? mySteps().slice(-1)[0] : open;
@@ -373,15 +405,31 @@ function renderTabs() {
   // The vertical before the first use case of each (BFSI), then each tab names only its area (PAYMENTS, KYC).
   const vertical = id => String(catalog[id].domain).split(' / ')[0];
   const area = id => String(catalog[id].domain).split(' / ').slice(1).join(' / ') || catalog[id].domain;
-  el('tabs').innerHTML = status.useCases.map((u, n) => {
+  // New Session, Same Context first: the simplest case of context lost between sessions, before the three BFSI use cases.
+  // Its vertical (SDLC) beside it, as the BFSI use cases have theirs.
+  el('tabs').innerHTML = '<span class="tab-group">SDLC</span><button class="tab' + (startHere ? ' active' : '') + '" data-start><span class="ico">' + icon('play', 'lg') + '</span>' +
+    '<span><span class="k">AI ASSISTANTS</span><div class="t">New Session, Same Context</div><div class="dots"></div></span></button>' +
+    status.useCases.map((u, n) => {
     const c = catalog[u.id];
     const group = n === 0 || vertical(status.useCases[n - 1].id) !== vertical(u.id) ? '<span class="tab-group">' + esc(vertical(u.id)) + '</span>' : '';
-    const dots = [0, 1, 2, 3].filter(s => stageNeeded(s, u.id)).map(s => '<i class="' + (runs[u.id] && runs[u.id][s] ? 'on' : '') + '" title="' + esc(stageName(s, u.id)) + '"></i>').join('');
-    return group + '<button class="tab' + (u.id === selected ? ' active' : '') + '" data-tab="' + esc(u.id) + '"><span class="ico">' + icon(TAB_ICONS[u.id] || 'dot', 'lg') + '</span>' +
+    const dots = [0, 1, 2, 3].filter(s => stageNeeded(s, u.id)).map(s => '<i class="' + (runsOf(u.id)[s] ? 'on' : '') + '" title="' + esc(stageName(s, u.id)) + '"></i>').join('');
+    return group + '<button class="tab' + (u.id === selected && !startHere ? ' active' : '') + '" data-tab="' + esc(u.id) + '"><span class="ico">' + icon(TAB_ICONS[u.id] || 'dot', 'lg') + '</span>' +
       '<span><span class="k">' + esc(area(u.id)) + '</span><div class="t">' + esc(c.title) + '</div><div class="dots" aria-label="Stages run">' + dots + '</div></span></button>';
   }).join('');
+  document.querySelector('[data-start]').onclick = async () => {
+    if (busy) return;
+    startHere = true; lastMessage = ''; keep.set('workshop.start', true);
+    await useCaseDatapack(SESSIONS);   // per use case: New Session's own datapack
+    render(); tellSessions();
+  };
   // Another use case: it resumes at its own first open step, and the last message (about the other one) is cleared.
-  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { selected = b.dataset.tab; resume(); lastMessage = ''; save(); render(); });
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = async () => {
+    if (busy) return;
+    selected = b.dataset.tab; lastMessage = ''; suggested = null; startHere = false; keep.set('workshop.start', false);
+    await useCaseDatapack();   // per use case: the tab's own datapack
+    openUseCase();
+    save(); render();
+  });
 }
 
 function renderUseCase() {
@@ -399,14 +447,15 @@ function renderUseCase() {
     ['book', 'Shared knowledge', docsIn ? 'in' : u.documents.length ? 'not' : 'none',
       u.documents.length ? docState.map(d => d[0] + ': ' + (d[1] === 'missing' ? 'not in your datapack yet' : d[1])).join('; ') + (docsIn ? '.' : ' (stage 1).') : 'Not read by this use case.'],
     ['promote', 'Collective memory', learnPromoted() ? 'in' : promotes(selected) ? 'run' : 'none',
-      selected === LEARNS ? (pairOn() && pair.role === 'support'
+      selected === LEARNS ? (pairOn() && pair.role === 'apac'
         ? (lesson ? 'The root cause your partner\'s agent promoted (' + lesson.writtenBy + '), in this datapack.' : 'Empty until your partner solves case 1 and shares their datapack.')
         : learnPromoted() ? 'The root cause the EU payments desk\'s agent promoted in case 1, as that run (step ' + stepNo(5) + ') reported its promotion.'
         : 'Empty until ' + (pairOn() ? 'your' : 'the EU desk\'s') + ' agent solves case 1 and promotes its root cause (step ' + stepNo(5) + ').')
       : promotes(selected) ? 'Nothing promoted yet: the runs promote what they learn from memory, then reuse it (stage 3).' : 'Not used by this use case.']];
   const BADGE = {in: ['ok', 'in your datapack'], not: ['warn', 'not yet'], run: ['', 'empty'], none: ['', 'not used'], needs: ['', 'needed']};
   // No datapack yet (a key, but none created or chosen): say what the use case needs, not what a datapack lacks.
-  const noDatapack = status.store.keyed && !(status.store.live && status.store.connected);
+  // (Per use case: the datapack in use may be another use case's; this one has none of its own yet.)
+  const noDatapack = status.store.keyed && !(status.store.live && status.store.connected && mineInUse());
   if (noDatapack) {
     reads[0][2] = handsOff(selected) || u.history ? 'needs' : 'none';
     reads[0][3] = (handsOff(selected) ? 'Written by one agent during each run and recalled by the next.' : '') +
@@ -451,7 +500,7 @@ function renderStepper() {
       '<span class="s">' + (done ? 'done' : 'step ' + (n + 1)) + '</span></button>';
   }).join('');
   // Another step: the last message (about the step left) is cleared.
-  document.querySelectorAll('.step').forEach(b => b.onclick = () => { step = Number(b.dataset.i); shown = STEPS[step].stage ?? shown; lastMessage = ''; save(); render(); });
+  document.querySelectorAll('.step').forEach(b => b.onclick = () => { if (busy) return; step = Number(b.dataset.i); shown = STEPS[step].stage ?? shown; lastMessage = ''; save(); render(); });
 }
 
 function guide() {
@@ -513,7 +562,7 @@ function pairToggle() {
   // Where the lesson lives (one datapack for the whole organization, or each desk's own, shared by the EU desk), and
   // under each, who you are in it; what that means, on its own line below.
   return '<div style="margin-bottom:12px"><div class="seg" role="tablist" aria-label="Where the lesson lives">' +
-    opt('solo', 'One org-wide datapack', 'You play both desks') + opt('eu', 'Shared datapack', 'You are the EU desk') + opt('support', 'Shared datapack', 'You are the APAC desk') + '</div>' +
+    opt('solo', 'One org-wide datapack', 'You play both desks') + opt('eu', 'Shared datapack', 'You are the EU desk') + opt('apac', 'Shared datapack', 'You are the APAC desk') + '</div>' +
     '<div class="hint" style="margin-top:6px">' + (pair.mode !== 'pair' ? 'Both desks write to one datapack for the whole organization.'
       : 'Each desk has its own datapack; the EU desk shares its datapack with the APAC desk. Two people, two Meko accounts. '
         + (pair.role === 'eu' ? 'Solve case 1, then share your datapack.' : 'Your partner solves case 1 and shares their datapack with you.')) + '</div></div>';
@@ -528,11 +577,11 @@ function pairGuide(run, check, body) {
   if (step === 7) return [PAIR_TITLES.eu[7], ['In the Meko app, share <b>' + name + '</b> with your partner\'s account. Reading is enough: they promote nothing.',
     'Then press <b>I\'ve shared it</b> and tell your partner the datapack\'s name.'],
     '<button class="btn primary" data-act="shared"' + (busy || pair.shared ? ' disabled' : '') + '>' + icon(pair.shared ? 'check' : 'user') + (pair.shared ? 'Shared' : 'I\'ve shared it') + '</button>'];
-  if (step === 1) return [PAIR_TITLES.support[1], ['In your own datapack, still empty: a failed payment reaches the APAC desk\'s payments investigator. Nothing anyone else learned is in reach.',
+  if (step === 1) return [PAIR_TITLES.apac[1], ['In your own datapack, still empty: a failed payment reaches the APAC desk\'s payments investigator. Nothing anyone else learned is in reach.',
     'How many hypotheses does it test? Your partner is solving case 1 meanwhile. What it finds is not promoted.'], run];
-  if (step === 8) return [PAIR_TITLES.support[8], ['When your partner has shared their datapack, pick it below: it shows as shared with you. Press <b>Refresh</b> if it is not listed yet.',
+  if (step === 8) return [PAIR_TITLES.apac[8], ['When your partner has shared their datapack, pick it below: it shows as shared with you. Press <b>Refresh</b> if it is not listed yet.',
     'Your baseline stays on this page.'], datapackForm(true)];
-  if (step === 6) return [PAIR_TITLES.support[6], ['The same case as your baseline, now in your partner\'s datapack. Does your investigator still test every hypothesis?',
+  if (step === 6) return [PAIR_TITLES.apac[6], ['The same case as your baseline, now in your partner\'s datapack. Does your investigator still test every hypothesis?',
     lesson ? 'In reach: the lesson promoted by <b>' + esc(lesson.writtenBy) + '</b>.' : 'Your partner\'s lesson is not in this datapack yet.'], run + check];
   return body;
 }
@@ -547,7 +596,7 @@ function earlierOpen(i) {
 /** What the learning use case's first two runs ask (its last one is the finale). */
 const LEARN_GUIDE = {
   1: ['A failed payment reaches the APAC payments desk\'s investigator. Nothing has been promoted yet: each run of this step starts a new learning epoch, so lessons from earlier runs are set aside.',
-      'How many hypotheses does it test before it finds the root cause? This is the baseline: what it finds is not promoted, so the only lesson later is the one the EU desk shares.'],
+      'How many hypotheses does it test before it finds the root cause? This is the baseline: what it finds is not promoted, so the only lesson later is the one the EU desk promotes.'],
   5: ['Case 1 reaches the EU payments desk: another desk\'s agent, in its own application. It investigates the same failure, then promotes the root cause from memory to collective memory.',
       'Under Shared knowledge, what was promoted, and by whom?']};
 
@@ -582,7 +631,7 @@ function finale() {
   if (selected === LEARNS) lines.push('The same case as step ' + stepNo(1) + ', for the APAC desk\'s investigator again: the root cause the EU desk promoted in case 1 is now collective memory. Does it still test every hypothesis?',
     'Compare with the <i>Without the lesson</i> card: the same case, the same agent; only the context changed.');
   if (selected === 'loan-underwriting') lines.push('Run it once more: the credit-risk ruling promoted in an earlier run is now collective memory. Does anyone ask credit risk this time?');
-  if (audit) lines.push((rerun ? 'Then an' : 'An') + ' auditor, given only the ' + c.followUp.subject + ' id, reads the whole record back. How many records did it have to request?');
+  if (audit) lines.push((rerun ? 'Then an' : 'An') + ' auditor, given only the ' + esc(c.followUp.subject) + ' id, reads the whole record back. How many records did it have to request?');
   if (audit && !rerun && !lastMekoRun()) lines.push('Run this use case at an earlier step first: there is nothing to audit yet.');
   return {rerun, audit, lines, label: rerun && audit ? 'Run, then audit' : audit ? 'Audit' : 'Run'};
 }
@@ -604,9 +653,56 @@ let choosing = false;
 function suggestedName() {
   if (!suggested) {
     const d = new Date(), pad = n => String(n).padStart(2, '0');
-    suggested = 'meko-workshop-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' + Math.random().toString(36).slice(2, 6);
+    const stem = () => 'meko-workshop-' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '-' + Math.random().toString(36).slice(2, 6);
+    // Per use case: one stem for the participant's datapacks, then the use case ("…-dispute", "…-kyc").
+    if (perCase()) { if (!dpStem) { dpStem = stem(); save(); } suggested = dpStem + '-' + (SUFFIX[selected] || selected); }
+    else suggested = stem();
   }
   return suggested;
+}
+
+/**
+ * One datapack for all use cases (the default), or one per use case: each use case starts truly empty, whatever the
+ * others added, and starts over on its own. The page remembers each use case's datapack and switches to it with the tab.
+ */
+let layout = keep.get('workshop.layout') || 'shared';
+let dpMap = keep.get('workshop.dpmap') || {};    // use case id → {name, id}, per-use-case layout
+let dpStem = keep.get('workshop.dpstem') || null;
+const perCase = () => layout === 'per';
+const SUFFIX = {'dont-make-me-explain': 'dispute', 'what-changed': 'kyc', 'organization-learned': 'learned', 'loan-underwriting': 'loan'};
+/** The selected use case's own datapack is the one in use (always true with one datapack for all). */
+const mineInUse = () => !perCase() || !!(dpMap[selected] && dpMap[selected].id === status.store.datapackId);
+
+function setLayout(v) {
+  if (busy || v === layout) return;
+  layout = v;
+  // Stay on step 1: per use case, this use case chooses its own datapack here (new, or an existing one, the one in use
+  // among them); back to one for all, the datapack in use serves every use case.
+  suggested = null; lastMessage = ''; choosing = false; dpMode = 'new'; dpPicked = null;
+  step = 0; shown = null;
+  save(); render();
+}
+
+/** Per use case: switches to the selected use case's datapack, if it has one (else its step 1 creates or picks one). */
+async function useCaseDatapack(key = selected) {
+  const m = perCase() && dpMap[key];
+  if (!m || m.id === status.store.datapackId) return;
+  busy = true; render(); say('Switching to ' + m.name + '…');
+  try {
+    const r = await fetch('/api/workshop/datapack?name=' + encodeURIComponent(m.name) + '&create=false&id=' + encodeURIComponent(m.id), {method: 'POST'});
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || r.statusText);
+    status = body;
+    loadRuns(status.store.contextId);
+    if (pairOn() && pair.role === 'apac') await refreshLesson();
+    say('');
+  } catch (e) {
+    // Gone (deleted in the Meko app, say): this use case chooses a datapack again at its step 1.
+    delete dpMap[key]; save();
+    step = 0; shown = null;
+    say('Could not switch to ' + m.name + ' (' + e.message + '): choose a datapack for this use case.');
+  }
+  busy = false;
 }
 
 /** The account's datapacks for "Use existing", loaded when that option is chosen (null until then). */
@@ -632,7 +728,7 @@ function datapackForm(listOnly) {
     '<button role="tab" aria-selected="' + (dpMode === 'existing') + '" data-dpmode="existing">Use an existing one</button></div>';
   let panel;
   // A datapack in use is shown as such, read-only; Start over makes the name editable again for a new one.
-  const inUse = status.store.live && status.store.connected && !choosing;
+  const inUse = status.store.live && status.store.connected && !choosing && mineInUse();
   if (mode === 'new' && inUse) {
     panel = '<div class="dp-panel"><label class="lbl" for="dpName">Name</label>' +
       '<div class="row"><input class="text" id="dpName" value="' + esc(status.store.datapack || '') + '" disabled>' +
@@ -646,20 +742,30 @@ function datapackForm(listOnly) {
   } else {
     if (datapacks == null) loadDatapacks();
     const current = status.store.datapack;
-    const rows = (datapacks || []).map(d => '<label class="dp' + (d.workshop ? '' : ' other') + '">' +
+    // Your own datapacks; one shared with you only where it is the point (switching to the EU desk's, in pair mode).
+    const listed = (datapacks || []).filter(d => listOnly || !d.sharedBy);
+    const rows = listed.map(d => '<label class="dp' + (d.workshop ? '' : ' other') + '">' +
       '<input type="radio" name="dpPick" value="' + esc(d.name) + '"' + ((dpPicked || current) === d.name ? ' checked' : '') + '>' +
       '<span class="dp-n">' + esc(d.name) + '</span><span class="dp-m">' + esc(ago(d.created)) + '</span>' +
       (d.name === current ? '<span class="pill ok">in use</span>' : '') +
       (d.sharedBy ? '<span class="pill ok">shared with you by ' + esc(d.sharedBy) + '</span>'
         : d.workshop ? '<span class="pill">workshop</span>' : '<span class="pill warn" title="It already holds context, so the stages would not start clean">has other content</span>') + '</label>').join('');
     panel = '<div class="dp-panel">' + (datapacks == null ? '<div class="hint">Loading your datapacks…</div>'
-      : datapacks.length ? '<div class="dp-list">' + rows + '</div>' +
+      : listed.length ? '<div class="dp-list">' + rows + '</div>' +
         '<div class="row" style="margin-top:8px"><button class="btn primary" data-datapack="use"' + (busy ? ' disabled' : '') + '>Use selected</button>' +
         (listOnly ? '<button class="btn" data-dpmode="existing">' + icon('refresh') + 'Refresh</button>' : '') +
         '<span class="hint">Datapacks not created for the workshop already hold context: the first stages will not be empty.</span></div>'
       : '<div class="hint">No datapacks in your account yet: create a new one.</div>') + '</div>';
   }
-  return '<div style="width:100%">' + (listOnly ? '' : sw) + panel + '</div>';
+  // One datapack for all use cases, or one per use case.
+  const lay = '<div class="seg" role="tablist" aria-label="Datapacks" style="margin-bottom:8px">' +
+    '<button role="tab" aria-selected="' + !perCase() + '" data-layout="shared">One datapack for all use cases</button>' +
+    '<button role="tab" aria-selected="' + perCase() + '" data-layout="per">One datapack per use case</button></div>' +
+    '<div class="hint" style="margin:-2px 0 8px">' + (perCase()
+      ? 'Each use case has its own datapack, created at its own step 1: it starts empty whatever the others added, and starts over on its own. ' +
+        (dpMap[selected] ? 'This use case: <b>' + esc(dpMap[selected].name) + '</b>.' : 'This use case has none yet.')
+      : 'All three use cases share one datapack; each adds only its own context.') + '</div>';
+  return '<div style="width:100%">' + (listOnly ? '' : lay + sw) + panel + '</div>';
 }
 
 // ---------------------------------------------------------------- output
@@ -913,7 +1019,7 @@ async function runSelected() {
   const id = selected, stage = STEPS[step].stage, c = catalog[id];
   // The datapack may have changed outside this page (an upload in the Meko app): check it before running a stage.
   status = await (await fetch('/api/workshop/status')).json();
-  if (pairOn() && pair.role === 'support' && stage === 3) await refreshLesson();
+  if (pairOn() && pair.role === 'apac' && stage === 3) await refreshLesson();
   const blocked = earlierOpen(step) || stageBlocked(stage);
   if (blocked) throw new Error(blocked);
   if (stage === 3) {
@@ -982,18 +1088,26 @@ async function busyWith(message, work) {
 }
 
 async function act(what) {
-  if (what === 'shared') { pair.shared = true; save(); render(); say('Tell your partner the datapack\'s name: ' + (status.store.datapack || '') + '.'); return; }
+  if (busy) return;
+  if (what === 'shared') {
+    // Shared only once case 1 is solved: there is nothing to share before.
+    const open = earlierOpen(step);
+    if (open) { say(open); return; }
+    pair.shared = true; save(); render(); say('Tell your partner the datapack\'s name: ' + (status.store.datapack || '') + '.'); return; }
   if (what === 'restart') {
     // A datapack is durable: nothing in it is cleared by a restart. A fresh start is a fresh datapack.
     suggested = null; choosing = true;
+    if (perCase()) delete dpMap[selected];   // only this use case starts over
+    if (pairOn()) resetPair();
     step = STEPS.findIndex(x => x.t === 'Create your datapack'); shown = null; save(); render();
-    say('Name a new datapack and press Create and use: everything after this is written to it.'); return;
+    say(perCase() ? 'Name a new datapack for ' + catalog[selected].title + ' and press Create and use: the other use cases keep theirs.'
+      : 'Name a new datapack and press Create and use: everything after this is written to it.'); return;
   }
   await busyWith(what === 'check' ? 'Checking your datapack…' : what === 'documents' ? 'Adding the one-line versions…' : what === 'upload' ? 'Uploading the documents…' : 'Adding last quarter\'s reviews…', async () => {
     status = what === 'check' ? await (await fetch('/api/workshop/status')).json() : await post('/api/workshop/' + what + '?useCase=' + encodeURIComponent(selected));
     if (status.store.contextId !== context) { loadRuns(status.store.contextId); resume(); }
     // A step that adds to the datapack moves on once it is complete (on Check too, after an upload in the Meko app).
-    if (pairOn() && pair.role === 'support') await refreshLesson();
+    if (pairOn() && pair.role === 'apac') await refreshLesson();
     if (STEPS[step].done && STEPS[step].stage == null && step > 0 && STEPS[step].done()) go(1);
     // An upload says what became of each document (a failure says why, such as a storage quota).
     if (what === 'upload' && status.uploaded) return Object.entries(status.uploaded).map(([k, v]) => k + ': ' + v).join(' · ') + '.';
@@ -1005,8 +1119,10 @@ function bind() {
   document.querySelectorAll('[data-run]').forEach(b => b.onclick = () => busyWith('Running ' + catalog[selected].title + ' with Meko…', runSelected));
   document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act(b.dataset.act));
   document.querySelectorAll('[data-pair]').forEach(b => b.onclick = () => b.dataset.pair === 'solo' ? setPair('solo') : setPair('pair', b.dataset.pair));
-  document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { go(Number(b.dataset.nav)); render(); });
+  document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { if (busy) return; go(Number(b.dataset.nav)); render(); });
+  document.querySelectorAll('[data-layout]').forEach(b => b.onclick = () => setLayout(b.dataset.layout));
   document.querySelectorAll('[data-dpmode]').forEach(b => b.onclick = () => {
+    if (busy) return;
     dpMode = b.dataset.dpmode;
     if (dpMode === 'existing') datapacks = null;   // always the account's current list
     render();
@@ -1024,6 +1140,9 @@ function bind() {
       const body = await r.json();
       if (!r.ok) throw new Error(body.error || r.statusText);
       status = body;
+      if (perCase()) dpMap[selected] = {name: status.store.datapack, id: status.store.datapackId};   // this use case's own
+      // A new datapack in pair mode is a new start for this role (switching to the partner's shared one is not).
+      if (create && pairOn()) resetPair();
       suggested = null;   // the next new datapack gets a new name
       choosing = false;   // the name is now the datapack in use
       datapacks = null;   // the list now includes it
@@ -1031,7 +1150,7 @@ function bind() {
       // Another datapack: its own runs (none, for a new one).
       loadRuns(status.store.contextId);
       shown = null;
-      if (pairOn() && pair.role === 'support') await refreshLesson();
+      if (pairOn() && pair.role === 'apac') await refreshLesson();
       if (status.store.live && status.store.connected) resume();   // the first step this datapack still needs
       return (create ? 'Created and using ' : 'Using ') + name + '. ' + datapackNote();
     });
@@ -1049,8 +1168,45 @@ function renderStatus() {
   el('modelPill').textContent = 'Models on';
 }
 
+/** New Session, Same Context, under its own key in the per-use-case layout. */
+const SESSIONS = 'new-session';
+
+/** Tells the New Session page to look again at the datapack in use, and whether it needs one of its own (per use case). */
+function tellSessions() {
+  const frame = el('startFrame');
+  if (frame.contentWindow && frame.src) frame.contentWindow.postMessage({refresh: true, layout, needsOwn: perCase() && !dpMap[SESSIONS]}, location.origin);
+}
+el('startFrame').addEventListener('load', tellSessions);
+
+// The New Session page reports its height (the frame takes it, so the page scrolls as one) and the datapacks it creates.
+window.addEventListener('message', e => {
+  if (e.origin !== location.origin || !e.data) return;
+  if (e.data.sessionsHeight) el('startFrame').style.height = e.data.sessionsHeight + 'px';
+  // The layout chosen on that page's datapack step is the workshop's: one for all, or one per use case.
+  if (e.data.setLayout && !busy) {
+    setLayout(e.data.setLayout);
+    useCaseDatapack(SESSIONS).then(() => { render(); tellSessions(); });
+  }
+  // A datapack created there: New Session's own (per use case), or the workshop's (one for all), with its runs.
+  if (e.data.datapackChanged) {
+    fetch('/api/workshop/status').then(r => r.json()).then(st => {
+      status = st;
+      if (perCase()) dpMap[SESSIONS] = {name: status.store.datapack, id: status.store.datapackId};
+      choosing = false; suggested = null;
+      loadRuns(status.store.contextId);
+      if (!busy) openUseCase();
+      save(); render(); tellSessions();
+    });
+  }
+});
+
 function render() {
   if (!status) return;
+  // Start here: its own page in place of the use case, its steps and its output.
+  ['usecase', 'output'].forEach(id => el(id).hidden = startHere);
+  document.querySelector('.panel.guide').hidden = startHere;
+  el('starthere').hidden = !startHere;
+  if (startHere && !el('startFrame').src) el('startFrame').src = '/sessions.html?embedded&from=workshop';
   renderStatus(); renderTabs(); renderUseCase(); renderStepper();
   el('guide').innerHTML = guide();
   renderOutput(); bind(); say(lastMessage);
@@ -1062,8 +1218,9 @@ function render() {
     status = await (await fetch('/api/workshop/status')).json();
     if (!status.useCases.some(u => u.id === selected)) selected = status.useCases[0].id;
     loadRuns(status.store.contextId);
-    if (pair.mode === 'pair' && pair.role === 'support') await refreshLesson();
-    resume();
+    await useCaseDatapack(startHere ? SESSIONS : selected);   // per use case: the shown tab's own datapack
+    if (pair.mode === 'pair' && pair.role === 'apac') await refreshLesson();
+    openUseCase();
     lastMessage = '';
     render();
   } catch (e) { el('guide').textContent = 'Unable to load the workshop: ' + e.message; }

@@ -60,6 +60,8 @@ class DocumentedFiguresTest {
 
     /** The learning story's last case per lane: the steady state the deck projects from. */
     final Map<Lane, Map<String, Integer>> steadyState = new LinkedHashMap<>();
+    /** The learning series in the database lane, case by case: hypotheses each case tested. */
+    final List<Integer> databaseHypotheses = new ArrayList<>();
 
     /** What actually ran: story id → lane → metric → value, summed over the series for the learning story. */
     final Map<String, Map<Lane, Map<String, Integer>>> measured = new LinkedHashMap<>();
@@ -78,6 +80,7 @@ class DocumentedFiguresTest {
                 steadyState.put(Lane.MEKO, totals(List.of(series.get("withMeko").getLast())));
                 lanes.put(Lane.WITHOUT, totals(series.get("withoutMeko")));
                 lanes.put(Lane.DATABASE, totals(series.get("database")));
+                series.get("database").forEach(r -> databaseHypotheses.add(totals(List.of(r)).getOrDefault("hypothesesTested", 0)));
                 lanes.put(Lane.MEKO, totals(series.get("withMeko")));
             } else {
                 for (Lane lane : LANES) lanes.put(lane, totals(List.of(stories.run(d.storyId(), lane))));
@@ -127,8 +130,21 @@ class DocumentedFiguresTest {
                 if (d.count() != null) {
                     assertThat(firstNumber(cell)).as("%s, %s %s in the README", d.title(), LANES.get(i), d.count()).isEqualTo(run.getOrDefault(d.count(), 0));
                 }
+                // Rulings written into a cell ("2 rulings requested", "1 ruling") are the run's.
+                Matcher rulings = Pattern.compile("(\\d+) rulings?").matcher(cell);
+                if (rulings.find()) {
+                    assertThat(Integer.parseInt(rulings.group(1))).as("%s, %s rulings in the README", d.title(), LANES.get(i)).isEqualTo(run.getOrDefault("rulingsRequested", 0));
+                }
             }
         }
+    }
+
+    @Test
+    void readmeDatabaseLaneLearnsAgainOnCase2ThenReusesOnCase3() throws IOException {
+        // "with your own database ... it learns the lesson again on case 2, then reuses it on case 3"
+        assertThat(Files.readString(Path.of("README.md"))).contains("learns the lesson again\non case 2, then reuses it on case 3");
+        assertThat(databaseHypotheses.get(1)).as("case 2 in the database lane tests hypotheses").isPositive();
+        assertThat(databaseHypotheses.get(2)).as("case 3 in the database lane reuses its own lesson").isZero();
     }
 
     @Test
