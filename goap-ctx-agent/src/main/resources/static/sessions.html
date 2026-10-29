@@ -50,6 +50,7 @@ textarea{min-height:58px;resize:vertical}
 .num{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 11px;min-width:120px}
 .num b{font-size:20px;display:block}
 .num span{font-size:11.5px;color:var(--muted)}
+.input{white-space:pre-wrap;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0;max-height:420px;overflow:auto}
 .reply{background:var(--blue-bg);border-radius:10px;padding:8px 11px;font-size:13px;margin:6px 0}
 details{margin-top:8px}summary{cursor:pointer;color:var(--muted);font-size:12.5px}
 table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
@@ -141,14 +142,14 @@ a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}a:
 </section>
 
 <section class="stepbody" id="p3">
-  <h2><span class="n">3</span>Next morning: a new session</h2>
-  <p class="what">Open a new session with a task. Before you type a word, what does it know? The same new session, run
-    twice: once with no store, as a harness on its own, and once connected to Meko. Connected, it loads at its start
-    what Meko returns for the task and for the project's standing context (its stack, conventions, constraints and
-    decisions), as a harness does.</p>
-  <label class="what" for="task" style="display:block;margin:0 0 4px">The task</label>
+  <h2><span class="n">3</span>Next morning: send a prompt in a new session</h2>
+  <p class="what">Send a prompt to a new session. The harness builds what it sends to the model: the context it could
+    load, then your prompt. The same prompt, twice: once with no store, as a harness on its own, and once connected to
+    Meko, where it loads what Meko returns for the prompt and for the project's standing context (its stack,
+    conventions, constraints and decisions).</p>
+  <label class="what" for="task" style="display:block;margin:0 0 4px">Your prompt</label>
   <input class="text" id="task">
-  <div class="row" style="margin-top:8px"><button class="btn primary" id="begin">Start the new session</button><span class="status" id="st3"></span></div>
+  <div class="row" style="margin-top:8px"><button class="btn primary" id="begin">Send the prompt</button><span class="status" id="st3"></span></div>
   <div class="cols" style="margin-top:10px">
     <div class="box" id="without"><h3>Without Meko</h3><div class="none">Not started.</div></div>
     <div class="box" id="with"><h3>With Meko</h3><div class="none">Not started.</div></div>
@@ -157,9 +158,9 @@ a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}a:
 
 <section class="stepbody" id="p4">
   <h2><span class="n">4</span>Switch the harness</h2>
-  <p class="what">Same project, another tool: a new session in Codex (stand-in), connected to the same datapack. Who
-    wrote what it knows?</p>
-  <div class="row"><button class="btn primary" id="switch">Start a session in Codex</button><span class="status" id="st4"></span></div>
+  <p class="what">Same project, same prompt, another tool: a new session in Codex (stand-in), connected to the same
+    datapack. What does its model receive, and who wrote that context?</p>
+  <div class="row"><button class="btn primary" id="switch">Send the prompt in Codex</button><span class="status" id="st4"></span></div>
   <div class="box" id="codex" style="margin-top:10px"><h3>Codex, with Meko</h3><div class="none">Not started.</div></div>
 </section>
 
@@ -208,7 +209,8 @@ function callsHtml(calls) {
       (c.ok ? esc(c.hits) : 'failed') + '</td><td>' + esc(c.millis) + '</td></tr>').join('') + '</table></details>';
 }
 const factHtml = (f, cls) => '<div class="fact' + (cls ? ' ' + cls : '') + '">' + esc(f.text) + (f.writtenBy ? '<div class="by">written by ' + esc(f.writtenBy)
-  + (f.foundBy ? ' · found by searching for ' + esc(f.foundBy) : '') + '</div>' : '') + '</div>';
+  + (f.foundBy ? ' · found by searching for ' + esc(f.foundBy) : '') + (f.score ? ' · Meko\'s score for the prompt ' + esc(f.score) : '')
+  + (f.reason ? '<br><b>Set aside:</b> ' + esc(f.reason) : '') + '</div>' : '') + '</div>';
 // The steps, in order: each is done by what it did, and Next lights up once the current one is.
 let needsDatapack = false, begun = false, switched = false, current = 0;
 /** The workshop's datapack step, as its use cases have it: the layout, new or existing, and the datapack in use. */
@@ -217,7 +219,7 @@ const FLOW = [
   {id: 'p0', t: 'Create your datapack', done: () => !needsDatapack && dpInUse !== null},
   {id: 'p1', t: 'Session 1, in Claude Code', done: () => sent > 0},
   {id: 'p2', t: 'End the session', done: () => ended && facts.length > 0},
-  {id: 'p3', t: 'A new session', done: () => begun},
+  {id: 'p3', t: 'Send a prompt', done: () => begun},
   {id: 'p4', t: 'Switch the harness', done: () => switched},
   {id: 'p5', t: 'Try it in your own harness', done: () => false}];
 /** The steps shown: step 0 only while no datapack is in use (when it is, the flow starts at session 1). */
@@ -307,20 +309,28 @@ function sessionCard(r, title) {
   const n = r.numbers;
   return '<h3>' + esc(title) + ' <span class="pill">' + esc(r.sessionId) + '</span></h3>' +
     (r.failed ? '<div class="pill bad" style="margin-bottom:6px">' + esc(r.failed) + '</div>' : '') +
-    '<div class="what" style="margin:0 0 4px">Knew before you typed:</div>' +
-    (r.known.length ? r.known.map(f => factHtml(f)).join('') : '<div class="none">Nothing: the session starts empty.</div>') +
-    '<div class="reply"><b>' + esc(r.harness) + ':</b> ' + esc(r.reply) + '</div>' +
+    // What the model receives, exactly as the harness builds it (prompts/harness/model-input.jinja).
+    '<div class="what" style="margin:0 0 2px">What the model receives <span class="pill">about ' + esc(r.modelInputTokens) + ' tokens (estimate)</span></div>' +
+    '<div class="input">' + esc(r.modelInput) + '</div>' +
+    (r.modelReply != null ? '<div class="reply"><b>' + esc(r.model) + ' answered:</b><br>' + esc(r.modelReply) + '</div>'
+      : '<div class="what" style="margin:2px 0 6px">' + esc(r.modelNote || '') + '</div>') +
+    // The right context: what was sent, what was set aside and why, and who decided.
+    (r.relevance ? '<div class="what" style="margin:2px 0 4px"><b>Relevance decided by</b> ' + esc(r.relevance) + '</div>' : '') +
+    (r.known.length ? '<details><summary>Sent: where the context came from (' + r.known.length + ')</summary>' + r.known.map(f => factHtml(f)).join('') + '</details>' : '') +
+    (r.setAside && r.setAside.length ? '<details open><summary>Set aside as not needed for this prompt (' + r.setAside.length + ')</summary>' +
+      r.setAside.map(f => factHtml(f, 'retell')).join('') + '</details>' : '') +
     '<div class="nums">' +
-      '<div class="num"><b>' + n.carried + ' of ' + n.established + '</b><span>facts from session 1 it started with</span></div>' +
-      '<div class="num"><b>' + n.toRetell + '</b><span>facts to tell it again</span></div>' +
+      '<div class="num"><b>' + n.carried + ' of ' + n.established + '</b><span>facts from session 1 sent to the model</span></div>' +
+      (r.withMeko ? '<div class="num"><b>' + (n.setAside || 0) + '</b><span>found, set aside as not needed here</span></div>' : '') +
+      '<div class="num"><b>' + n.toRetell + '</b><span>' + (r.withMeko ? 'not found: to tell it again' : 'facts to tell it again') + '</span></div>' +
       '<div class="num"><b>' + n.wordsToRetype + '</b><span>words to re-type (Meko\'s wording)</span></div></div>' +
     (r.retell.length ? '<details><summary>What you would have to explain again</summary>' + r.retell.map(f => factHtml(f, 'retell')).join('') + '</details>' : '') +
     callsHtml(r.calls);
 }
 
-el('begin').onclick = () => run('st3', 'Starting the new session, twice…', async () => {
+el('begin').onclick = () => run('st3', 'Sending the prompt to a new session, twice…', async () => {
   const task = el('task').value.trim();
-  if (!task) throw new Error('Give the session a task.');
+  if (!task) throw new Error('Type a prompt first.');
   const q = (meko, harness) => api('POST', '/api/sessions/begin?harness=' + encodeURIComponent(harness) + '&meko=' + meko + '&after=' + encodeURIComponent(s1), {task});
   const [a, b] = await Promise.all([q(false, CLAUDE), q(true, CLAUDE)]);
   el('without').innerHTML = sessionCard(a, 'Without Meko');
@@ -329,7 +339,7 @@ el('begin').onclick = () => run('st3', 'Starting the new session, twice…', asy
   return '';
 });
 
-el('switch').onclick = () => run('st4', 'Starting a session in Codex…', async () => {
+el('switch').onclick = () => run('st4', 'Sending the prompt in Codex…', async () => {
   const r = await api('POST', '/api/sessions/begin?harness=' + encodeURIComponent(CODEX) + '&meko=true&after=' + encodeURIComponent(s1), {task: el('task').value.trim()});
   el('codex').innerHTML = sessionCard(r, 'Codex, with Meko');
   switched = true; done('p4'); unlock('p5');

@@ -439,7 +439,7 @@ function showSessions(on) {
   document.querySelector('main section.panel.story').style.display = on ? 'none' : '';
   el('results').style.display = on ? 'none' : '';
   el('sessionsView').hidden = !on;
-  if (on && !el('sessionsFrame').src) el('sessionsFrame').src = '/sessions.html?embedded';
+  if (on && !el('sessionsFrame').src) el('sessionsFrame').src = '/sessions.html?embedded&t=' + Date.now();   // always this start's page
 }
 // The embedded page reports its height: the frame takes it, so the page scrolls as one.
 window.addEventListener('message', e => {

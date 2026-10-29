@@ -1206,7 +1206,7 @@ function render() {
   ['usecase', 'output'].forEach(id => el(id).hidden = startHere);
   document.querySelector('.panel.guide').hidden = startHere;
   el('starthere').hidden = !startHere;
-  if (startHere && !el('startFrame').src) el('startFrame').src = '/sessions.html?embedded&from=workshop';
+  if (startHere && !el('startFrame').src) el('startFrame').src = '/sessions.html?embedded&from=workshop&t=' + Date.now();   // always this start's page
   renderStatus(); renderTabs(); renderUseCase(); renderStepper();
   el('guide').innerHTML = guide();
   renderOutput(); bind(); say(lastMessage);

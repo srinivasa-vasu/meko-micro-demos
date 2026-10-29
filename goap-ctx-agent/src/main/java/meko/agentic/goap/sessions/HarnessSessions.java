@@ -65,7 +65,17 @@ public class HarnessSessions {
         return t;
     });
 
-    public HarnessSessions(MekoMcpClient meko, ContextStores stores, ReceiptLog receipts, OutageSwitch outage) {
+    private final com.embabel.common.textio.template.TemplateRenderer templates;
+    private final meko.agentic.goap.model.LlmTiers models;
+    /** The workshop runs without a model, whatever model settings it is started with: it shows the input only. */
+    private final boolean workshop;
+
+    public HarnessSessions(MekoMcpClient meko, ContextStores stores, ReceiptLog receipts, OutageSwitch outage,
+                           com.embabel.common.textio.template.TemplateRenderer templates, meko.agentic.goap.model.LlmTiers models,
+                           meko.agentic.goap.story.Workshop workshop) {
+        this.workshop = workshop.enabled();
+        this.templates = templates;
+        this.models = models;
         this.meko = meko;
         this.stores = stores;
         this.receipts = receipts;
@@ -187,26 +197,48 @@ public class HarnessSessions {
         String id = (String) start(harness).get("sessionId");
         Facts earlier = earlierSessionId == null ? new Facts(List.of(), true) : sessionFacts(earlierSessionId, harnessOf(earlierSessionId));
         List<Map<String, String>> established = earlier.facts();
-        Recall recall = withMeko ? recall(id, harness, task) : new Recall(Map.of(), true);
-        List<StoreRecord> recalled = List.copyOf(recall.found().keySet());
-        List<Map<String, String>> known = recalled.stream().map(r -> Map.of("text", r.text(), "writtenBy", String.valueOf(r.writtenBy()),
-                "foundBy", recall.found().get(r))).toList();
-        // A fact from the earlier session is carried when the new session's recall returned it (by id, else by text).
-        List<Map<String, String>> carried = established.stream().filter(f -> recalled.stream().anyMatch(r ->
-                (!f.get("id").isBlank() && f.get("id").equals(r.id())) || f.get("text").equals(r.text()))).toList();
-        List<Map<String, String>> retell = established.stream().filter(f -> !carried.contains(f)).toList();
+        Recall recall = withMeko ? recall(id, harness, task) : new Recall(List.of(), true);
+        // The right context: of what Meko returned, what this prompt needs (a model judges in the demo; a rule in the workshop).
+        Selection chosen = withMeko ? select(id, task, recall.found()) : new Selection(List.of(), List.of(), null);
+        List<Map<String, String>> known = chosen.kept().stream().map(Candidate::view).toList();
+        List<Map<String, String>> setAside = chosen.setAside().stream().map(a -> {
+            Map<String, String> v = new LinkedHashMap<>(a.candidate().view());
+            v.put("reason", a.reason());
+            return v;
+        }).toList();
+        // Each of the earlier session's facts: sent to the model, set aside as not needed for this prompt, or not found.
+        List<Map<String, String>> carried = established.stream().filter(f -> chosen.kept().stream().anyMatch(c -> c.is(f))).toList();
+        List<Map<String, String>> notNeeded = established.stream().filter(f -> chosen.setAside().stream().anyMatch(a -> a.candidate().is(f))).toList();
+        List<Map<String, String>> retell = established.stream().filter(f -> !carried.contains(f) && !notNeeded.contains(f)).toList();
         int wordsToRetype = retell.stream().mapToInt(f -> f.get("text").trim().split("\\s+").length).sum();
-        String reply = known.isEmpty()
-                ? "Starting fresh: I have no context from earlier sessions. To " + lower(task) + ", tell me about your stack, your conventions and any decisions I should follow."
-                : "Before you typed, I loaded what this project already knows (" + known.size() + " fact" + (known.size() == 1 ? "" : "s") + "). To "
-                + lower(task) + ", I'll work from those" + (retell.isEmpty() ? "." : "; I still need: " + retell.size() + " more, told again.");
+        // What the harness sends to the model: the context it could load, then the prompt (prompts/harness/model-input).
+        String modelInput = templates.renderLoadedTemplate("harness/model-input",
+                Map.of("harness", harness, "facts", known, "prompt", task)).strip().replaceAll("\n{3,}", "\n\n");
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("sessionId", id);
         out.put("harness", harness);
         out.put("withMeko", withMeko);
         out.put("known", known);
-        out.put("reply", reply);
-        out.put("numbers", Map.of("established", established.size(), "carried", carried.size(), "toRetell", retell.size(), "wordsToRetype", wordsToRetype));
+        out.put("setAside", setAside);
+        if (chosen.decidedBy() != null) out.put("relevance", chosen.decidedBy());
+        out.put("modelInput", modelInput);
+        // An estimate (characters / 4), as the stories estimate context size; the model's own count is in its reply's usage.
+        out.put("modelInputTokens", Math.max(1, modelInput.length() / 4));
+        // Where models are on (the demo, with a key), the model answers exactly this input; where they are off, the input
+        // is what a model would receive.
+        if (workshop) {
+            out.put("modelNote", "The workshop runs without a model: this is the input a model would receive.");
+        } else try {
+            models.answer(id, modelInput, "llm", "slm").ifPresentOrElse(a -> {
+                out.put("model", a.model());
+                out.put("modelReply", a.text());
+            }, () -> out.put("modelNote", models.enabled() ? "No model tier is available: this is the input a model would receive."
+                    : "Models are off here: this is the input a model would receive."));
+        } catch (RuntimeException e) {
+            out.put("modelNote", "The model call failed (" + e.getMessage() + "): this is the input it was sent.");
+        }
+        out.put("numbers", Map.of("established", established.size(), "carried", carried.size(), "setAside", notNeeded.size(),
+                "toRetell", retell.size(), "wordsToRetype", wordsToRetype));
         out.put("retell", retell);
         // A failed Meko call is a failure, not a measurement: the numbers above are incomplete, and say so.
         if (!earlier.ok() || !recall.ok()) out.put("failed", "A Meko call failed, so these numbers are incomplete: see the calls.");
@@ -218,9 +250,102 @@ public class HarnessSessions {
     /** What a session loads at its start besides its task: the project's standing context, as a harness does. */
     static final String PROJECT_CONTEXT = "the project's stack, conventions, constraints and decisions";
 
-    private record Recall(Map<StoreRecord, String> found, boolean ok) {}
+    /**
+     * A fact Meko returned for a new session: which search found it, and Meko's relevance score for the prompt (null
+     * when only the project-context search returned it, or on the stand-in, which has no scores).
+     */
+    record Candidate(String id, String text, String writtenBy, String foundBy, Double score) {
+        Map<String, String> view() {
+            Map<String, String> v = new LinkedHashMap<>(Map.of("text", text, "writtenBy", writtenBy, "foundBy", foundBy));
+            if (score != null) v.put("score", String.format("%.2f", score));
+            return v;
+        }
 
-    private record Searched(List<StoreRecord> rows, boolean ok) {}
+        /** Whether this is the earlier session's fact {@code f}: by id, else by its text. */
+        boolean is(Map<String, String> f) {
+            return (!f.get("id").isBlank() && f.get("id").equals(id)) || f.get("text").equals(text);
+        }
+    }
+
+    private record Recall(List<Candidate> found, boolean ok) {}
+
+    private record Searched(List<Candidate> rows, boolean ok) {}
+
+    /** What was kept for the model, what was set aside and why, and who decided. */
+    record Selection(List<Candidate> kept, List<SetAside> setAside, String decidedBy) {}
+
+    record SetAside(Candidate candidate, String reason) {}
+
+    /** The workshop's rule: a fact is kept when Meko's score for the prompt is at least this share of the top score. */
+    static final double RELATIVE_CUTOFF = 0.7;
+
+    /**
+     * The right context for a prompt. Where a model is available (the demo), it reads what Meko returned and keeps what
+     * the prompt needs, with a reason for each fact it sets aside (prompts/harness/relevance). Otherwise (the workshop,
+     * or no model) a rule decides from Meko's own scores: kept when at least 70% of the top score; a fact only the
+     * project-context search returned is standing context, kept. A model's answer that does not account for every fact
+     * once is not used: the rule decides, and says so.
+     */
+    Selection select(String sessionId, String prompt, List<Candidate> candidates) {
+        if (candidates.isEmpty()) return new Selection(List.of(), List.of(), null);
+        if (!workshop && models.enabled()) {
+            try {
+                String ask = templates.renderLoadedTemplate("harness/relevance", Map.of("prompt", prompt,
+                        "candidates", candidates.stream().map(c -> Map.of("text", c.text(), "score", c.score() == null ? "none" : String.format("%.2f", c.score()))).toList()));
+                var answer = models.answer(sessionId, ask, "slm", "llm");
+                if (answer.isPresent()) {
+                    Selection judged = parseJudgement(answer.get().text(), candidates, answer.get().model());
+                    if (judged != null) return judged;
+                    return byRule(candidates, " (" + answer.get().model() + "'s answer did not account for every fact once)");
+                }
+            } catch (RuntimeException e) {
+                return byRule(candidates, " (the model call failed: " + e.getMessage() + ")");
+            }
+        }
+        return byRule(candidates, "");
+    }
+
+    private Selection byRule(List<Candidate> candidates, String why) {
+        double top = candidates.stream().map(Candidate::score).filter(java.util.Objects::nonNull).mapToDouble(Double::doubleValue).max().orElse(Double.NaN);
+        if (Double.isNaN(top)) {
+            return new Selection(List.copyOf(candidates), List.of(), "rule: no relevance scores to compare (the offline stand-in), so all were kept" + why);
+        }
+        double cutoff = top * RELATIVE_CUTOFF;
+        List<Candidate> kept = new ArrayList<>();
+        List<SetAside> aside = new ArrayList<>();
+        for (Candidate c : candidates) {
+            if (c.score() == null || c.score() >= cutoff) kept.add(c);
+            else aside.add(new SetAside(c, String.format("Meko's score %.2f, below %.0f%% of the top score (%.2f)", c.score(), RELATIVE_CUTOFF * 100, top)));
+        }
+        return new Selection(kept, aside, String.format("rule: kept what scores at least %.0f%% of Meko's top score for the prompt; "
+                + "standing context the project search returned is kept", RELATIVE_CUTOFF * 100) + why);
+    }
+
+    /** A model's choice, if it accounts for every fact exactly once; else null. */
+    Selection parseJudgement(String reply, List<Candidate> candidates, String model) {
+        try {
+            String json = reply.substring(reply.indexOf('{'), reply.lastIndexOf('}') + 1);
+            JsonNode node = meko.objectMapper().readTree(json);
+            java.util.Set<Integer> seen = new java.util.HashSet<>();
+            List<Candidate> kept = new ArrayList<>();
+            List<SetAside> aside = new ArrayList<>();
+            for (JsonNode n : node.path("keep").values()) {
+                int i = n.asInt(-1);
+                if (i < 1 || i > candidates.size() || !seen.add(i)) return null;
+                kept.add(candidates.get(i - 1));
+            }
+            for (JsonNode a : node.path("setAside").values()) {
+                int i = a.path("n").asInt(-1);
+                if (i < 1 || i > candidates.size() || !seen.add(i)) return null;
+                aside.add(new SetAside(candidates.get(i - 1), a.path("reason").asString("not needed for this prompt")));
+            }
+            if (seen.size() != candidates.size()) return null;
+            kept.sort(java.util.Comparator.comparingInt(candidates::indexOf));
+            return new Selection(kept, aside, model + ", reading what Meko returned and the prompt");
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
 
     /**
      * What a new session loads at its start, across every conversation and harness: memory search for its task, and
@@ -228,23 +353,28 @@ public class HarnessSessions {
      * the project's). Both searches run at once; each fact once, with the search that found it first.
      */
     private Recall recall(String sessionId, String harness, String task) {
-        Map<StoreRecord, String> found = new LinkedHashMap<>();
-        var byTask = CompletableFuture.supplyAsync(() -> search(sessionId, harness, task), SEARCHES);
-        var byProject = CompletableFuture.supplyAsync(() -> search(sessionId, harness, PROJECT_CONTEXT), SEARCHES);
+        var byTask = CompletableFuture.supplyAsync(() -> search(sessionId, harness, task, "the prompt", true), SEARCHES);
+        var byProject = CompletableFuture.supplyAsync(() -> search(sessionId, harness, PROJECT_CONTEXT, "the project context", false), SEARCHES);
+        List<Candidate> found = new ArrayList<>();
         boolean ok = true;
-        for (var e : List.of(Map.entry("the task", byTask.join()), Map.entry("the project context", byProject.join()))) {
-            ok &= e.getValue().ok();
-            for (StoreRecord r : e.getValue().rows()) {
-                boolean seen = found.keySet().stream().anyMatch(k -> (!r.id().isBlank() && r.id().equals(k.id())) || r.text().equals(k.text()));
-                if (!seen) found.put(r, e.getKey());
+        // The prompt's own search first: its scores are the prompt's relevance; the project search adds what it missed.
+        for (Searched s : List.of(byTask.join(), byProject.join())) {
+            ok &= s.ok();
+            for (Candidate c : s.rows()) {
+                boolean seen = found.stream().anyMatch(k -> (!c.id().isBlank() && c.id().equals(k.id())) || c.text().equals(k.text()));
+                if (!seen) found.add(c);
             }
         }
         return new Recall(found, ok);
     }
 
-    private Searched search(String sessionId, String harness, String query) {
-        if (!liveMeko()) return new Searched(standIn.searchMemory(sessionId, harness, query, 10), true);
-        List<StoreRecord> rows = new ArrayList<>();
+    /** @param scored whether Meko's scores for this search are the prompt's relevance (the prompt's own search) */
+    private Searched search(String sessionId, String harness, String query, String foundBy, boolean scored) {
+        if (!liveMeko()) {
+            return new Searched(standIn.searchMemory(sessionId, harness, query, 10).stream()
+                    .map(r -> new Candidate(r.id(), r.text(), String.valueOf(r.writtenBy()), foundBy, null)).toList(), true);
+        }
+        List<Candidate> rows = new ArrayList<>();
         boolean ok = timed(sessionId, harness, "memory_search", query, () -> {
             JsonNode payload = meko.callTool("memory_search", meko.args(
                     "query", query,
@@ -255,7 +385,8 @@ public class HarnessSessions {
             for (JsonNode r : meko.rows(payload)) {
                 String text = meko.rowText(r);
                 if (text == null || text.isBlank()) continue;
-                rows.add(new StoreRecord(r.path("id").asString(""), text, r.path("agent_id").asString(""), r.path("created_at").asString(""), null));
+                rows.add(new Candidate(r.path("id").asString(""), text, r.path("agent_id").asString(""), foundBy,
+                        scored && r.path("score").isNumber() ? r.path("score").asDouble() : null));
             }
             return rows.size();
         });
@@ -319,8 +450,4 @@ public class HarnessSessions {
         return text.length() <= 110 ? text : text.substring(0, 110) + "…";
     }
 
-    private static String lower(String task) {
-        String t = task.strip().replaceAll("[.!]+$", "");
-        return t.isEmpty() ? "do this" : Character.toLowerCase(t.charAt(0)) + t.substring(1);
-    }
 }

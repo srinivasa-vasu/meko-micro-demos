@@ -1,0 +1,17 @@
+{# The right context: which of the facts Meko returned does this prompt need? A model judges where one is available
+   (the demo); the workshop decides by rule instead (Meko's score, relative to the top), with no model. The answer's
+   shape is given with placeholders only: an example answer could be copied instead of judged. #}
+You choose the context an AI coding assistant needs for one prompt. Keep only the facts the prompt needs to be done
+well; set the rest aside, each with a short reason. Do not invent facts, and do not rewrite them.
+
+Prompt:
+{{ prompt }}
+
+Facts Meko returned, numbered, with Meko's relevance score for the prompt:
+{% for c in candidates %}
+{{ loop.index }}. {{ c.text }} (score {{ c.score }})
+{% endfor %}
+
+Answer with JSON only, in this shape (the shape only: the numbers and reasons are yours to decide):
+{"keep": [<numbers of the facts to keep>], "setAside": [{"n": <number>, "reason": "<why this prompt does not need it>"}]}
+Every number appears once, in "keep" or in "setAside".

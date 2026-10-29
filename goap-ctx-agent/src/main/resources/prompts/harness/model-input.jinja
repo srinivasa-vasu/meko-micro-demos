@@ -1,0 +1,18 @@
+{# What the harness sends to the model when a new session gets its first prompt: the context it could load, then the
+   prompt. Only the headings are this template's; each context line is what Meko returned, word for word. Who wrote
+   each is shown beside the input on the page, not sent: the model needs the facts, not their provenance. Without a
+   store, a new session has nothing to load. #}
+You are {{ harness }}, an AI assistant working on this project.
+
+{% if facts %}
+Context (loaded from Meko before the prompt):
+{% for fact in facts %}
+- {{ fact.text }}
+{% endfor %}
+{% else %}
+Context:
+(none: a new session starts empty)
+{% endif %}
+
+Prompt:
+{{ prompt }}

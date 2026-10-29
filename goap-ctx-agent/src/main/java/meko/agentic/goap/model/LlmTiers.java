@@ -165,6 +165,25 @@ public class LlmTiers {
         cache.clear();
     }
 
+    /** A model's answer: which model answered, and what it said. */
+    public record Answer(String model, String text) {}
+
+    /**
+     * Sends {@code text} as one user message to the first available tier among {@code preferred}, logged under
+     * {@code caseId} like every model call; empty when models are off or none of the tiers is available.
+     */
+    public java.util.Optional<Answer> answer(String caseId, String text, String... preferred) {
+        if (!enabled()) return java.util.Optional.empty();
+        for (String tier : preferred) {
+            if (!available(tier)) continue;
+            String reply = new OpenAiCompatibleChatModel(tier, tier(tier), log)
+                    .call(new org.springframework.ai.chat.prompt.Prompt(ModelCallLog.caseTag(caseId) + "\n" + text))
+                    .getResult().getOutput().getText();
+            return java.util.Optional.of(new Answer(tier(tier).getModel(), reply == null ? "" : reply.strip()));
+        }
+        return java.util.Optional.empty();
+    }
+
     /** Sends a one-line prompt to every available tier so the first story run doesn't pay Ollama's model-load time. */
     public Map<String, String> warmUp() {
         invalidate();
