@@ -184,7 +184,8 @@ if (new URLSearchParams(location.search).has('embedded')) {
   const report = () => parent.postMessage({sessionsHeight: document.documentElement.scrollHeight}, location.origin);
   new ResizeObserver(report).observe(document.body);
 }
-try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark'; } catch (e) { /* default */ }
+// Stored plain ("light") or as JSON ("\"light\"", as the workshop page used to); inside the workshop, its messages set it.
+try { document.documentElement.dataset.theme = (localStorage.getItem('theme') || 'dark').replace(/"/g, ''); } catch (e) { /* default */ }
 
 const CLAUDE = 'claude_code:payments-api', CODEX = 'codex:payments-api';
 // Examples to start from: the participant edits or replaces them. What Meko keeps is its own extraction of what is sent.
@@ -361,7 +362,9 @@ async function run(statusId, message, work) {
 let needsOwn = false;
 const FROM_WORKSHOP = new URLSearchParams(location.search).get('from') === 'workshop';
 window.addEventListener('message', e => {
-  if (e.origin !== location.origin || !e.data || !e.data.refresh) return;
+  if (e.origin !== location.origin || !e.data) return;
+  if (e.data.theme === 'light' || e.data.theme === 'dark') document.documentElement.dataset.theme = e.data.theme;
+  if (!e.data.refresh) return;
   needsOwn = !!e.data.needsOwn;
   if (e.data.layout) layout = e.data.layout;
   checkDatapack(); loadStatus();
@@ -437,12 +440,15 @@ function renderDp() {
 /** Creates a datapack, or uses an existing one, and tells the workshop around this page (it is the workshop's too). */
 function useDatapack(name, create) {
   return run('st0', (create ? 'Creating ' : 'Switching to ') + name + '…', async () => {
-    await api('POST', '/api/workshop/datapack?name=' + encodeURIComponent(name) + '&create=' + create);
+    // A new one is filed in the workshop's Meko project: under SDLC when it is this use case's own, else under All use cases.
+    const r = await api('POST', '/api/workshop/datapack?name=' + encodeURIComponent(name) + '&create=' + create + (create ? '&group=' + (layout === 'per' ? 'sdlc' : 'all') : ''));
     needsOwn = false; dpModeS = 'new'; dpPickedS = null; dpListS = null;
-    if (window.parent !== window) parent.postMessage({datapackChanged: true}, location.origin);
-    await checkDatapack(); await loadStatus();
+    // The workshop's status comes with the answer: the page around this one uses it rather than asking again.
+    if (window.parent !== window) parent.postMessage({datapackChanged: true, status: r}, location.origin);
+    await Promise.all([checkDatapack(), loadStatus()]);
     current = 1; renderFlow();   // on to session 1, as the workshop moves on once a datapack is in use
-    return (create ? 'Created and using ' : 'Using ') + name + '.';
+    const filed = r.filed ? ' Filed in the ' + r.filed + ' project folder.' : r.fileError ? ' ' + r.fileError : '';
+    return (create ? 'Created and using ' : 'Using ') + name + '.' + filed;
   });
 }
 renderFlow();

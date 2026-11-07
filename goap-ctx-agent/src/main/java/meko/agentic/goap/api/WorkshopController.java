@@ -31,10 +31,13 @@ public class WorkshopController {
     private final boolean models;
     private final KnowledgeDocuments files;
     private final meko.agentic.goap.story.StoryService stories;
+    private final meko.agentic.goap.context.MekoSelfLearning selfLearning;
 
     public WorkshopController(Workshop workshop, StorySeeder seeder, StoryCatalog catalog, ContextStores stores, MekoMcpClient meko,
                               @org.springframework.beans.factory.annotation.Value("${goap.llm.enabled:true}") boolean models,
-                              KnowledgeDocuments files, meko.agentic.goap.story.StoryService stories) {
+                              KnowledgeDocuments files, meko.agentic.goap.story.StoryService stories,
+                              meko.agentic.goap.context.MekoSelfLearning selfLearning) {
+        this.selfLearning = selfLearning;
         this.stories = stories;
         this.files = files;
         this.models = models;
@@ -91,6 +94,7 @@ public class WorkshopController {
     /** Pre-flight: which store the Meko lane uses, and whether it is reachable. */
     @GetMapping("/preflight")
     public Map<String, Object> storeStatus() {
+        warmProject();
         // A datapack deleted in the Meko app is forgotten here, so the page asks for a new one.
         boolean deleted = meko.configured() && !meko.datapackStillExists();
         ContextStore store = stores.forLane(ContextStores.Lane.MEKO);
@@ -138,21 +142,129 @@ public class WorkshopController {
                 .toList();
     }
 
-    /** Step 1: create a fresh datapack (or use an existing one by name), and point the Meko lane at it. */
+    /** The project every datapack created by the workshop is filed into, one folder per vertical. */
+    static final String PROJECT = "meko-workshop";
+    private static final String PROJECT_DESCRIPTION = "Datapacks created by the Meko workshop, by vertical: SDLC (New Session, Same Context) "
+            + "and BFSI (disputes, KYC, the organization learned, lending). A datapack shared by all use cases is in its own folder.";
+    /** The folder for each group the page names: its name and what belongs in it. */
+    private static final Map<String, List<String>> FOLDERS = Map.of(
+            "sdlc", List.of("SDLC", "Workshop datapacks for the SDLC use case: New Session, Same Context (AI assistants)."),
+            "bfsi", List.of("BFSI", "Workshop datapacks for the BFSI use cases: disputes, KYC, the organization learned, lending."),
+            "all", List.of("All use cases", "Workshop datapacks shared by every use case, SDLC and BFSI alike."));
+
+    /**
+     * Step 1: create a fresh datapack (or use an existing one by name), and point the Meko lane at it. A created one is
+     * filed into the workshop's project, in the folder for {@code group} (sdlc, bfsi, or all for one datapack for all
+     * use cases); an existing one is used as it is, wherever it is filed.
+     */
     @PostMapping("/datapack")
     public Map<String, Object> datapack(@org.springframework.web.bind.annotation.RequestParam String name,
                                         @org.springframework.web.bind.annotation.RequestParam(defaultValue = "true") boolean create,
-                                        @org.springframework.web.bind.annotation.RequestParam(required = false) String id) throws Exception {
+                                        @org.springframework.web.bind.annotation.RequestParam(required = false) String id,
+                                        @org.springframework.web.bind.annotation.RequestParam(required = false) String group) throws Exception {
         if (!name.matches("[a-z0-9][a-z0-9-]{2,62}")) {
             throw new IllegalArgumentException("Use 3 to 63 lowercase letters, digits and hyphens, starting with a letter or digit.");
         }
-        // A known id must be the named datapack's, as this key sees them: never one name shown and another datapack used.
-        if (!create && id != null && !id.isBlank() && meko.listDatapacks().stream()
-                .noneMatch(d -> name.equals(d.get("name")) && id.equals(d.get("id")))) {
-            throw new IllegalArgumentException("No datapack " + name + " with that id in this account: choose it again.");
+        if (group != null && !FOLDERS.containsKey(group)) throw new IllegalArgumentException("Unknown group " + group + ": use one of " + FOLDERS.keySet());
+        if (!create) id = existingId(name, id);
+        // Filing is a convenience: the datapack is created and in use either way. The folder is resolved first (usually
+        // already known, from the warm-up), so the datapack is created straight into it.
+        List<String> folder = create && group != null ? FOLDERS.get(group) : null;
+        String folderId = null, fileError = null;
+        if (folder != null) {
+            try {
+                folderId = meko.projectFolder(PROJECT, PROJECT_DESCRIPTION, folder.get(0), folder.get(1));
+            } catch (Exception e) {
+                fileError = e.getMessage();
+            }
         }
-        meko.useDatapack(name, create, id);
-        return status();
+        try {
+            meko.useDatapack(name, create, id, folderId);
+        } catch (IllegalStateException e) {
+            if (folderId == null) throw e;
+            // The folder was refused (deleted in the Meko app, say): nothing was created, so create it unfiled.
+            meko.forgetProject(PROJECT);
+            meko.useDatapack(name, create, id, null);
+            folderId = null;
+            fileError = e.getMessage();
+        }
+        // A datapack created a moment ago holds nothing: its documents and history are known, not searched for.
+        Map<String, Object> r = new LinkedHashMap<>(create ? status(nothing(workshop.documents()), nothing(workshop.historyUseCases())) : status());
+        if (folderId != null) r.put("filed", PROJECT + " / " + folder.get(0));
+        else if (folder != null) r.put("fileError", "Created, but not filed in the " + PROJECT + " project: " + fileError);
+        return r;
+    }
+
+    /**
+     * The id of an existing datapack chosen by name: checked against the account's listing, the one the page showed if
+     * it is recent (a choice made from a list just shown needs no second listing), else a new one.
+     */
+    private String existingId(String name, String id) throws Exception {
+        for (long maxAge : new long[] {LISTING_REUSE_MILLIS, 0}) {
+            for (Map<String, String> d : meko.listDatapacks(maxAge)) {
+                // A known id must be the named datapack's, as this key sees them: never one name shown and another used.
+                if (name.equals(d.get("name")) && (id == null || id.isBlank() || id.equals(d.get("id")))) return d.get("id");
+            }
+        }
+        if (id != null && !id.isBlank()) throw new IllegalArgumentException("No datapack " + name + " with that id in this account: choose it again.");
+        return null;   // not listed: resolved by name, which says what is visible
+    }
+
+    /** How long a listing the page just showed stands for checking a choice from it. */
+    private static final long LISTING_REUSE_MILLIS = 60_000;
+
+    private static Map<String, String> nothing(List<String> keys) {
+        Map<String, String> m = new LinkedHashMap<>();
+        keys.forEach(k -> m.put(k, "missing"));
+        return m;
+    }
+
+    /** The workshop project's lookup, started once, ahead of the first datapack the participant creates. */
+    private final java.util.concurrent.atomic.AtomicBoolean projectWarmed = new java.util.concurrent.atomic.AtomicBoolean();
+
+    private void warmProject() {
+        if (!meko.keyed() || !projectWarmed.compareAndSet(false, true)) return;
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                meko.findProject(PROJECT);
+            } catch (Exception e) {
+                projectWarmed.set(false);   // tried again on the next look; the create resolves it anyway
+            }
+        }, CHECKS);
+    }
+
+    /** The questions a run's agents asked, as the page sends them for a self-learning check. */
+    public record Questions(List<String> questions) {}
+
+    /**
+     * Self-learning: asks the run's questions again through context_search (all sources), and returns the band Meko gave
+     * each with the datapack's quality and to-dos. Only on a live datapack: the stand-in has no search log.
+     */
+    @PostMapping("/selflearning/check")
+    public Map<String, Object> selfLearningCheck(@org.springframework.web.bind.annotation.RequestBody Questions body) throws Exception {
+        Map<String, Object> off = selfLearningOff();
+        if (off != null) return off;
+        if (body == null || body.questions() == null || body.questions().isEmpty()) throw new IllegalArgumentException("No questions to check: run the use case first.");
+        Map<String, Object> r = new LinkedHashMap<>(Map.of("available", true));
+        r.putAll(selfLearning.check(body.questions()));
+        return r;
+    }
+
+    /** Self-learning: replays the weak searches among {@code questions} to see whether what was added since fixed them. */
+    @PostMapping("/selflearning/verify")
+    public Map<String, Object> selfLearningVerify(@org.springframework.web.bind.annotation.RequestBody Questions body) throws Exception {
+        Map<String, Object> off = selfLearningOff();
+        if (off != null) return off;
+        Map<String, Object> r = new LinkedHashMap<>(Map.of("available", true, "replays", selfLearning.verify(body == null ? null : body.questions())));
+        r.putAll(selfLearning.status());
+        return r;
+    }
+
+    /** Why self-learning cannot run here (no live, connected datapack), or null when it can. */
+    private Map<String, Object> selfLearningOff() {
+        boolean live = stores.forLane(ContextStores.Lane.MEKO).kind() == ContextStore.Kind.MEKO_LIVE;
+        if (live && Boolean.TRUE.equals(meko.status().get("connected"))) return null;
+        return Map.of("available", false, "reason", "Self-learning reads the search log of a live Meko datapack: connect one at step 1 (the offline stand-in has none).");
     }
 
     /** A request this application cannot act on (a bad name, an unknown datapack): 400. */

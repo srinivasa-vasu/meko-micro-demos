@@ -19,6 +19,8 @@ svg.i.lg{width:20px;height:20px}
 a{color:var(--blue)}
 :focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+/* The title takes the room left; the status and theme controls stay top right, and wrap below only on narrow screens. */
+header>div:first-child{flex:1 1 480px;min-width:0}header>.row{flex:none}
 .brand{color:var(--accent);font-weight:800;font-size:13px;display:flex;gap:6px;align-items:center}
 h1{font-size:22px;margin:2px 0;letter-spacing:-.01em}
 .sub{color:var(--muted);font-size:13px;max-width:780px}
@@ -127,16 +129,20 @@ code{font:12px ui-monospace,monospace;background:var(--chip);padding:1px 5px;bor
 .detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}
 .box{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);min-width:0}
 .chat{display:flex;flex-direction:column;gap:6px;max-height:460px;overflow:auto;padding-right:4px}
-.bubble{max-width:85%;border-radius:12px;padding:7px 10px;font-size:13px}
+.bubble{max-width:85%;border-radius:12px;padding:7px 10px;font-size:13px;overflow-wrap:anywhere;min-width:0}
 .bubble .who{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:1px}
 .bubble.person{align-self:flex-start;background:var(--cust-bg);border-bottom-left-radius:4px}
 .bubble.agent{align-self:flex-end;background:var(--agent-bg);border-bottom-right-radius:4px}
+/* Records the agents wrote (nobody speaks): a log, full width, not one side of a dialogue. */
+.bubble.record{align-self:stretch;max-width:none;border-radius:8px}
 .chat .sep{align-self:center;font-size:11.5px;color:var(--muted);font-weight:700;margin-top:6px}
 .did{display:flex;gap:8px;font-size:12.5px;padding:6px 8px;border-radius:8px;margin:4px 0;align-items:flex-start}
 .did .k{display:grid;place-items:center;width:22px;height:22px;border-radius:6px;flex:none;background:var(--chip);color:var(--muted)}
 .did.ASK{background:var(--warn-tint)}.did.ASK .k{background:var(--warn-bg);color:var(--warn)}
 .did.REWORK{background:var(--bad-tint)}.did.REWORK .k{background:var(--bad-bg);color:var(--bad)}
 .did.CONTEXT{background:var(--blue-tint)}.did.CONTEXT .k{background:var(--blue-bg);color:var(--blue)}
+/* Plain work: the bare icon, as in the legend; a check in a filled square reads as a checkbox. */
+.did.WORK .k{background:transparent}
 .did .p{font-weight:700}.did .m{margin-left:auto;color:var(--muted);font-size:11px;white-space:nowrap}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-bottom:6px}
 .legend span{display:inline-flex;gap:5px;align-items:center}
@@ -147,7 +153,7 @@ th{color:var(--muted);font-size:11.5px;font-weight:600}
 td.tool{white-space:nowrap}
 .tool span{display:inline-flex;gap:5px;align-items:center;font:11.5px ui-monospace,monospace;border-radius:6px;padding:2px 6px}
 .tool .read{background:var(--blue-bg);color:var(--blue)}.tool .write{background:var(--violet-bg);color:var(--violet)}
-td.fail{color:var(--bad);font-weight:700}
+td.fail{color:var(--bad);font-weight:700}.note.fail{color:var(--bad)}
 .empty{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:13px;margin-top:14px}
 @media(max-width:1000px){.uc{grid-template-columns:minmax(0,1fr)}.reads{border-left:0;padding-left:0}.detail{grid-template-columns:minmax(0,1fr)}.stages,.pillars{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(prefers-reduced-motion:no-preference){.stage,.step .dot,.btn{transition:border-color .15s,background .15s,box-shadow .15s}}
@@ -216,13 +222,22 @@ const PATHS = {
 const icon = (name, cls) => '<svg class="i' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + PATHS[name] + '</svg>';
 
 // ---------------------------------------------------------------- theme (this browser only)
+/** The theme as stored: plain ("light", as the demo page stores it) or JSON ("\"light\"", as this page used to). */
+const storedTheme = () => { try { const v = localStorage.getItem('theme'); return v && v.replace(/"/g, ''); } catch (e) { return null; } };
 function applyTheme(t) {
   document.documentElement.dataset.theme = t;
+  // The New Session page is its own document: it follows this page's theme.
+  const frame = document.getElementById('startFrame');
+  if (frame && frame.contentWindow && frame.src) frame.contentWindow.postMessage({theme: t}, location.origin);
   el('themeBtn').innerHTML = icon(t === 'light' ? 'moon' : 'sun');
   el('themeBtn').title = 'Switch to the ' + (t === 'light' ? 'dark' : 'light') + ' theme';
 }
-applyTheme(keep.get('theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
-el('themeBtn').onclick = () => { const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; applyTheme(t); keep.set('theme', t); };
+applyTheme(storedTheme() || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+el('themeBtn').onclick = () => {
+  const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  applyTheme(t);
+  try { localStorage.setItem('theme', t); } catch (e) { /* not kept */ }
+};
 el('brandMark').insertAdjacentHTML('afterbegin', icon('database'));
 
 // ---------------------------------------------------------------- state
@@ -518,7 +533,8 @@ function guide() {
     ['Create a fresh datapack for the workshop', datapackLines(), datapackForm()],
     ['Run ' + title + ' with no context',
       ['Your datapack is empty: no documents, no earlier memory. The agents still write to Meko during the run, and the next agent can recall it.',
-       'What did the agent know, and what could it still not decide? Do this for each use case: pick its tab at the top, then press Run.'], run],
+       'What did the agent know, and what could it still not decide? Do this for each use case: pick its tab at the top, then press Run.']
+       .concat(live ? ['Then, under the run, press <b>Check with Meko</b>: Meko rates how well your datapack answers the questions the agents asked, and lists what to add.'] : []), run],
     ['Add the documents: policies and standards',
       [live ? 'Press <b>Upload the documents</b>: the app uploads ' + docs.map(([k]) => '<code>' + esc((status.files || {})[k] || k) + '</code>').join(', ')
               + ' from <code>src/main/resources/kb/</code> to your datapack through Meko\'s MCP, and Meko indexes them. (Or upload them yourself in the Meko app.)'
@@ -527,7 +543,8 @@ function guide() {
       '<button class="btn primary" data-act="upload"' + (busy || blocked ? ' disabled' : '') + '>' + icon('upload') + 'Upload the documents</button>' + check +
       (live ? '<button class="btn" data-act="documents"' + (busy || blocked ? ' disabled' : '') + ' title="Promotes a short version of each document instead">Upload failed? Add one-line versions</button>' : '') + wait],
     ['Run ' + title + ' with shared knowledge',
-      ['Which steps disappeared? Under Shared knowledge, what did Meko return, and under Right context, what did the agent set aside?', 'Did the outcome change?'], run],
+      ['Which steps disappeared? Under Shared knowledge, what did Meko return, and under Right context, what did the agent set aside?', 'Did the outcome change?']
+       .concat(live ? ['Under Self-learning, press <b>Replay earlier weak searches</b>: did the documents move them from low to high?'] : []), run],
     ['Add last quarter\'s reviews',
       ['Another desk\'s agent reviewed this customer last quarter, in its own application, and wrote the reviews to memory. Press <b>Add their reviews</b> to put them in your datapack as that agent wrote them: one is the right review to compare with, two are look-alikes.',
        'Now: ' + esc(reviewsState(status.history[selected])) + '.'],
@@ -799,14 +816,16 @@ function renderOutput() {
       '<div class="detail">' +
       '<div class="box"><h3>' + icon('user') + 'Conversation</h3><div class="chat">' + conversationHtml(r) + '</div></div>' +
       '<div class="box"><h3>' + icon('play') + 'What the agents did</h3>' +
-        '<div class="legend"><span>' + icon('ask') + 'asked someone</span><span>' + icon('redo') + 'redid work</span><span>' + icon('database') + 'used context</span></div>' +
+        '<div class="legend"><span>' + icon('check') + 'did the work</span><span>' + icon('ask') + 'asked someone</span><span>' + icon('redo') + 'redid work</span><span>' + icon('database') + 'used context</span></div>' +
         (r.steps || []).map(stepHtml).join('') + '</div>' +
       '<div class="box" style="grid-column:1 / -1">' + callsHtml(r.calls || []) + '</div>' +
+      (status.store.live && status.store.connected ? '<div class="box" style="grid-column:1 / -1">' + learningHtml(r) + '</div>' : '') +
       '</div>';
   }
   const audit = audits[selected] && audits[selected][shown];
   el('output').innerHTML = track + detail + (audit ? auditHtml(c, audit) : '');
   document.querySelectorAll('[data-stage]').forEach(b => b.onclick = () => { shown = Number(b.dataset.stage); renderOutput(); });
+  document.querySelectorAll('[data-learn]').forEach(b => b.onclick = () => learn(b.dataset.learn));
 }
 
 /** One stage: which layers of context it had, its verdict, its numbers and the change from the stage before. */
@@ -908,7 +927,7 @@ function conversationHtml(r) {
   const records = (r.written || []).filter(w => w.kind === 'record');
   if (!records.length) return '<div class="note">Nothing said or recorded in this run.</div>';
   return '<div class="note" style="margin-bottom:6px">Nobody speaks in this use case: these are the records the agents wrote to the case\'s conversation in Meko.</div>' +
-    records.map(w => '<div class="bubble agent"><div class="who">' + esc(w.agent) + ' · ' + esc(String(w.label || '').replace(/^.*? · /, '')) + '</div>' + esc(w.text) + '</div>').join('');
+    records.map(w => '<div class="bubble agent record"><div class="who">' + esc(w.agent) + ' · ' + esc(String(w.label || '').replace(/^.*? · /, '')) + '</div>' + esc(w.text) + '</div>').join('');
 }
 
 /** A line of the conversation as a chat bubble: the person on the left, the agents on the right. */
@@ -919,7 +938,8 @@ function lineHtml(l) {
 }
 
 function stepHtml(s) {
-  const k = {ASK: 'ask', REWORK: 'redo', CONTEXT: 'database'}[s.kind] || 'dot';
+  // Useful work (WORK) gets a check: a bare dot read as a missing icon beside the others.
+  const k = {ASK: 'ask', REWORK: 'redo', CONTEXT: 'database'}[s.kind] || 'check';
   return '<div class="did ' + esc(s.kind) + '"><span class="k">' + icon(k) + '</span><span><span class="p">' + esc(s.persona) + '.</span> ' + esc(s.text) + '</span><span class="m">' + esc(s.minutes) + ' min</span></div>';
 }
 
@@ -933,6 +953,81 @@ function callsHtml(calls) {
     calls.map(x => '<tr><td>' + esc(x.agent) + '</td><td class="tool"><span class="' + (READS.has(x.tool) ? 'read' : 'write') + '">' + icon(READS.has(x.tool) ? 'read' : 'write') + esc(x.tool) + '</span></td>' +
       '<td>' + esc(x.detail) + '</td><td' + (x.ok ? '' : ' class="fail"') + '>' + (x.ok ? esc(x.hits) : 'failed') + '</td><td>' + esc(x.millis) + '</td></tr>').join('') +
     '</tbody></table>';
+}
+
+// ---------------------------------------------------------------- self-learning: Meko on the run's questions
+/**
+ * The questions a run's agents searched Meko with, as its receipts record them. Searches scoped to the run's own case
+ * are left out: they are about this run's case, not what the datapack covers.
+ */
+function questionsOf(receipts) {
+  const qs = receipts.filter(x => x.tool === 'memory_search' || x.tool === 'knowledgebase_search')
+    .map(x => String(x.detail || '').replace(/^\[cached in this run\] /, ''))
+    .filter(q => q && !q.startsWith('[this case]'));
+  return [...new Set(qs)].slice(0, 8);
+}
+/** A run kept before questions were: what its (shortened) calls still say. */
+const runQuestions = r => r.questions || questionsOf(r.calls || []);
+const learning = {};   // use case id + stage → {check, replays, error, busy}
+const learnKey = () => selected + ':' + shown;
+const BAND = {high: 'ok', mid: '', low: 'warn'};
+const bandPill = b => '<span class="pill ' + (BAND[b] ?? '') + '">' + esc(b || '?') + '</span>';
+/** The questions of this use case's earlier stages: what a replay checks again now that more context is in. */
+const earlierQuestions = () => [...new Set(Object.keys(runs[selected] || {}).map(Number).filter(s => s < shown)
+  .flatMap(s => runQuestions(runs[selected][s])))];
+
+function learningHtml(r) {
+  const L = learning[learnKey()] || {};
+  const qs = runQuestions(r), earlier = earlierQuestions();
+  let h = '<h3>' + icon('bulb') + 'Self-learning: how well your datapack answers this run <span class="count">' + qs.length + ' questions</span></h3>' +
+    '<p class="note">Meko rates every search made through <code>context_search</code> and lists what to add. <b>Check with Meko</b> asks this run\'s questions again that way, across memory, knowledge and conversations' +
+    (earlier.length ? '; <b>Replay earlier weak searches</b> re-runs the ones an earlier stage\'s check found weak, to show whether what you added since fixed them' : '') +
+    '. Each is a real search against your Meko search limit; the agents\' own run is not changed.</p>' +
+    '<div class="row"><button class="btn" data-learn="check"' + (L.busy || !qs.length ? ' disabled' : '') + '>' + icon('refresh') + (L.check ? 'Check again' : 'Check with Meko') + '</button>' +
+    (earlier.length ? '<button class="btn" data-learn="verify"' + (L.busy ? ' disabled' : '') + '>' + icon('redo') + 'Replay earlier weak searches</button>' : '') +
+    (L.busy ? '<span class="note">' + esc(L.busy) + '</span>' : '') + (L.error ? '<span class="note fail">' + esc(L.error) + '</span>' : '') + '</div>';
+  if (L.check) {
+    h += '<table><thead><tr><th>Question the agents asked</th><th>Meko rated it</th><th>Found in</th><th>Meko\'s hint</th></tr></thead><tbody>' +
+      L.check.checks.map(x => '<tr><td>' + esc(x.question) + '</td><td>' + bandPill(x.quality) + '</td><td>' +
+        esc([x.memory && x.memory + ' memory', x.knowledge && x.knowledge + ' knowledge', x.conversation && x.conversation + ' conversation'].filter(Boolean).join(', ') || 'nothing') +
+        '</td><td>' + esc(x.hint) + '</td></tr>').join('') + '</tbody></table>';
+  }
+  if (L.replays) {
+    h += L.replays.length
+      ? '<table><thead><tr><th>Earlier weak search</th><th>Before</th><th>Now</th><th>Meko says</th></tr></thead><tbody>' +
+        L.replays.map(x => '<tr><td>' + esc(x.question) + '</td><td>' + bandPill(x.before) + '</td><td>' + bandPill(x.after) + '</td><td>' +
+          esc(x.outcome + (x.hint ? ': ' + x.hint : '') + (x.indexing ? ' (a document is still indexing: replay again shortly)' : '')) + '</td></tr>').join('') + '</tbody></table>'
+      : '<p class="note">No weak searches to replay: press <b>Check with Meko</b> on an earlier stage\'s run first, or every earlier search is already fixed.</p>';
+  }
+  const S = L.replays ? L.status : L.check;
+  if (S && S.quality) {
+    h += '<div class="sum" style="margin-top:10px"><span class="pill ok">Datapack quality: <b>' + esc(S.quality.pct) + '%</b> of ' + esc(S.quality.searches) + ' searches found a strong match</span>' +
+      (S.quality.potential > S.quality.pct ? '<span class="pill">' + esc(S.quality.potential) + '% once the to-dos are done</span>' : '') + '</div>' +
+      (S.todos || []).map(t => '<div class="note"><b>' + esc(t.title) + '</b> (' + esc(t.searches) + ' searches): ' + esc(t.why) +
+        (t.examples.length ? ' For example: ' + t.examples.map(esc).join('; ') + '.' : '') + '</div>').join('');
+  }
+  return h;
+}
+
+/** Runs a self-learning check or replay for the run shown; it changes nothing the agents use. */
+async function learn(what) {
+  const key = learnKey(), r = (runs[selected] || {})[shown];
+  if (!r) return;
+  const L = learning[key] = Object.assign(learning[key] || {}, {busy: what === 'check' ? 'Asking Meko…' : 'Replaying…', error: null});
+  renderOutput();
+  try {
+    const res = await fetch('/api/workshop/selflearning/' + what, {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({questions: what === 'check' ? runQuestions(r) : earlierQuestions()})});
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || res.statusText);
+    if (!body.available) throw new Error(body.reason);
+    if (what === 'check') L.check = body;
+    else { L.replays = body.replays; L.status = body; }
+  } catch (e) {
+    L.error = e.message;
+  }
+  L.busy = null;
+  renderOutput();
 }
 
 function auditHtml(c, a) {
@@ -1010,6 +1105,7 @@ function keepRun(list, headline) {
     written: list.flatMap(r => (r.written || []).filter(w => w.kind !== 'turn').map(w => ({agent: w.agent, kind: w.kind, label: w.label, text: cut(w.text, 400)}))).slice(0, 60),
     passed: list.flatMap(r => r.passedOver.map(p => ({text: cut(p.text, 200), reason: p.reason}))).slice(0, 20),
     calls: list.flatMap(r => r.receipts.map(x => ({agent: x.agent, tool: x.tool, detail: cut(x.detail, 160), hits: x.hits, ok: x.ok, millis: x.millis}))).slice(0, 200),
+    questions: questionsOf(list.flatMap(r => r.receipts)),
     // Each decision the agents made, as traced to the record: the question, the answer, who decided and on how much context.
     traces: list.flatMap(r => (r.decisions || []).map(d => ({gate: d.gate, persona: d.persona, question: cut(d.question, 260), answer: cut(d.answer, 600),
       decidedBy: cut(d.decidedBy, 200), context: d.context, byModel: d.byModel, basis: basisOf(d.read, r)}))).slice(0, 30)};
@@ -1136,7 +1232,8 @@ function bind() {
     const name = create ? el('dpName').value.trim() : (picked ? picked.value : '');
     if (!name) { say('Pick a datapack from the list first.'); return; }
     busyWith((create ? 'Creating ' : 'Switching to ') + name + '…', async () => {
-      const r = await fetch('/api/workshop/datapack?name=' + encodeURIComponent(name) + '&create=' + create, {method: 'POST'});
+      // A new one is filed in the workshop's Meko project: under BFSI when it is this use case's own, else under All use cases.
+      const r = await fetch('/api/workshop/datapack?name=' + encodeURIComponent(name) + '&create=' + create + (create ? '&group=' + (perCase() ? 'bfsi' : 'all') : ''), {method: 'POST'});
       const body = await r.json();
       if (!r.ok) throw new Error(body.error || r.statusText);
       status = body;
@@ -1152,7 +1249,8 @@ function bind() {
       shown = null;
       if (pairOn() && pair.role === 'apac') await refreshLesson();
       if (status.store.live && status.store.connected) resume();   // the first step this datapack still needs
-      return (create ? 'Created and using ' : 'Using ') + name + '. ' + datapackNote();
+      const filed = body.filed ? ' Filed in the ' + body.filed + ' project folder.' : body.fileError ? ' ' + body.fileError : '';
+      return (create ? 'Created and using ' : 'Using ') + name + '.' + filed + ' ' + datapackNote();
     });
   });
 }
@@ -1174,7 +1272,8 @@ const SESSIONS = 'new-session';
 /** Tells the New Session page to look again at the datapack in use, and whether it needs one of its own (per use case). */
 function tellSessions() {
   const frame = el('startFrame');
-  if (frame.contentWindow && frame.src) frame.contentWindow.postMessage({refresh: true, layout, needsOwn: perCase() && !dpMap[SESSIONS]}, location.origin);
+  if (frame.contentWindow && frame.src) frame.contentWindow.postMessage({refresh: true, layout, needsOwn: perCase() && !dpMap[SESSIONS],
+    theme: document.documentElement.dataset.theme}, location.origin);
 }
 el('startFrame').addEventListener('load', tellSessions);
 
@@ -1189,13 +1288,15 @@ window.addEventListener('message', e => {
   }
   // A datapack created there: New Session's own (per use case), or the workshop's (one for all), with its runs.
   if (e.data.datapackChanged) {
-    fetch('/api/workshop/status').then(r => r.json()).then(st => {
+    // The status the change answered with, when it came with it: no second round of searches.
+    (e.data.status && e.data.status.store ? Promise.resolve(e.data.status) : fetch('/api/workshop/status').then(r => r.json())).then(st => {
       status = st;
       if (perCase()) dpMap[SESSIONS] = {name: status.store.datapack, id: status.store.datapackId};
       choosing = false; suggested = null;
       loadRuns(status.store.contextId);
       if (!busy) openUseCase();
-      save(); render(); tellSessions();
+      // Not told to refresh: the New Session page just did, and now has a datapack of its own.
+      save(); render();
     });
   }
 });

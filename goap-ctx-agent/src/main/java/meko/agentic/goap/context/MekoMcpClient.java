@@ -241,17 +241,26 @@ public class MekoMcpClient {
      * wrong id is caught like a deleted datapack, by {@link #datapackStillExists}.
      */
     public String useDatapack(String name, boolean create, String knownId) throws Exception {
+        return useDatapack(name, create, knownId, null);
+    }
+
+    /**
+     * As {@link #useDatapack(String, boolean, String)}; a datapack created with {@code folderId} is created straight into
+     * that project folder (one call, rather than create and then file).
+     */
+    public String useDatapack(String name, boolean create, String knownId, String folderId) throws Exception {
         if (!properties.keyed()) throw new IllegalStateException("No Meko API key: set MEKO_API_KEY and restart.");
         // Writes still queued for the datapack in use finish first, outside this client's lock: a queued writer may need
         // the lock itself (re-initialising an expired MCP session), so draining under it could wait forever.
         beforeSwitch.forEach(Runnable::run);
-        return switchTo(name, create, knownId);
+        return switchTo(name, create, knownId, folderId);
     }
 
-    private synchronized String switchTo(String name, boolean create, String knownId) throws Exception {
+    private synchronized String switchTo(String name, boolean create, String knownId, String folderId) throws Exception {
         String created = null;
         if (create) {
-            JsonNode result = callTool("datapack_create", args("name", name, "conversation_id", lookupConversation()));
+            listed = null;   // the account now holds one more
+            JsonNode result = callTool("datapack_create", args("name", name, "folder_id", folderId, "conversation_id", lookupConversation()));
             for (String path : List.of("datapack_id", "id")) {
                 if (result.path(path).isString()) created = result.path(path).asString();
             }
@@ -305,6 +314,7 @@ public class MekoMcpClient {
     }
 
     private void forgetDeleted() {
+        listed = null;
         datapackId = null;
         properties.setDatapackId(null);
         properties.setDatapackName(null);
@@ -315,6 +325,17 @@ public class MekoMcpClient {
     /** Forgets when the datapack was last confirmed, so the next check asks Meko (tests). */
     void expireConfirmation() {
         confirmedAt = 0;
+    }
+
+    /** The last listing, and when: a choice made from a list just shown is checked against it, not a new listing. */
+    private volatile List<Map<String, String>> listed;
+    private volatile long listedAt;
+
+    /** The datapacks this key can see, as last listed if that was at most {@code maxAgeMillis} ago. */
+    public List<Map<String, String>> listDatapacks(long maxAgeMillis) throws Exception {
+        List<Map<String, String>> last = listed;
+        if (last != null && System.currentTimeMillis() - listedAt <= maxAgeMillis) return last;
+        return listDatapacks();
     }
 
     /** The datapacks this key can see: name, id and when each was created. */
@@ -328,7 +349,103 @@ public class MekoMcpClient {
                     "created", row.path("created_at").asString(""), "grant", row.path("grant").asString(""),
                     "owner", row.path("datapack_owner_name").asString("")));
         }
+        listed = List.copyOf(out);
+        listedAt = System.currentTimeMillis();
         return out;
+    }
+
+    /** Project and folder ids already found or created, by "project" and "project/folder": one lookup per start. */
+    private final Map<String, String> projectIds = new ConcurrentHashMap<>();
+
+    /**
+     * Files a datapack into a folder of one of this key's own projects, creating the project and the folder the first
+     * time. Only projects this key owns are looked at: a shared project of the same name is never written to.
+     */
+    public synchronized void fileInProject(String datapackId, String project, String projectDescription,
+                                           String folder, String folderDescription) throws Exception {
+        String folderId = projectFolder(project, projectDescription, folder, folderDescription);
+        try {
+            callTool("project_add_datapack", args("datapack_id", datapackId, "folder_id", folderId, "conversation_id", lookupConversation()));
+        } catch (Exception e) {
+            forgetProject(project);
+            throw e;
+        }
+    }
+
+    /** Forgets a project's ids: it may have been deleted in the Meko app, so it is looked up afresh next time. */
+    public void forgetProject(String project) {
+        projectIds.keySet().removeIf(k -> k.equals(project) || k.startsWith(project + "/"));
+    }
+
+    /**
+     * Looks up an owned project and its folders, creating nothing, so a later {@link #projectFolder} for a folder that
+     * exists costs no call. A warm-up: run before the participant creates a datapack.
+     */
+    public synchronized void findProject(String project) throws Exception {
+        if (projectIds.containsKey(project)) return;
+        String conversation = lookupConversation();
+        String projectId = ownedProject(project, conversation);
+        if (projectId == null) return;
+        projectIds.put(project, projectId);
+        for (JsonNode row : callTool("project_describe", args("project_id", projectId, "conversation_id", conversation)).path("folders").values()) {
+            String id = row.path("folder_id").asString("");
+            if (!id.isBlank()) projectIds.put(project + "/" + row.path("folder_name").asString(""), id);
+        }
+    }
+
+    /** The id of a folder in one of this key's own projects, creating the project and the folder the first time. */
+    public synchronized String projectFolder(String project, String projectDescription,
+                                             String folder, String folderDescription) throws Exception {
+        String conversation = lookupConversation();
+        String projectId = projectIds.get(project);
+        if (projectId == null) {
+            projectId = ownedProject(project, conversation);
+            if (projectId == null) {
+                JsonNode created = callTool("project_create", args("project_name", project, "description", projectDescription,
+                        "folders", List.of(folder), "conversation_id", conversation));
+                projectId = firstText(created, "project_id", "id");
+                if (projectId == null) projectId = firstText(created.path("project"), "project_id", "id");
+                if (projectId == null) projectId = ownedProject(project, conversation);
+                if (projectId == null) throw new IllegalStateException("project_create gave no id for " + project + ": " + created);
+            }
+            projectIds.put(project, projectId);
+        }
+        String folderId = projectIds.get(project + "/" + folder);
+        if (folderId == null) {
+            folderId = folderIn(projectId, folder, conversation);
+            if (folderId == null) {
+                JsonNode created = callTool("project_folder_create", args("project_id", projectId, "folder_name", folder,
+                        "description", folderDescription, "conversation_id", conversation));
+                folderId = firstText(created, "folder_id", "id");
+                if (folderId == null) folderId = firstText(created.path("folder"), "folder_id", "id");
+                if (folderId == null) folderId = folderIn(projectId, folder, conversation);
+                if (folderId == null) throw new IllegalStateException("project_folder_create gave no id for " + folder + ": " + created);
+            }
+            projectIds.put(project + "/" + folder, folderId);
+        }
+        return folderId;
+    }
+
+    private String ownedProject(String name, String conversation) throws Exception {
+        for (JsonNode row : callTool("project_list", args("conversation_id", conversation)).path("owned").values()) {
+            if (name.equals(row.path("project_name").asString(""))) return row.path("project_id").asString();
+        }
+        return null;
+    }
+
+    private String folderIn(String projectId, String folder, String conversation) throws Exception {
+        JsonNode described = callTool("project_describe", args("project_id", projectId, "conversation_id", conversation));
+        for (JsonNode row : described.path("folders").values()) {
+            if (folder.equals(row.path("folder_name").asString(""))) return row.path("folder_id").asString();
+        }
+        return null;
+    }
+
+    private static String firstText(JsonNode node, String... names) {
+        for (String name : names) {
+            if (node.path(name).isString() && !node.path(name).asString().isBlank()) return node.path(name).asString();
+        }
+        return null;
     }
 
     /** datapack_list and datapack_create need a conversation id even though no datapack is chosen yet. */

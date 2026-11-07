@@ -4,6 +4,12 @@ server:
 spring:
   application:
     name: goap-ctx-agent
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          # The pages change with the app: browsers check for a newer page on every load, so none is served stale.
+          no-cache: true
   config:
     # Effort estimates (minutes) for every story step: illustrative assumptions, with the basis for each.
     import: classpath:effort/estimates.yml
@@ -15,7 +21,7 @@ meko:
   enabled: ${MEKO_ENABLED:true}
   api-key: ${MEKO_API_KEY:}
   datapack-id: ${MEKO_DATAPACK_ID:}
-  datapack-name: ${MEKO_DATAPACK_NAME:meko-goap}
+  datapack-name: ${MEKO_DATAPACK_NAME:meko-workshop}
   mcp-url: ${MEKO_MCP_URL:https://mcp.mekodata.ai/mcp}
   client-name: ${spring.application.name}
 
