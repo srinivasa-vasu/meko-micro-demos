@@ -1,8 +1,9 @@
 # Meko micro demos
 
 Small, self-contained Spring Boot apps that show what [Meko](https://mekodata.ai/) adds to AI agents: memory,
-knowledge and decision traces that persist across runs and are shared across agents and system boundaries. Two of the
-demos plan with [Embabel](https://github.com/embabel/embabel-agent) GOAP; the third is a console for Meko's MCP tools.
+knowledge and decision traces that persist across runs and are shared across agents and system boundaries. Three of the
+demos plan with [Embabel](https://github.com/embabel/embabel-agent) GOAP, one of them on [YugabyteDB AMP](https://www.yugabyte.com/amp/)
+branches; the fourth is a console for Meko's MCP tools.
 
 Each demo is its own Maven project with its own README. Start there for the details.
 
@@ -10,9 +11,10 @@ Each demo is its own Maven project with its own README. Start there for the deta
 |---|---|---|
 | [`goap-ctx-agent`](goap-ctx-agent/README.md) | Five agent workflows across system boundaries, run side by side without Meko, with your own database, and with Meko. The same agents and the same GOAP planner; only the context changes. | 8080 |
 | [`support-ctx-agent`](support-ctx-agent/README.md) | An AI SRE incident commander. Memory is consulted first and decides how much telemetry is read, which model tier is used, and whether a model is needed at all. Every run reports its cost against the no-memory baseline. | 8081 |
+| [`release-ctx-agent`](release-ctx-agent/README.md) | Meko × YugabyteDB AMP workshop, two use cases. Rehearse before you release: an agent branches `main` on AMP (no ticket, zero-copy) and rehearses a pull request's migrations using the standard and other teams' incidents and critical queries from Meko. Undo a bad batch job: an agent branches `main` as of the scheduler's recorded position and repairs only the rows the job changed. Every decision is on a record in Meko. | 8082 |
 | [`meko-console`](meko-console/README.md) | A debugging console for Meko's MCP surface. Call any tool and see exactly what was sent and what came back. | 8090 |
 
-Each demo has its own port, so all three can run at once. All of them read the Meko key from `MEKO_API_KEY`.
+Each demo has its own port, so all of them can run at once. All of them read the Meko key from `MEKO_API_KEY`.
 
 ## Requirements
 
@@ -53,6 +55,7 @@ demo's README.
 
 ```
 goap-ctx-agent/      Embabel GOAP stories, with and without Meko
+release-ctx-agent/   Meko × AMP: rehearse a release, undo a bad batch job
 support-ctx-agent/   Incident commander: memory-first planning and cost reporting
 meko-console/        Meko MCP debugging console
 ```

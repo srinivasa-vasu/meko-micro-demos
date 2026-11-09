@@ -1,0 +1,41 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: release-ctx-agent
+  web:
+    resources:
+      cache:
+        cachecontrol:
+          # The page changes with the app: browsers check for a newer one on every load.
+          no-cache: true
+
+meko:
+  enabled: ${MEKO_ENABLED:true}
+  api-key: ${MEKO_API_KEY:}
+  datapack-id: ${MEKO_DATAPACK_ID:}
+  # Empty: the datapack is created or chosen on the page, as in the other workshops.
+  datapack-name: ${MEKO_DATAPACK_NAME:}
+  mcp-url: ${MEKO_MCP_URL:https://mcp.mekodata.ai/mcp}
+  client-name: ${spring.application.name}
+
+release:
+  # The organization's shared datapack to read besides the release team's own (other teams' incidents and critical
+  # queries), by name. Empty: connected on the page.
+  shared-datapack: ${MEKO_SHARED_DATAPACK:}
+
+amp:
+  # An existing cluster of the datapack, and its admin password (AMP shows a password only when it creates the cluster).
+  cluster-id: ${AMP_CLUSTER_ID:}
+  password: ${AMP_PASSWORD:}
+  database: checkout
+  # Years of checkout history on main: large enough that a table rewrite and an index build are measurable.
+  seed-customers: ${AMP_SEED_CUSTOMERS:100000}
+  seed-orders: ${AMP_SEED_ORDERS:1000000}
+  ready-seconds: 420
+
+embabel:
+  models:
+    # Deterministic placeholder registered in DeterministicLlmConfig; no provider key needed.
+    default-llm: deterministic-placeholder

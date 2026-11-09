@@ -1,0 +1,1331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rehearse Before You Release</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ------------------------------------------------------------------ theme: follows the system, the toggle overrides */
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --surface-2: #f7f9fb; --sunken: #eef2f5; --ink: #13202b; --ink-2: #2f3e4c; --muted: #5d6c7b; --line: #dfe5eb;
+  --accent: #0b7d5d; --accent-ink: #ffffff; --accent-soft: #e1f3ec; --warn: #9a6200; --warn-soft: #fbf0d9; --bad: #bf3b31; --bad-soft: #fbe6e3;
+  --info: #2b5fbf; --info-soft: #e4ecfa; --violet: #5a46c4; --shadow: 0 1px 2px rgba(19, 32, 43, .05), 0 6px 20px rgba(19, 32, 43, .05);
+  --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a1016; --surface: #111a23; --surface-2: #0e161e; --sunken: #0c131a; --ink: #e8eef4; --ink-2: #c3cfda; --muted: #8b9bab; --line: #213040;
+    --accent: #6ee0b8; --accent-ink: #052016; --accent-soft: rgba(110, 224, 184, .13); --warn: #f2c46b; --warn-soft: rgba(242, 196, 107, .13);
+    --bad: #ff8f8f; --bad-soft: rgba(255, 143, 143, .13); --info: #8fb8ff; --info-soft: rgba(143, 184, 255, .13); --violet: #c4b2ff;
+    --shadow: 0 0 0 1px rgba(255, 255, 255, .02), 0 8px 28px rgba(0, 0, 0, .35); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a1016; --surface: #111a23; --surface-2: #0e161e; --sunken: #0c131a; --ink: #e8eef4; --ink-2: #c3cfda; --muted: #8b9bab; --line: #213040;
+  --accent: #6ee0b8; --accent-ink: #052016; --accent-soft: rgba(110, 224, 184, .13); --warn: #f2c46b; --warn-soft: rgba(242, 196, 107, .13);
+  --bad: #ff8f8f; --bad-soft: rgba(255, 143, 143, .13); --info: #8fb8ff; --info-soft: rgba(143, 184, 255, .13); --violet: #c4b2ff;
+  --shadow: 0 0 0 1px rgba(255, 255, 255, .02), 0 8px 28px rgba(0, 0, 0, .35); color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------ base */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14.5px/1.55 var(--body); -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--display); letter-spacing: -.015em; margin: 0; }
+h2 { font-size: 24px; line-height: 1.2; }
+h3 { font-size: 16px; margin: 18px 0 8px; }
+p { margin: 0; }
+a { color: var(--info); }
+code { font: 12.5px var(--mono); background: var(--sunken); border: 1px solid var(--line); padding: 1px 5px; border-radius: 6px; }
+:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 6px; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+
+/* ------------------------------------------------------------------ layout */
+.app { display: grid; grid-template-columns: 280px minmax(0, 1fr) 340px; min-height: calc(100vh - 78px); }
+.side { position: sticky; top: 0; height: 100vh; overflow: auto; border-right: 1px solid var(--line); background: var(--surface); padding: 22px 18px; display: flex; flex-direction: column; gap: 18px; }
+.main { padding: 22px clamp(16px, 2.5vw, 40px) 60px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.insight { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 22px 20px; border-left: 1px solid var(--line); background: var(--surface-2); display: flex; flex-direction: column; gap: 16px; }
+@media (max-width: 1360px) {
+  .app { grid-template-columns: 260px minmax(0, 1fr); }
+  .side { grid-row: span 2; align-self: start; }
+  .insight { position: static; height: auto; grid-column: 2; border-left: 0; border-top: 1px solid var(--line); padding: 20px clamp(16px, 2.5vw, 40px) 40px; display: grid; grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 960px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { grid-row: auto; }
+  .uctab { min-width: 170px; }
+  .side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 14px 16px; gap: 12px; }
+  .insight { grid-column: 1; grid-template-columns: 1fr; }
+  .steps { flex-direction: row !important; overflow-x: auto; padding-bottom: 4px; }
+  .steps .stp { flex: 0 0 auto; }
+  .steps .stp .sub, .env { display: none !important; }
+}
+
+/* ------------------------------------------------------------------ sidebar */
+.brand .k { font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.brand h1 { font-size: 21px; line-height: 1.15; margin-top: 4px; }
+.brand p { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+/* ------------------------------------------------------------------ top bar: one tab per use case */
+.topnav { display: flex; align-items: stretch; gap: 18px; padding: 0 clamp(12px, 2vw, 24px); background: var(--surface); border-bottom: 1px solid var(--line); min-height: 78px; }
+.topnav .mark { align-self: center; flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink); font: 800 13px var(--display); letter-spacing: -.02em; }
+.topnav .brandtxt { align-self: center; flex: none; font: 700 13px var(--display); line-height: 1.25; }
+.topnav .brandtxt small { display: block; font: 500 11.5px var(--body); color: var(--muted); }
+.uctabs { display: flex; gap: 4px; overflow-x: auto; flex: 1; align-items: stretch; scrollbar-width: thin; }
+.uctab { position: relative; flex: 1 1 0; min-width: 180px; max-width: 300px; display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px;
+  align-items: center; padding: 10px 14px; border: 0; background: transparent; color: var(--ink); cursor: pointer; font: inherit; text-align: left; border-radius: 12px 12px 0 0; }
+.uctab:hover { background: var(--surface-2); }
+.uctab::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: transparent; }
+.uctab[aria-selected="true"] { background: var(--accent-soft); }
+.uctab[aria-selected="true"]::after { background: var(--accent); }
+.uctab .ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--sunken); color: var(--muted); }
+.uctab .ic svg { width: 20px; height: 20px; }
+.uctab[aria-selected="true"] .ic { background: var(--accent); color: var(--accent-ink); }
+.uctab.busy .ic { box-shadow: 0 0 0 3px var(--warn-soft); }
+.uctab .kick { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.uctab .tt { display: block; font: 700 14.5px/1.2 var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.uctab .meta { display: flex; gap: 8px; align-items: center; margin-top: 3px; }
+.uctab .meta code { font-size: 10.5px; padding: 0 5px; }
+/* A domain's tabs sit together, its name on a vertical bar beside them. */
+.ucgroup { display: flex; align-items: stretch; gap: 4px; flex: 1 1 0; min-width: 0; max-width: max-content; }
+.ucgroup + .ucgroup { margin-left: 10px; }
+.ucgroup .gl { flex: none; align-self: center; writing-mode: vertical-rl; transform: rotate(180deg); padding: 6px 4px; border-right: 2px solid var(--line);
+  font-size: 10px; font-weight: 800; letter-spacing: .14em; color: var(--muted); }
+.ucgroup.on .gl { color: var(--accent); border-right-color: var(--accent); }
+.dots { display: flex; gap: 3px; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.dots i.on { background: var(--accent); }
+/* Up to six tabs across a laptop screen: the brand text, then the kickers, give way first. */
+@media (max-width: 1500px) { .topnav .brandtxt { display: none; } }
+@media (max-width: 1250px) { .uctab .kick { display: none; } .uctab { grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 8px 10px; } .uctab .ic { width: 32px; height: 32px; } }
+.stepshead { display: flex; justify-content: space-between; align-items: center; margin-bottom: -8px; padding: 0 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.linkbtn { border: 0; background: transparent; color: var(--muted); font: 600 12px var(--body); letter-spacing: 0; text-transform: none;
+  padding: 4px 6px; border-radius: 7px; cursor: pointer; }
+.linkbtn:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
+.linkbtn:disabled { opacity: .4; cursor: not-allowed; }
+.steps { display: flex; flex-direction: column; gap: 4px; }
+.stp { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: center; width: 100%; text-align: left; border: 1px solid transparent; background: transparent; color: var(--ink); border-radius: 12px; padding: 8px 10px; cursor: pointer; font: inherit; }
+.stp:hover:not(.locked) { background: var(--surface-2); }
+.stp.current { background: var(--accent-soft); border-color: var(--accent); }
+.stp .dot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; border: 2px solid var(--line); color: var(--muted); background: var(--surface); }
+.stp.done .dot { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.stp.current .dot { border-color: var(--accent); color: var(--accent); }
+.stp.done.current .dot { color: var(--accent-ink); }
+.stp.locked { cursor: not-allowed; color: var(--muted); }
+.stp.locked .dot { border-style: dashed; }
+.stp.running .dot { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
+@media (prefers-reduced-motion: no-preference) { .stp.running .dot { animation: pulse 1.4s ease-in-out infinite; } }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px var(--warn-soft); } }
+.stp .t { font-weight: 700; font-size: 13.5px; line-height: 1.25; }
+.stp .sub { font-size: 12px; color: var(--muted); line-height: 1.3; }
+.stp .sub.skip { color: var(--warn); }
+.env { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); }
+.env .row2 { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px; font-size: 12.5px; }
+.env .row2 span:first-child { color: var(--muted); }
+.env .row2 b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-foot { display: flex; gap: 8px; align-items: center; }
+.meter { height: 6px; border-radius: 99px; background: var(--sunken); overflow: hidden; margin-top: 4px; }
+.meter i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+
+/* ------------------------------------------------------------------ controls */
+.btn { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 14px; border-radius: 10px; cursor: pointer; font: 600 13.5px var(--body); }
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.ghost { background: transparent; }
+.btn.sm { padding: 5px 10px; font-size: 12.5px; }
+.iconbtn { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 50%; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 3px; background: var(--surface-2); }
+.seg button { border: 0; background: transparent; color: var(--muted); padding: 7px 14px; border-radius: 9px; cursor: pointer; font: 600 13.5px var(--body); }
+.seg button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+label.lbl { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin: 12px 0 5px; }
+input.text { width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 8px 11px; font: inherit; }
+input.text:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+.hint { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+.pill { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 99px; background: var(--sunken); color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; border: 0; font-family: var(--body); }
+.pill.ok { background: var(--accent-soft); color: var(--accent); } .pill.warn { background: var(--warn-soft); color: var(--warn); } .pill.bad { background: var(--bad-soft); color: var(--bad); }
+button.pill { cursor: pointer; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* ------------------------------------------------------------------ main column */
+.top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.eyebrow { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; box-shadow: var(--shadow); }
+.card .lead { color: var(--ink-2); margin-top: 8px; max-width: 88ch; }
+.check { list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-direction: column; gap: 12px; counter-reset: c; }
+.check > li { counter-increment: c; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; background: var(--surface-2); }
+.check > li::before { content: counter(c); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--line); font-weight: 800; color: var(--muted); background: var(--surface); }
+.check > li.ok { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.check > li.ok::before { content: "✓"; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.check > li.wait { opacity: .55; }
+.check .h { font-weight: 700; font-size: 15px; }
+.check .d { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.check .act-row { margin-top: 12px; }
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
+.option { border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: var(--surface-2); min-width: 0; }
+.option h3 { margin-top: 0; }
+@media (max-width: 1100px) { .options { grid-template-columns: minmax(0, 1fr); } }
+.list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow: auto; margin-top: 8px; }
+.item { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
+.item:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.item input { accent-color: var(--accent); }
+.item .m { margin-left: auto; font-size: 12px; color: var(--muted); }
+.callout { display: block; border-radius: 12px; padding: 10px 14px; font-size: 13.5px; margin-top: 14px; background: var(--info-soft); color: var(--ink-2); }
+.callout.flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.callout.warn { background: var(--warn-soft); } .callout.bad { background: var(--bad-soft); } .callout.ok { background: var(--accent-soft); }
+.split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(260px, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 1100px) { .split { grid-template-columns: minmax(0, 1fr); } }
+.timeline { list-style: none; margin: 4px 0 0; padding: 0 0 0 18px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+.timeline li { position: relative; font-size: 13px; color: var(--muted); }
+.timeline li::before { content: ""; position: absolute; left: -25px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.timeline li.bad::before { border-color: var(--bad); background: var(--bad-soft); }
+.timeline li b { display: block; color: var(--ink); font-size: 13.5px; }
+details.fold > summary { list-style: none; display: flex; align-items: center; gap: 10px; cursor: pointer; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary .pill { margin-left: auto; }
+details.fold .chev { color: var(--muted); transition: transform .15s; }
+details.fold[open] .chev { transform: rotate(90deg); }
+.plan .arrow { color: var(--muted); font-size: 12px; align-self: center; }
+.audit-inline { margin-top: 18px; }
+.nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.nav .why { font-size: 13px; color: var(--muted); }
+.status { font-size: 13px; color: var(--muted); min-height: 18px; }
+.busy { font-size: 12.5px; color: var(--warn); margin-top: 10px; }
+details.net summary { cursor: pointer; font-size: 12.5px; color: var(--muted); margin-top: 12px; }
+
+/* ------------------------------------------------------------------ insight column */
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
+.box h3 { margin-top: 0; font-size: 14.5px; }
+.box .look { color: var(--ink-2); font-size: 13.5px; }
+.box .look p + p { margin-top: 8px; }
+.layers { display: flex; flex-direction: column; gap: 8px; }
+.layer { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 13px; }
+.layer .ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--sunken); color: var(--muted); font-weight: 800; font-size: 12px; }
+.layer.on .ic { background: var(--accent-soft); color: var(--accent); }
+.layer b { display: block; font-size: 13px; }
+.layer span { color: var(--muted); }
+
+/* ------------------------------------------------------------------ activity, results, audit */
+.log { max-height: 280px; overflow: auto; font: 12px/1.6 var(--mono); color: var(--ink-2); background: var(--sunken); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; white-space: pre-wrap; margin-top: 12px; }
+.runs { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; margin-top: 12px; }
+.run { flex: 0 0 230px; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--surface-2); cursor: pointer; text-align: left; color: var(--ink); font: inherit; }
+.run.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.run .n { font-size: 12px; color: var(--muted); }
+.metric { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; font-size: 12.5px; color: var(--muted); }
+.metric b { color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.verdict { display: inline-flex; font-size: 12px; font-weight: 700; border-radius: 99px; padding: 3px 10px; width: fit-content; background: var(--sunken); color: var(--muted); }
+.verdict.APPROVED, .verdict.APPROVED_WITH_CHANGES { background: var(--accent-soft); color: var(--accent); }
+.verdict.CHANGES_REQUESTED, .verdict.REPAIR_HELD { background: var(--warn-soft); color: var(--warn); } .verdict.NOT_DECIDED, .verdict.NOT_RECOVERED { background: var(--bad-soft); color: var(--bad); }
+.verdict.RECOVERED { background: var(--accent-soft); color: var(--accent); }
+.decision { border-left: 4px solid var(--accent); background: var(--surface-2); border-radius: 10px; padding: 12px 16px; margin-top: 16px; }
+.decision.CHANGES_REQUESTED, .decision.REPAIR_HELD { border-left-color: var(--warn); } .decision.NOT_DECIDED, .decision.NOT_RECOVERED, .decision.failed { border-left-color: var(--bad); }
+.decision ul { margin: 6px 0; padding-left: 20px; }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.sub-box { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--surface-2); min-width: 0; }
+.sub-box h3 { margin-top: 0; }
+ul.plain { list-style: none; padding: 0; margin: 4px 0 10px; } ul.plain li { padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; } ul.plain li:last-child { border: 0; }
+.who { font-size: 12px; color: var(--violet); }
+.aside { color: var(--muted); text-decoration: line-through; }
+.plan { display: flex; gap: 6px; flex-wrap: wrap; }
+.plan span { font: 12px var(--mono); padding: 4px 9px; border-radius: 8px; background: var(--sunken); color: var(--ink-2); border: 1px solid var(--line); }
+.plan span.done { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.plan span.skip { background: transparent; color: var(--muted); border-style: dashed; }
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; }
+td.sql { font: 12px var(--mono); color: var(--ink-2); max-width: 520px; }
+td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+table.counts { width: auto; min-width: min(100%, 560px); }
+table.counts th, table.counts td { padding-left: 18px; }
+table.counts th:first-child, table.counts td:first-child { padding-left: 8px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 7px; margin: 1px 3px 1px 0; }
+.tag.bad { background: var(--bad-soft); color: var(--bad); } .tag.warn { background: var(--warn-soft); color: var(--warn); } .tag.ok { background: var(--accent-soft); color: var(--accent); }
+.secret { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.secret code { font-size: 14px; padding: 4px 8px; }
+</style>
+</head>
+<body>
+<header class="topnav">
+  <span class="mark" aria-hidden="true">M×A</span>
+  <div class="brandtxt">Meko × YugabyteDB AMP<small>Workshop</small></div>
+  <nav class="uctabs" id="rail" role="tablist" aria-label="Use cases"></nav>
+</header>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <h1 id="ucTitle"></h1>
+      <p id="prLine"></p>
+    </div>
+    <div class="stepshead"><span id="stepsLabel">Steps</span>
+      <button class="linkbtn" id="startOver" title="Start this use case over: its earlier runs stay on the record in Meko, only new ones count">↺ Start over</button></div>
+    <nav class="steps" id="steps" aria-label="Workshop steps"></nav>
+    <div class="env" id="env"></div>
+    <div class="side-foot">
+      <button class="btn iconbtn" id="theme" title="Switch light / dark" aria-label="Switch light or dark theme">◐</button>
+      <span class="small muted">The agent never changes. The datapack does.</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="top">
+      <span class="eyebrow" id="eyebrow"></span>
+      <button class="pill warn" id="pJob" hidden title="Go to the step that started it"></button>
+    </div>
+    <section class="card" id="stepCard"></section>
+    <div class="nav">
+      <button class="btn ghost" id="prev">← Back</button>
+      <span class="row"><span class="why" id="nextWhy"></span><button class="btn" id="next">Next →</button></span>
+    </div>
+    <div class="status" id="status" role="status"></div>
+    <details class="card fold" id="activity" hidden>
+      <summary><span class="chev" aria-hidden="true">▸</span><h3 style="margin:0" id="actTitle">Activity</h3><span class="pill" id="actState"></span></summary>
+      <div id="secret"></div>
+      <div class="log" id="actLog"></div>
+    </details>
+    <section class="card" id="results" hidden>
+      <div class="top"><h3 style="margin:0">Rehearsals of <span id="prName">the pull request</span></h3><span class="small muted">Every number was measured on the rehearsal branch in your run.</span></div>
+      <div class="runs" id="runs"></div>
+      <div id="result"></div>
+    </section>
+  </main>
+
+  <aside class="insight">
+    <div class="box"><h3>What to look for</h3><div class="look" id="look"></div></div>
+    <div class="box"><h3>What the datapack holds</h3><div class="layers" id="layers"></div></div>
+  </aside>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+/** An endpoint's size, as the server creates it. */
+const cores = () => (state.status?.amp?.endpointCores ?? 0.5) + ' vCPU';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const ms = n => n == null ? '' : n >= 1000 ? (n / 1000).toFixed(1) + ' s' : n + ' ms';
+const bytes = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1024).toFixed(0) + ' KB';
+const store = {
+  get(k, d) { try { const v = sessionStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* not kept */ } },
+};
+async function api(path, body) {
+  const r = await fetch('/api' + path, body === undefined ? {} : {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+
+/* ------------------------------------------------------------------ theme */
+try { const t = localStorage.getItem('release-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* system */ }
+$('theme').onclick = () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('release-theme', document.documentElement.dataset.theme); } catch (e) { /* not kept */ }
+};
+
+/* ------------------------------------------------------------------ state */
+const state = {
+  useCase: store.get('useCase', 'release'), step: null, status: null, runsBy: store.get('runsBy', {}), selected: null,
+  datapacks: null, clusters: null, dpMode: null, dpChoice: null, clChoice: null, listedFor: undefined,
+  cidr: null, job: null, jobStep: store.get('jobStep', null),
+};
+/**
+ * The use cases, in tab order. They share the setup (datapack, cluster, the org's shared datapack); each has its own
+ * steps, record and step renderer. Adding one: an entry here (title, group, domain, icon, record, steps), its model and its
+ * steps, and a job type for its agent. The tabs, the step track and the results follow from this list.
+ */
+const USE_CASES = {
+  release: {title: 'Rehearse Before You Release', tile: 'Rehearse a release', group: 'SDLC', domain: 'Release', short: 'a migration, on a fork', record: 'PR-4821',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 7v10M18 11c0 4-6 3-11.5 6.5"/></svg>',
+    line: id => `<code>${esc(id)}</code> on <code>orders</code>, rehearsed on a branch of production.`,
+    steps: [
+      {t: 'Datapack', s: 'where context and the database live'},
+      {t: 'Database', s: 'an AMP cluster, main seeded'},
+      {t: 'Rehearse, no context', s: 'what AMP alone shows'},
+      {t: '+ Shared knowledge', s: 'the standard and the policy'},
+      {t: "+ The org's shared context", s: 'incidents, critical queries'},
+      {t: 'Audit & promote', s: 'by the pull request id'},
+    ]},
+  recovery: {title: 'Undo a Bad Batch Job', tile: 'Undo a bad batch job', group: 'OPS', domain: 'Operational anomaly', short: 'a defective job, repaired', record: 'INC-3107',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>',
+    line: id => `<code>${esc(id)}</code>: a defect in a nightly job damaged <code>orders</code>; repaired from a fork of the past.`,
+    steps: [
+      {t: 'Datapack', s: 'where context and the database live'},
+      {t: 'Database', s: 'an AMP cluster, main seeded'},
+      {t: 'The faulty job', s: 'a code defect damages orders'},
+      {t: 'Recover, no shared context', s: 'only the alert and the time'},
+      {t: "+ The org's shared context", s: "the scheduler's marker, the runbook"},
+      {t: 'Audit & promote', s: 'by the incident id'},
+    ]},
+};
+let STEPS = USE_CASES[state.useCase].steps;
+state.step = store.get('step:' + state.useCase, null);
+const JOB_TITLES = {cluster: 'Creating the cluster', seed: 'Seeding main', knowledge: 'Adding the documents',
+  org: "Preparing the org's shared datapack", rehearsal: 'Rehearsing the pull request', promote: 'Promoting lessons',
+  incident: 'Running the faulty job', recovery: 'Repairing what the job changed'};
+
+/** Where the workshop stands, from the server's view of the datapack: what is done, what is open, what is locked and why. */
+function model() {
+  return state.useCase === 'recovery' ? modelRecovery() : modelRelease();
+}
+
+/** A step is done only when every step before it is: what the record shows, chained. */
+function chain(recorded) {
+  const done = recorded.map(() => false);
+  for (let i = 0; i < recorded.length; i++) done[i] = recorded[i] && (i === 0 || done[i - 1]);
+  return done;
+}
+
+function modelRecovery() {
+  const s = state.status || {}, meko = s.meko || {}, amp = s.amp || {};
+  const progress = s.incidentProgress || {runs: []};
+  const checking = !!progress.loading;
+  const runs = progress.runs || [];
+  // A recovery's stage: whether it found the scheduler's marker (in the org's shared datapack).
+  const ran = k => runs.some(r => (r.teams ? 1 : 0) === k);
+  const datapack = !!meko.connected;
+  const org = s.org || {connected: false};
+  // The incident is the record's current cycle (a new one starts each time the faulty job runs, or on Start over).
+  const incident = progress.incident ? Object.assign({job: progress.job, active: !!progress.active}, progress.incident) : {active: false};
+  const seeded = datapack && !!amp.cluster && !!amp.orders;
+  const happened = !!incident.lsn;
+  const recorded = [datapack, seeded, happened, ran(0) || ran(1), ran(1), false];
+  const done = chain(recorded);
+  const earlier = recorded.map((r, i) => r && !done[i]);
+  const open = [true, done[0], done[1], done[2], done[3], datapack && (runs.length > 0 || localRuns().length > 0)];
+  const locked = ['', 'Choose a datapack first.', 'Create or choose a seeded cluster first.', 'Run the faulty job first.',
+    'Recover without the shared context first.', 'Recover at least once first.'];
+  const orgOwned = org.connected && org.grant === 'owner';
+  const todo = ['Create or choose a datapack.', !amp.cluster ? 'Create or choose a cluster.' : 'Seed main.',
+    orgOwned ? 'Run the faulty job.' : 'Connect an org datapack you own, then run the faulty job.',
+    'Run the recovery.', 'Run the recovery with the shared context.', ''];
+  return {s, meko, amp, org, runs, seeded, datapack, done, earlier, skipped: recorded.map(() => false), open, locked, todo, ran,
+    checking, incident, orgOwned, knowledge: false, teams: org.connected};
+}
+
+function modelRelease() {
+  const s = state.status || {}, meko = s.meko || {}, amp = s.amp || {};
+  const progress = s.progress || {runs: [], teams: false};
+  const checking = !!progress.loading;
+  const runs = progress.runs || [];
+  const stageOf = r => r.knowledge && r.teams ? 2 : r.knowledge ? 1 : r.teams ? 3 : 0;
+  const ran = k => runs.some(r => stageOf(r) === k);
+  const datapack = !!meko.connected;
+  const knowledge = datapack && ((meko.knowledge?.documents || 0) > 0 || runs.some(r => r.knowledge));
+  // Other teams' context comes from the organization's shared datapack, not the release team's own.
+  const org = s.org || {connected: false};
+  const teams = datapack && !!org.connected && org.teams === true;
+  const seeded = datapack && !!amp.cluster && !!amp.orders;
+  // What the datapack's record shows was done, and what counts as done now: a step is done only when every step
+  // before it is (a rehearsal on the record ran against a cluster that may no longer be the one in use).
+  const recorded = [datapack, seeded, ran(0) || knowledge || teams, ran(1) || teams, ran(2), false];
+  const done = chain(recorded);
+  const earlier = recorded.map((r, i) => r && !done[i]);
+  const skipped = [false, false, done[2] && !ran(0), done[3] && !ran(1), false, false];
+  const open = [true, done[0], done[1], done[2], done[3], datapack && (runs.length > 0 || localRuns().length > 0)];
+  const locked = ['', 'Choose a datapack first.', 'Create or choose a seeded cluster first.', 'Rehearse with no context first.',
+    'Rehearse with the standard first.', 'Rehearse at least once first.'];
+  const todo = [
+    'Create or choose a datapack.',
+    !amp.cluster ? 'Create or choose a cluster.' : 'Seed main.',
+    'Run the rehearsal.',
+    knowledge ? 'Run the rehearsal.' : 'Add the documents, then rehearse.',
+    teams ? 'Run the rehearsal.' : "Connect the org's shared datapack, then rehearse.",
+    '',
+  ];
+  const includes = knowledge && teams ? "with the standard and other teams' memory" : knowledge ? 'with the standard and the policy'
+    : teams ? "with other teams' memory only" : 'with no context';
+  return {s, meko, amp, org, runs, knowledge, teams, seeded, datapack, done, earlier, skipped, open, locked, todo, includes, ran, checking};
+}
+
+/** The rehearsals this browser has followed, for the datapack in use only. */
+const datapackKey = () => state.status?.meko?.connected ? state.status.meko.datapackId : null;
+const runsKey = uc => datapackKey() && datapackKey() + '|' + (uc || state.useCase);
+const localRuns = uc => (runsKey(uc) && state.runsBy[runsKey(uc)]) || [];
+
+let pending = false;
+const busy = () => pending || state.job != null || state.status?.job?.status === 'running';
+function jobStep(type) {
+  if (type === 'cluster' || type === 'seed') return 1;
+  if (type === 'knowledge') return 3;
+  if (type === 'org') return state.useCase === 'recovery' ? 2 : 4;
+  if (type === 'incident') return 2;
+  if (type === 'promote') return 5;
+  return state.jobStep ?? (type === 'recovery' ? 3 : 2);
+}
+
+/** The use case a job belongs to; null for setup work every use case shares. */
+function caseOfJob(type) {
+  return {rehearsal: 'release', knowledge: 'release', incident: 'recovery', recovery: 'recovery'}[type] ?? null;
+}
+
+/**
+ * Starts the use case in use over, in the same datapack: a new cycle on its record. Nothing is deleted from Meko; the
+ * page shows only the new cycle's runs.
+ */
+async function startOver() {
+  const uc = USE_CASES[state.useCase];
+  if (!confirm('Start ' + uc.title + ' over?\n\nIts earlier runs stay on ' + uc.record + "'s record in Meko, for an audit; only new runs count from here."
+      + (state.useCase === 'recovery' ? '\n\nThen run the faulty job again.' : ''))) return;
+  await act(async () => {
+    await api('/start-over', {record: uc.record});
+    if (runsKey()) { state.runsBy[runsKey()] = []; store.set('runsBy', state.runsBy); }
+    state.selected = null;
+    $('activity').hidden = true;
+    state.audit = null;
+  }, uc.title + ' starts over: a new cycle on ' + uc.record + "'s record.", false);
+  state.step = null;   // the first open step of the new cycle
+  render();
+}
+$('startOver').onclick = startOver;
+
+function switchUseCase(uc) {
+  if (uc === state.useCase) return;
+  state.useCase = uc;
+  store.set('useCase', uc);
+  STEPS = USE_CASES[uc].steps;
+  state.step = store.get('step:' + uc, null);
+  state.selected = null;
+  state.audit = null;
+  say('');
+  render();
+}
+
+/* ------------------------------------------------------------------ navigation */
+function firstOpenStep(m) {
+  for (let i = 0; i < STEPS.length; i++) if (m.open[i] && !m.done[i]) return i;
+  return STEPS.length - 1;
+}
+function go(i) {
+  const m = model();
+  if (i < 0 || i >= STEPS.length || !m.open[i]) return;
+  state.step = i;
+  store.set('step:' + state.useCase, i);
+  // The results follow the step: its latest run, when it has one.
+  const run = latestRunOf(i);
+  if (run) state.selected = run.id;
+  say('');
+  render();
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+/** Back and Next ignore a second click within 400 ms: a double click moves one step, not two. */
+let lastNav = 0;
+function nav(delta) {
+  const now = Date.now();
+  if (now - lastNav < 400) return;
+  lastNav = now;
+  go(state.step + delta);
+}
+$('prev').onclick = () => nav(-1);
+$('next').onclick = () => nav(1);
+
+function renderSide(m) {
+  const uc = USE_CASES[state.useCase];
+  const runningCase = busy() ? caseOfJob(state.job?.type || state.status?.job?.type) : null;
+  const tab = ([key, u]) => {
+    const done = (key === 'recovery' ? modelRecovery() : modelRelease()).done;
+    return `<button class="uctab ${key === runningCase ? 'busy' : ''}" role="tab" data-uc="${key}" aria-selected="${key === state.useCase}" title="${esc(u.title)}: ${esc(u.short)}">
+      <span class="ic" aria-hidden="true">${u.icon}</span>
+      <span><span class="kick">${esc(u.domain)}</span><span class="tt">${esc(u.title)}</span>
+        <span class="meta"><code>${esc(u.record)}</code><span class="dots" aria-label="${done.filter(Boolean).length} of ${u.steps.length} steps done">${u.steps.map((st, i) => `<i class="${done[i] ? 'on' : ''}"></i>`).join('')}</span></span></span></button>`;
+  };
+  // Tabs grouped by domain, in the order each domain first appears in USE_CASES.
+  const groups = [...new Set(Object.values(USE_CASES).map(u => u.group))];
+  $('rail').innerHTML = groups.map(g => {
+    const members = Object.entries(USE_CASES).filter(([, u]) => u.group === g);
+    return `<div class="ucgroup ${members.some(([key]) => key === state.useCase) ? 'on' : ''}" role="presentation"><span class="gl">${esc(g)}</span>${members.map(tab).join('')}</div>`;
+  }).join('');
+  document.querySelectorAll('.uctab').forEach(b => b.onclick = () => switchUseCase(b.dataset.uc));
+  $('ucTitle').textContent = uc.title;
+  $('stepsLabel').textContent = 'Steps · ' + uc.record;
+  document.title = uc.title;
+  const jobType = state.job?.type || state.status?.job?.type;
+  // A running job pulses on its own use case's track only (setup steps belong to every use case).
+  const runningStep = busy() && (caseOfJob(jobType) ?? state.useCase) === state.useCase ? jobStep(jobType) : -1;
+  $('steps').innerHTML = STEPS.map((st, i) => {
+    const cls = [m.done[i] ? 'done' : '', i === state.step ? 'current' : '', m.open[i] ? '' : 'locked', i === runningStep ? 'running' : ''].join(' ');
+    const sub = m.checking && i >= 2 && i <= 4 ? 'Checking the record…' : m.earlier[i] ? 'Ran earlier in this datapack. ' + (m.open[i] ? '' : m.locked[i])
+      : !m.open[i] ? m.locked[i] : m.skipped[i] ? 'skipped: the datapack already had this context' : st.s;
+    return `<button class="stp ${cls}" data-i="${i}" ${m.open[i] ? '' : 'aria-disabled="true"'} title="${esc(m.open[i] ? st.s : m.locked[i])}">
+      <span class="dot">${m.done[i] ? '✓' : m.open[i] ? i + 1 : '🔒'}</span>
+      <span><span class="t">${esc(st.t)}</span><br><span class="sub ${m.skipped[i] ? 'skip' : ''}">${esc(sub)}</span></span></button>`;
+  }).join('');
+  document.querySelectorAll('.stp').forEach(b => b.onclick = () => {
+    const i = +b.dataset.i;
+    if (m.open[i]) go(i); else say(m.locked[i]);
+  });
+  const budget = m.amp.budget;
+  $('env').innerHTML = `
+    <div class="row2"><span>Datapack</span><b title="${esc(m.meko.datapackName || '')}">${m.datapack ? esc(m.meko.datapackName) : '—'}</b></div>
+    <div class="row2"><span>Cluster</span><b>${m.amp.cluster ? esc(m.amp.cluster.name) + (m.amp.orders ? ' · seeded' : ' · not seeded') : '—'}</b></div>
+    <div class="row2"><span>AMP vCPU</span><span>${budget ? `<b>${budget.usedCores} of ${budget.maxCores}</b> · ${esc(budget.tier)}<div class="meter"><i style="width:${Math.min(100, 100 * budget.usedCores / Math.max(budget.maxCores, .5))}%"></i></div>` : '—'}</span></div>`;
+  $('prLine').innerHTML = uc.line(uc.record);
+}
+
+function renderNav(m) {
+  $('eyebrow').textContent = `Step ${state.step + 1} of ${STEPS.length} · ${STEPS[state.step].t}`;
+  $('prev').disabled = state.step === 0;
+  const last = state.step === STEPS.length - 1;
+  const canNext = !last && m.done[state.step] && m.open[state.step + 1];
+  $('next').disabled = !canNext;
+  $('next').className = 'btn' + (canNext ? ' primary' : '');
+  $('next').textContent = last ? 'Done' : `Next: ${STEPS[state.step + 1].t} →`;
+  $('nextWhy').textContent = last || canNext ? '' : m.todo[state.step];
+}
+
+/* ------------------------------------------------------------------ the steps */
+function cidrField(m) {
+  if (state.cidr == null && m.amp.publicIp) state.cidr = m.amp.publicIp + '/32';
+  return `<details class="net"><summary>Endpoints admit <b>${esc(state.cidr || 'this machine')}</b> only · change</summary>
+    <label class="lbl" for="cidr">The address AMP admits to the endpoints (this machine's public IP)</label>
+    <input class="text" id="cidr" value="${esc(state.cidr || '')}" placeholder="203.0.113.4/32">
+    <div class="hint">AMP refuses a public endpoint without an allow-list, or with one wider than /24.</div></details>`;
+}
+function bindCidr() { if ($('cidr')) $('cidr').oninput = e => { state.cidr = e.target.value; }; }
+
+function rehearseItem(m, needs, label) {
+  const did = m.ran(state.step - 2) || (state.step === 2 && m.ran(0));
+  return `<li class="${did ? 'ok' : ''} ${needs ? 'wait' : ''}"><div>
+    <div class="h">Rehearse ${esc(m.s.pr || 'the pull request')} ${esc(label)}</div>
+    <div class="d">The agent recalls what the datapack holds and reviews the migrations against any rules it finds, forks
+      <code>main</code> (seconds), adds a ${cores()} endpoint (a minute or three), rehearses both migrations under checkout's
+      writes and whatever its context asks for, deletes the branch, and records its decision.</div>
+    ${cidrField(m)}
+    <div class="row act-row"><button class="btn primary act" id="run" ${needs ? 'disabled' : ''}>${did ? 'Rehearse again' : 'Rehearse'}</button>
+      ${needs ? `<span class="small muted">${esc(needs)}</span>` : ''}</div></div></li>`;
+}
+
+function renderStep(m) {
+  const c = $('stepCard');
+  const amp = m.amp, meko = m.meko;
+  if (state.useCase === 'recovery' && state.step >= 2) renderRecoveryStep(m, c);
+  else switch (state.step) {
+    case 0: {
+      const list = state.datapacks;
+      const mode = state.dpMode || (m.datapack ? 'existing' : 'new');
+      const stamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
+      c.innerHTML = `<h2>Choose the datapack</h2>
+        <p class="lead">A datapack holds what the agents read and write (memory, knowledge, records) and, with AMP, the clusters:
+          the database you rehearse on lives next to everything the agent knows. Start from a new, empty one to see the agent with no context.</p>
+        ${m.datapack ? `<div class="callout ok">In use: <b>${esc(meko.datapackName)}</b>. Choose another below, or go on.</div>`
+          : meko.datapackName ? `<div class="callout warn">The app was started with the datapack <b>${esc(meko.datapackName)}</b>
+              (<code>MEKO_DATAPACK_NAME</code>), and this account has no datapack by that name. Create it below, or choose an existing one.</div>` : ''}
+        <div style="margin-top:16px" class="seg" role="tablist">
+          <button role="tab" aria-selected="${mode === 'new'}" data-m="new">Create a new datapack</button>
+          <button role="tab" aria-selected="${mode === 'existing'}" data-m="existing">Use an existing one</button></div>
+        ${mode === 'new'
+          ? `<label class="lbl" for="dpName">Name</label><input class="text" id="dpName" value="${esc(!m.datapack && meko.datapackName ? meko.datapackName : 'release-rehearsal-' + stamp)}">
+             <div class="row" style="margin-top:12px"><button class="btn primary act" id="dpCreate">Create and use</button></div>`
+          : list ? `<div class="row" style="margin-top:14px;justify-content:space-between;max-width:760px"><span class="small muted">${list.length} datapack(s) you can use</span><button class="btn sm ghost" id="dpList">Refresh</button></div>
+             <div class="list" style="max-width:760px">${list.map(d => `<label class="item"><input type="radio" name="dp" value="${esc(d.id)}" data-name="${esc(d.name)}" ${(state.dpChoice || (m.datapack ? meko.datapackId : '')) === d.id ? 'checked' : ''}>
+               <b>${esc(d.name)}</b><span class="m">${esc(d.grant || '')} · ${esc((d.created || '').slice(0, 10))}</span></label>`).join('')}</div>
+             <div class="row" style="margin-top:12px"><button class="btn primary act" id="dpUse">Use this datapack</button></div>`
+          : '<p class="hint" style="margin-top:14px">Loading your datapacks…</p>'}`;
+      c.querySelectorAll('.seg button').forEach(b => b.onclick = () => { state.dpMode = b.dataset.m; render(); });
+      c.querySelectorAll('input[name=dp]').forEach(i => i.onchange = () => { state.dpChoice = i.value; });
+      if (mode === 'existing') load('datapacks', '/datapacks');
+      if ($('dpList')) $('dpList').onclick = () => { state.datapacks = null; render(); };
+      if ($('dpCreate')) $('dpCreate').onclick = () => act(() => api('/datapacks', {name: $('dpName').value, create: true}), 'Datapack created and in use.');
+      if ($('dpUse')) $('dpUse').onclick = () => {
+        const r = c.querySelector('input[name=dp]:checked');
+        if (!r) return say('Choose a datapack.');
+        act(() => api('/datapacks', {name: r.dataset.name, id: r.value, create: false}), 'Datapack in use.');
+      };
+      break;
+    }
+    case 1: {
+      const clusters = state.clusters;
+      c.innerHTML = `<h2>Create or choose the AMP cluster</h2>
+        <p class="lead">The cluster's <code>main</code> branch holds the checkout data: years of order history, ${Number(amp.seedOrders || 0).toLocaleString()} orders when seeded.
+          Every rehearsal forks <code>main</code> and deletes the fork; nothing ever changes <code>main</code>.</p>
+        ${amp.cluster ? `<div class="callout flex ${amp.orders ? 'ok' : 'warn'}"><span>In use: <b>${esc(amp.cluster.name)}</b>, main at <code>${esc(amp.main || '')}</code>
+          ${amp.serverVersion ? ', PostgreSQL ' + esc(amp.serverVersion) : ''}: ${amp.orders ? Number(amp.orders).toLocaleString() + ' orders.' : 'not seeded yet.'}</span>
+          ${!amp.orders ? '<button class="btn sm primary act" id="seed" style="margin-left:auto">Seed main</button>' : ''}</div>` : ''}
+        ${amp.error && amp.cluster ? `<div class="callout warn">${esc(amp.error)}</div>` : ''}
+        <div class="options">
+          <div class="option"><h3>Create a new cluster</h3>
+            <p class="small muted">AMP creates it in this datapack with a ${cores()} writer on <code>main</code>; then the app seeds the data (about a minute).</p>
+            <label class="lbl" for="clName">Name</label><input class="text" id="clName" value="checkout">
+            ${amp.passwordConfigured ? '<p class="hint">Admin password: <code>AMP_PASSWORD</code>, from the app\'s environment.</p>'
+              : `<label class="lbl" for="clNewPw">Admin password <span class="muted">(optional)</span></label><input class="text" id="clNewPw" type="password" autocomplete="new-password" placeholder="8 to 128 printable characters">
+                 <div class="hint">Leave it empty and AMP generates one, shown once. The app keeps it in memory only.</div>`}
+            ${cidrField(m)}
+            <div class="row" style="margin-top:14px"><button class="btn primary act" id="clCreate">Create, then seed main</button></div></div>
+          <div class="option"><h3>Use one this datapack has</h3>
+            ${!clusters ? '<p class="hint">Loading the datapack\'s clusters…</p>' : clusters.length
+              ? `<div class="row" style="justify-content:space-between"><span class="small muted">${clusters.length} cluster(s)</span><button class="btn sm ghost" id="clList">Refresh</button></div>
+                 <div class="list">${clusters.map(x => `<label class="item"><input type="radio" name="cl" value="${esc(x.id)}" ${(state.clChoice || amp.cluster?.id) === x.id ? 'checked' : ''}><b>${esc(x.name)}</b><span class="m">${esc(x.id.slice(0, 8))}</span></label>`).join('')}</div>
+                 ${amp.passwordConfigured ? '' : '<label class="lbl" for="clPw">Its admin password</label><input class="text" id="clPw" type="password" autocomplete="off"><div class="hint">Not needed for a cluster this app created since it started.</div>'}
+                 <div class="row" style="margin-top:14px"><button class="btn primary act" id="clUse">Use this cluster</button></div>`
+              : '<p class="hint">None yet: create one.</p>'}</div>
+        </div>`;
+      bindCidr();
+      if (m.datapack) load('clusters', '/clusters');
+      if ($('clList')) $('clList').onclick = () => { state.clusters = null; render(); };
+      c.querySelectorAll('input[name=cl]').forEach(i => i.onchange = () => { state.clChoice = i.value; });
+      $('clCreate').onclick = () => start(() => api('/clusters', {name: $('clName').value, cidr: state.cidr, password: $('clNewPw')?.value || ''}), 'cluster');
+      if ($('seed')) $('seed').onclick = () => start(() => api('/seed', {}), 'seed');
+      if ($('clUse')) $('clUse').onclick = () => {
+        const r = c.querySelector('input[name=cl]:checked');
+        if (!r) return say('Choose a cluster.');
+        act(() => api('/clusters/use', {id: r.value, password: $('clPw')?.value || ''}), 'Cluster in use.');
+      };
+      break;
+    }
+    case 2: {
+      const already = m.knowledge || m.teams;
+      c.innerHTML = `<h2>Rehearse with no context</h2>
+        <p class="lead">The datapack is empty: no standard, no policy, no other team's memory. This is what AMP alone gives the agent:
+          a production-sized fork to try the change on, and no idea what to look for.</p>
+        ${already ? `<div class="callout warn">This datapack already holds context, so a rehearsal now would include it. The step counts as skipped;
+          create a new datapack (step 1) to see the no-context run.</div>` : ''}
+        <ol class="check">${rehearseItem(m, '', m.includes)}</ol>`;
+      bindCidr();
+      $('run').onclick = () => rehearse(m);
+      break;
+    }
+    case 3: {
+      c.innerHTML = `<h2>Add shared knowledge, then rehearse</h2>
+        <p class="lead">The platform data team's <b>zero-downtime migration standard</b> (MIG-01…06, for PostgreSQL 18) and release
+          management's <b>release policy for orders</b> (REL-01…04) go into the release team's knowledge base. The agent's checks, its
+          lock timeout and its stall limit all come from their text.</p>
+        <ol class="check">
+        <li class="${m.knowledge ? 'ok' : ''}"><div>
+          <div class="h">Add the standard and the policy</div>
+          <div class="d">Uploaded to the knowledge base; the step waits until a search finds their rules (a minute or two).</div>
+          <div class="row act-row">${m.knowledge ? `<span class="pill ok">In the datapack</span>
+              <button class="btn sm ghost act" id="add" title="Upload the current versions again">Upload again</button>`
+            : `<button class="btn primary act" id="add">Upload the two documents</button>`}</div></div></li>
+        ${rehearseItem(m, m.knowledge ? '' : 'Add the documents first.', m.includes)}</ol>`;
+      bindCidr();
+      $('add').onclick = () => start(() => api('/knowledge', {}), 'knowledge');
+      $('run').onclick = () => rehearse(m);
+      break;
+    }
+    case 4: {
+      const picker = orgPicker(m, 'teams');
+      c.innerHTML = `<h2>Connect the org's shared context, then rehearse</h2>
+        <p class="lead">In a real organization the platform SRE, warehouse and checkout teams keep what they know in their own datapack and
+          share it with release management in the Meko app. The release agent never talks to them: it reads their datapack beside its own,
+          and every fact says where it came from and who wrote it.</p>
+        <ol class="check">
+        <li class="${m.teams ? 'ok' : ''}"><div>
+          <div class="h">Connect the organization's shared datapack</div>
+          <div class="d">Platform SRE: incident INC-2291, a migration queued behind the nightly reporting job. Warehouse: the pick-list
+            dashboard's query. Checkout: the order-history query. Plus two look-alikes about other tables.</div>
+          ${picker.html}</div></li>
+        ${rehearseItem(m, m.teams ? '' : m.org.connected && m.org.teams === null ? 'Checking the shared datapack…' : "Connect the org's shared datapack first.", m.includes)}</ol>`;
+      bindCidr();
+      picker.bind(c);
+      $('run').onclick = () => rehearse(m);
+      break;
+    }
+    case 5:
+      c.innerHTML = `<h2>Audit and promote</h2>
+        <p class="lead">The change board has only the pull request id. It reads the record back from Meko: every turn the agent wrote
+          across your rehearsals, and the evidence. Then promote what the rehearsals taught to shared knowledge, for every team.</p>
+        <ol class="check">
+          <li><div><div class="h">Read the record of ${esc(m.s.pr || 'the pull request')}</div>
+            <div class="d">One <code>conversation_get</code> by the pull request id, and the evidence artifact it names.</div>
+            <div class="row act-row"><button class="btn primary act" id="audit">Read the record</button></div></div></li>
+          ${promoteItem(m)}</ol>${auditBlock()}`;
+      $('audit').onclick = () => act(async () => renderAudit(await api('/audit?record=' + encodeURIComponent(USE_CASES.release.record))), 'Record read back.', false);
+      $('promote').onclick = () => start(() => api('/promote', {}), 'promote');
+      break;
+  }
+  $('startOver').disabled = busy() || !m.datapack;
+  if (pending) c.querySelectorAll('.act').forEach(b => { b.disabled = true; });
+  if (busy() && !pending) {
+    const t = JOB_TITLES[state.job?.type || state.status?.job?.type] || 'A job';
+    c.querySelectorAll('.act').forEach(b => { b.disabled = true; });
+    c.insertAdjacentHTML('beforeend', `<p class="busy">Actions are paused while <b>${esc(t)}</b> runs. You can look around; it continues on the server.</p>`);
+  }
+}
+
+/** The recovery use case's steps 3 to 6: the incident, recovering without and with the org's shared context, the audit. */
+function renderRecoveryStep(m, c) {
+  const inc = m.incident;
+  const recoverItem = (stage, needs) => {
+    const did = m.ran(stage);
+    return `<li class="${did ? 'ok' : ''} ${needs ? 'wait' : ''}"><div>
+      <div class="h">Recover ${esc(USE_CASES.recovery.record)} ${stage ? "with the org's shared context" : 'with only the alert'}</div>
+      <div class="d">${stage ? `The recovery agent reads its own datapack and the org's shared one. If it finds the scheduler's marker, it forks
+        <code>main</code> as of that position (seconds), compares the fork with <code>main</code> to find exactly the rows the job changed, deletes
+        the fork, rehearses the repair on a fresh branch of <code>main</code>, then repairs <code>main</code>. One branch at a time.`
+        : `The recovery agent reads only its own team's datapack: it has the incident id and the time from the alert, nothing else.`}</div>
+      ${cidrField(m)}
+      <div class="row act-row"><button class="btn primary act" id="recover" ${needs ? 'disabled' : ''}>${did ? 'Recover again' : 'Recover'}</button>
+        ${needs ? `<span class="small muted">${esc(needs)}</span>` : ''}</div></div></li>`;
+  };
+  switch (state.step) {
+    case 2: {
+      const picker = orgPicker(m, 'incident');
+      c.innerHTML = `<div class="split"><div><h2>The faulty job</h2>
+        <p class="lead">An operational anomaly, not an attack: a code defect in a scheduled program. Every night the batch scheduler runs
+          <code>nightly-reprice</code> on <code>orders</code>. Tonight's version ships with a bug in its filter, so it marks every paid order as
+          pending. Checkout keeps taking orders, the warehouse pick list goes empty, and the on-call SRE agent opens <code>${esc(USE_CASES.recovery.record)}</code>.</p>
+        <p class="lead">To undo it, someone needs the database's position from just before the job ran. Only the scheduler's agent recorded it.</p></div>
+        <ol class="timeline" aria-label="What happens, and who records what">
+          <li><b>Scheduler's agent</b><span>records a marker: the job, its start time, and the WAL position just before it</span></li>
+          <li class="bad"><b>nightly-reprice</b><span>runs with the defect: paid orders become pending</span></li>
+          <li><b>Checkout</b><span>keeps writing new orders, paid and pending</span></li>
+          <li><b>SRE agent</b><span>records ${esc(USE_CASES.recovery.record)}: the time and the symptom. No WAL position</span></li>
+        </ol></div>
+        <ol class="check">
+          <li class="${m.orgOwned ? 'ok' : ''}"><div><div class="h">The org's shared datapack, where the scheduler and the SRE agent write</div>
+            <div class="d">It must be one you own: their agents write to it. Creating one also adds the data repair runbook (REC-01…04).</div>
+            ${picker.html}</div></li>
+          <li class="${inc.lsn ? 'ok' : ''} ${m.orgOwned ? '' : 'wait'}"><div><div class="h">Run the faulty job on <code>main</code></div>
+            <div class="d">This changes <code>main</code>'s <code>orders</code>, as the defective job would in production. The recovery puts it back.</div>
+            ${inc.lsn ? `<div class="callout ${inc.active ? 'warn' : 'ok'}">${inc.active ? 'Unrepaired' : 'Repaired'}: <b>${esc(inc.job)}</b>${inc.run ? ' run <code>' + esc(inc.run) + '</code>' : ''} started at
+              ${esc(inc.startedAt)} UTC (marker position <code>${esc(inc.lsn)}</code>) and marked ${inc.changed} paid orders pending; detected at
+              ${esc(inc.detectedAt)} UTC.</div>${countsTable(inc, null)}` : ''}
+            <div class="row act-row"><button class="btn primary act" id="incident" ${m.orgOwned && !inc.active ? '' : 'disabled'}>${inc.lsn ? 'Run it again' : 'Run the faulty job'}</button>
+              ${inc.active ? '<span class="small muted">Recover this one first.</span>' : m.orgOwned ? '' : '<span class="small muted">Connect an org datapack you own first.</span>'}</div></div></li>
+        </ol>`;
+      picker.bind(c);
+      $('incident').onclick = () => start(() => api('/incident', {}), 'incident');
+      break;
+    }
+    case 3:
+      c.innerHTML = `<h2>Recover with only the alert</h2>
+        <p class="lead">The data recovery team's agent is paged with the incident id and the time. The org's shared datapack, where the scheduler's
+          marker and the SRE agent's notes are, is not shared with the recovery team yet. Can it find the rows the job changed?</p>
+        <ol class="check">${recoverItem(0, '')}</ol>`;
+      bindCidr();
+      $('recover').onclick = () => recover(false);
+      break;
+    case 4: {
+      const picker = orgPicker(m, 'teams');
+      c.innerHTML = `<h2>Share the org's context with the recovery team, then recover</h2>
+        <p class="lead">The org's shared datapack is now shared with the recovery team, as an owner does in the Meko app. The recovery agent never
+          talks to the scheduler or the SRE agent: it finds the incident, the scheduler's marker and the runbook in the shared datapack, each
+          with who wrote it.</p>
+        <ol class="check">
+          <li class="${m.org.connected ? 'ok' : ''}"><div><div class="h">The org's shared datapack, shared with the recovery team</div>
+            <div class="d">${m.org.connected ? `<b>${esc(m.org.name)}</b>: the scheduler's markers, ${esc(USE_CASES.recovery.record)}, and the data repair runbook.`
+              : "Connect the one the scheduler and the SRE agent wrote to in step 3."}</div>
+            ${m.org.connected ? '' : picker.html}</div></li>
+          ${recoverItem(1, !m.org.connected ? "Connect the org's shared datapack first." : '')}
+        </ol>`;
+      bindCidr();
+      picker.bind(c);
+      $('recover').onclick = () => recover(true);
+      break;
+    }
+    case 5:
+      c.innerHTML = `<h2>Audit and promote</h2>
+        <p class="lead">Anyone with the incident id reads back what was changed and on what evidence: the position the comparison used, the rows
+          repaired, the checks. Then promote what the recovery taught, for every team.</p>
+        <ol class="check">
+          <li><div><div class="h">Read the record of ${esc(USE_CASES.recovery.record)}</div>
+            <div class="d">One <code>conversation_get</code> by the incident id, and the evidence artifact it names.</div>
+            <div class="row act-row"><button class="btn primary act" id="audit">Read the record</button></div></div></li>
+          ${promoteItem(m)}</ol>${auditBlock()}`;
+      $('audit').onclick = () => act(async () => renderAudit(await api('/audit?record=' + USE_CASES.recovery.record)), 'Record read back.', false);
+      $('promote').onclick = () => start(() => api('/promote', {}), 'promote');
+      break;
+  }
+}
+
+function recover(readShared) {
+  state.jobStep = state.step;
+  store.set('jobStep', state.step);
+  start(() => api('/recover', {cidr: state.cidr, readShared}), 'recovery', readShared ? "with the org's shared context" : 'with only the alert');
+}
+
+/**
+ * The organization's shared datapack: connected (with what it holds), or a choice between one shared with you and one
+ * created for a solo run. {@code purpose} 'teams' (other teams' context) or 'incident' (the scheduler and the SRE agent
+ * write to it, so it must be yours).
+ */
+function orgPicker(m, purpose) {
+  const org = m.org;
+  const list = state.orgDatapacks;
+  const shared = (list || []).filter(d => d.grant && d.grant !== 'owner');
+  const owned = (list || []).filter(d => d.grant === 'owner');
+  const choices = purpose === 'incident' ? owned : [...shared, ...owned];
+  // A name no datapack this account can see has yet: the date, then the time, then a number.
+  const taken = new Set((list || []).map(d => d.name).concat(m.meko.datapackName ? [m.meko.datapackName] : []));
+  const fresh = () => {
+    const now = new Date().toISOString();
+    let name = 'org-context-' + now.slice(0, 10);
+    if (!taken.has(name)) return name;
+    name += '-' + now.slice(11, 16).replace(':', '');
+    if (taken.has(name)) for (let i = 2; ; i++) if (!taken.has(name + '-' + i)) return name + '-' + i;
+    return name;
+  };
+  // What the user typed is kept across redraws; otherwise a fresh suggestion.
+  const suggestion = state.orgName && !taken.has(state.orgName) ? state.orgName : fresh();
+  const holds = org.teams === null ? 'checking what it holds…' : org.teams ? "holds other teams' incidents and critical queries" : 'holds no team context yet';
+  const fill = org.teams === false && org.grant === 'owner';
+  const html = org.connected ? `<div class="callout ${purpose === 'incident' ? (org.grant === 'owner' ? 'ok' : 'warn') : org.teams ? 'ok' : 'warn'} flex"><span>Connected: <b>${esc(org.name)}</b>
+        · ${esc(org.grant === 'owner' ? 'yours' : (org.grant || 'shared') + (org.owner ? ', owned by ' + org.owner : ''))} · ${holds}</span>
+        ${fill ? '<button class="btn sm primary act" id="orgFill" style="margin-left:auto">Fill it with the teams\' memory</button>' : ''}
+        <button class="btn sm ghost act" id="orgOff" ${fill ? '' : 'style="margin-left:auto"'}>Disconnect</button></div>
+        ${purpose === 'incident' && org.grant !== 'owner' ? '<p class="hint">The scheduler and the SRE agent write their records here, so it must be one you own: disconnect it and create one.</p>'
+          : org.teams === false && org.grant !== 'owner' ? '<p class="hint">It is shared with you for reading: ask its owner to add the teams\' memory, or create one of your own.</p>' : ''}`
+    : !list ? '<p class="hint">Loading the datapacks you can see…</p>' : `
+      <div class="options" style="margin-top:12px">
+        <div class="option"><h3>${purpose === 'incident' ? 'Use one of yours' : 'Use one shared with you'}</h3>
+          ${choices.length ? `<div class="list">${choices.map(d => `<label class="item"><input type="radio" name="org" value="${esc(d.id)}">
+            <b>${esc(d.name)}</b><span class="m">${esc(d.grant === 'owner' ? 'yours' : d.grant + (d.owner ? ' · ' + d.owner : ''))}</span></label>`).join('')}</div>
+            <div class="row" style="margin-top:12px"><button class="btn primary act" id="orgUse">Connect</button></div>`
+            : `<p class="hint">${purpose === 'incident' ? 'You own none besides this one.' : 'Nothing is shared with you yet.'}</p>`}
+          <p class="hint">Sharing is done in the Meko app; reading is enough for the agents that read it.</p></div>
+        <div class="option"><h3>Or create one (solo run)</h3>
+          <p class="small muted">Creates a new one in your account, in the project's <i>Org context (shared)</i> folder, and writes the teams'
+            memory and the data repair runbook into it, in their names.</p>
+          <label class="lbl" for="orgName">Name</label><input class="text" id="orgName" value="${esc(suggestion)}">
+          <div class="row" style="margin-top:12px"><button class="btn primary act" id="orgCreate">Create and connect</button></div></div>
+      </div>`;
+  const bind = c => {
+    if (!org.connected) load('orgDatapacks', '/org/datapacks');
+    if ($('orgUse')) $('orgUse').onclick = () => {
+      const r = c.querySelector('input[name=org]:checked');
+      if (!r) return say('Choose a datapack.');
+      act(() => api('/org', {id: r.value, create: false}), 'Shared datapack connected.', false);
+    };
+    if ($('orgName')) $('orgName').oninput = e => { state.orgName = e.target.value; };
+    if ($('orgCreate')) $('orgCreate').onclick = () => {
+      const name = $('orgName').value.trim();
+      if (taken.has(name)) return say(name + ' already exists: pick it under "Use one", or choose another name.');
+      start(() => api('/org', {name, create: true}), 'org');
+    };
+    if ($('orgFill')) $('orgFill').onclick = () => start(() => api('/org/fill', {}), 'org');
+    if ($('orgOff')) $('orgOff').onclick = () => act(() => api('/org/disconnect', {}), 'Disconnected.', false);
+  };
+  return {html, bind};
+}
+
+function renderInsight(m) {
+  const looks = [
+    '<p>Start empty. The first rehearsal shows the agent with nothing but AMP: what it finds on its own, and what it cannot decide.</p>',
+    `<p>The budget: a rehearsal adds one branch with a ${cores()} endpoint for a few minutes, on top of <code>main</code>'s ${cores()}.</p>
+     <p>If AMP generates the password, it is shown once, in the activity panel. Save it.</p>`,
+    `<p>Which statements <b>rewrote</b> <code>orders</code> (its file node changed), and how long checkout's worst insert took.</p>
+     <p>With no standard the agent cannot tell a safe migration from an unsafe one, and with no policy it decides nothing.</p>
+     <p>The plan: which actions the planner skipped.</p>`,
+    `<p>Under <i>Review</i>: which rule each statement breaks. The migrations rehearsed are the rewritten ones.</p>
+     <p>Did anything rewrite the table now? Was the rollback rehearsed and did it restore the schema?</p>
+     <p>Why are changes still requested? (Look for MIG-05.)</p>`,
+    `<p>The release agent reads two datapacks now: its own, and the org's shared one. Every incident and critical query says which datapack it came from and which team's agent wrote it.</p>
+     <p>The reporting job's long transaction now runs during the rehearsal: who wrote the incident that asked for it?</p>
+     <p>Which statements waited for their lock and retried? Did checkout stay within the policy's limit?</p>
+     <p>The critical queries before and after: which one regressed, and what does the agent change? Under <i>Set aside</i>: memories about other tables.</p>`,
+    `<p>Can the board tell what was rehearsed, under which workloads, by which rule each statement was judged, and whether the rollback was tested, from the id alone?</p>`,
+  ];
+  const recoveryLooks = [looks[0], looks[1],
+    `<p>Who writes what: the scheduler's agent records the WAL position before the job; the SRE agent records the time and the symptom, and no position.</p>
+     <p>This step changes <code>main</code>: the pick list goes empty. The recovery puts it back.</p>`,
+    `<p>What the agent has: the incident id and a time. What it needs: a point in time to compare against. A time is not a WAL position.</p>
+     <p>The plan: which actions the planner skipped, and why nothing is repaired.</p>`,
+    `<p>Where each fact came from: the incident (SRE agent), the marker (scheduler's agent), the runbook (platform data team), all in the org's shared datapack.</p>
+     <p>The fork as of the marker's position: how long it took. The damage: how many pending orders were the job's, and how many were genuine or new.</p>
+     <p>The repair rehearsal's checks, then the repair on main: each critical query the teams registered gives back its answer from before the job.</p>`,
+    `<p>From the incident id alone: the position the comparison used, the rows repaired, and the checks.</p>`];
+  $('look').innerHTML = (state.useCase === 'recovery' ? recoveryLooks : looks)[state.step];
+  const layer = (on, ic, title, text) => `<div class="layer ${on ? 'on' : ''}"><span class="ic">${ic}</span><div><b>${title}</b><span>${text}</span></div></div>`;
+  const amp = m.amp;
+  $('layers').innerHTML = !m.datapack ? '<p class="small muted">No datapack chosen yet.</p>' :
+    layer(!!amp.cluster, 'DB', 'AMP cluster', amp.cluster ? esc(amp.cluster.name) + (amp.orders ? ', main seeded' : ', main not seeded') : 'none yet')
+    + (state.useCase === 'recovery' ? layer(!!m.incident.lsn, '!', 'The faulty job', m.incident.lsn ? (m.incident.active ? 'unrepaired on main' : 'repaired') : 'not run yet')
+      : layer(m.knowledge, 'K', 'Shared knowledge', m.knowledge ? `${m.meko.knowledge?.documents ?? '?'} document(s): the standard and the policy` : 'none'))
+    + layer(m.teams, 'M', "Org's shared context", m.org.connected ? `${esc(m.org.name)} (${m.org.teams === null ? 'checking' : m.org.teams ? 'incidents, critical queries' : 'no team context yet'})` : 'not connected')
+    + layer(m.runs.length > 0, 'R', 'Records', m.runs.length ? `${m.runs.length} run(s) on ${esc(USE_CASES[state.useCase].record)}'s record` : 'nothing recorded yet')
+    + layer((m.meko.knowledge?.promoted || 0) > 0, 'L', 'Promoted lessons', (m.meko.knowledge?.promoted || 0) + ' promoted');
+}
+
+function render() {
+  const m = model();
+  if (state.step == null || !m.open[state.step]) state.step = firstOpenStep(m);
+  renderSide(m);
+  renderNav(m);
+  renderStep(m);
+  renderInsight(m);
+  renderRuns();
+}
+
+/* ------------------------------------------------------------------ actions */
+function say(text) { $('status').textContent = text || ''; }
+
+/** Loads a list a step shows, once: the step shows "Loading…" until it arrives. */
+const loading = {};
+function load(key, path) {
+  if (state[key] || loading[key]) return;
+  loading[key] = true;
+  api(path).then(v => { state[key] = v; }).catch(e => { state[key] = []; say(e.message); })
+    .finally(() => { loading[key] = false; render(); });
+}
+
+/** A quick call. On success the page moves on when the step it was on is now done (and {@code advance} is not false). */
+async function act(fn, done, advance) {
+  if (busy()) return;
+  hold();
+  say('Working…');
+  const from = state.step;
+  try {
+    await fn();
+    pending = false;
+    await refresh();
+    say(done || '');
+    if (advance !== false) advanceFrom(from);
+  } catch (e) { say(e.message); } finally { release(); }
+}
+
+/** Marks an action in flight: every action button goes off at once, so a second click does nothing. */
+function hold() {
+  pending = true;
+  document.querySelectorAll('.act').forEach(b => { b.disabled = true; });
+}
+function release() {
+  if (!pending) return;
+  pending = false;
+  render();
+}
+
+function advanceFrom(from) {
+  const m = model();
+  if (state.step === from && m.done[from] && from < STEPS.length - 1 && m.open[from + 1]) go(from + 1);
+}
+
+function rehearse(m) {
+  state.jobStep = state.step;
+  store.set('jobStep', state.step);
+  start(() => api('/rehearsals', {cidr: state.cidr}), 'rehearsal', m.includes);
+}
+
+/** Starts a background job and follows it. */
+async function start(call, type, label) {
+  if (busy()) return;
+  hold();
+  say('');
+  try {
+    const {job: id} = await call();
+    pending = false;
+    follow(id, type, state.step, label);
+  } catch (e) { say(e.message); } finally { release(); }
+}
+
+let polling = null;
+/**
+ * Setup work moves on to the next step by itself when it is done. A job whose output is the point (the faulty job, a
+ * rehearsal, a recovery, a promotion) stays on its step: the user reads it, then goes on with Next.
+ */
+const SETUP_JOBS = ['cluster', 'seed', 'knowledge', 'org'];
+const shownSecret = new Set();
+/** Follows a job until it ends; when it succeeds, moves on if the page is still on the step that started it. */
+function follow(id, type, from, label) {
+  state.job = {id, type, from, label, started: Date.now()};
+  $('activity').hidden = false;
+  $('activity').open = true;   // open while it runs; it folds up when the job ends
+  $('actTitle').textContent = JOB_TITLES[type] || 'Working';
+  render();
+  if (polling) clearInterval(polling);
+  let polls = 0;
+  const poll = async () => {
+    let j;
+    try { j = await api('/jobs/' + id); } catch (e) { return; }
+    // Every ~6 s while the job runs: the status too, so the sidebar's budget shows a branch's endpoint while it exists.
+    if (++polls % 4 === 0 && j.status === 'running') {
+      try { state.status = await api('/status'); renderSide(model()); } catch (e) { /* the next poll tries again */ }
+    }
+    state.job.started = j.started;
+    $('actState').textContent = j.status;
+    $('actState').className = 'pill ' + (j.status === 'done' ? 'ok' : j.status === 'failed' ? 'bad' : 'warn');
+    $('actLog').textContent = j.entries.filter(e => ['log', 'error', 'branch', 'review', 'decision', 'rehearsal', 'plans', 'rollbackCheck', 'baseline'].includes(e.kind))
+      .map(e => new Date(e.at).toLocaleTimeString() + '  ' + e.text).join('\n');
+    $('actLog').scrollTop = $('actLog').scrollHeight;
+    const secret = j.entries.find(e => e.kind === 'generatedPassword')?.data;
+    if (secret && !shownSecret.has(j.id)) {
+      shownSecret.add(j.id);
+      $('secret').innerHTML = `<div class="callout warn" style="display:block"><b>Save this password now.</b> AMP generated it and will not show it again;
+        this app keeps it only until it stops.<div class="secret"><code id="pwValue">${esc(secret)}</code>
+        <button class="btn sm" id="pwCopy">Copy</button><button class="btn sm ghost" id="pwHide">I saved it</button></div></div>`;
+      $('pwCopy').onclick = () => navigator.clipboard?.writeText($('pwValue').textContent);
+      $('pwHide').onclick = () => { $('secret').innerHTML = ''; };
+    }
+    if (j.type === 'rehearsal' || j.type === 'recovery') showRun(j, label, j.type === 'recovery' ? 'recovery' : 'release', from);
+    if (j.status !== 'running') {
+      clearInterval(polling);
+      polling = null;
+      state.job = null;
+      $('activity').open = j.status === 'failed';   // a failure stays open, to read why
+      if (j.type === 'cluster') state.clusters = null;
+      if (j.type === 'promote' || j.type === 'rehearsal' || j.type === 'recovery') state.lessons = null;
+      if (j.type === 'incident' && j.status === 'done' && runsKey('recovery')) { state.runsBy[runsKey('recovery')] = []; store.set('runsBy', state.runsBy); state.selected = null; }
+      if (j.type === 'org') state.orgDatapacks = null;
+      await refresh();
+      if (j.status === 'done') {
+        say((JOB_TITLES[j.type] || 'The job') + ': done.' + (SETUP_JOBS.includes(j.type) ? '' : ' Read the result, then go on when ready.'));
+        if (SETUP_JOBS.includes(j.type)) advanceFrom(from);
+      } else say((JOB_TITLES[j.type] || 'The job') + ' failed: ' + (j.error || 'see the activity log.'));
+    }
+  };
+  polling = setInterval(poll, 1500);
+  poll();
+}
+
+/* ------------------------------------------------------------------ running job pill */
+setInterval(() => {
+  const job = state.job;
+  if (!job) { $('pJob').hidden = true; return; }
+  const secs = Math.max(0, Math.round((Date.now() - (job.started || Date.now())) / 1000));
+  $('pJob').hidden = false;
+  $('pJob').textContent = `● ${JOB_TITLES[job.type] || 'Working'} · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+}, 1000);
+$('pJob').onclick = () => {
+  const job = state.job;
+  if (job) go(job.type === 'rehearsal' ? (state.jobStep ?? job.from) : jobStep(job.type));
+  $('activity').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+};
+
+/* ------------------------------------------------------------------ results */
+function showRun(j, label, uc, step) {
+  const key = runsKey(uc);
+  if (!key) return;
+  const runs = state.runsBy[key] = state.runsBy[key] || [];
+  let run = runs.find(r => r.id === j.id);
+  if (!run) { run = {id: j.id, label: label || 'rehearsal', step}; runs.push(run); state.selected = j.id; }
+  run.status = j.status; run.entries = j.entries; run.error = j.error;
+  store.set('runsBy', state.runsBy);
+  renderRuns();
+}
+
+/** What a rehearsal ran with, from the server's progress record. */
+const ranWith = r => r.knowledge && r.teams ? "with the standard and other teams' memory" : r.knowledge ? 'with the standard and the policy'
+  : r.teams ? "with other teams' memory only" : 'with no context';
+
+/**
+ * The step a run belongs to: the one that started it; for a run from the record (an earlier session) or one followed
+ * before runs remembered their step, the step for what it ran with.
+ */
+function stepOfRun(run) {
+  if (run.step != null) return run.step;
+  const recovery = state.useCase === 'recovery';
+  if (run.flags) return recovery ? (run.flags.teams ? 4 : 3) : 2 + (run.flags.knowledge ? (run.flags.teams ? 2 : 1) : run.flags.teams ? 2 : 0);
+  const ctx = (run.entries || []).find(e => e.kind === 'context' || e.kind === 'incidentContext')?.data;
+  if (!ctx) return null;
+  if (recovery) return ctx.marker ? 4 : 3;
+  const knowledge = Object.keys(ctx.rules || {}).length > 0, teams = (ctx.incidents || []).length + (ctx.queries || []).length > 0;
+  return 2 + (knowledge ? (teams ? 2 : 1) : teams ? 2 : 0);
+}
+
+/** Every run of the use case in use: those this browser followed, with their details, and the record's others, as summaries. */
+function allRuns() {
+  const followed = localRuns();
+  const recovery = state.useCase === 'recovery';
+  const record = recovery ? state.status?.incidentProgress : state.status?.progress;
+  const recorded = (record?.runs || []).filter(r => !followed.some(f => f.id === r.run))
+    .map(r => ({id: r.run, label: recovery ? (r.teams ? "with the org's shared context" : 'with only the alert') : ranWith(r), summary: true,
+      verdict: r.verdict, flags: {knowledge: r.knowledge, teams: r.teams}}));
+  return [...recorded, ...followed];
+}
+
+/** The latest run of a step, if it has one. */
+const latestRunOf = step => allRuns().filter(r => stepOfRun(r) === step).pop();
+
+function renderRuns() {
+  const runs = allRuns();
+  if (state.step < 2) { $('results').hidden = true; return; }
+  if (!state.selected || !runs.some(r => r.id === state.selected)) state.selected = latestRunOf(state.step)?.id ?? null;
+  $('results').hidden = !runs.length;
+  $('prName').textContent = USE_CASES[state.useCase].record;
+  $('runs').innerHTML = runs.map((r, i) => {
+    const d = (r.entries || []).find(e => e.kind === 'decision' || e.kind === 'recoveryDecision')?.data;
+    const dmg = (r.entries || []).find(e => e.kind === 'damage')?.data;
+    const reh = (r.entries || []).find(e => e.kind === 'rehearsal')?.data;
+    const br = (r.entries || []).find(e => e.kind === 'branch')?.data;
+    const here = stepOfRun(r) === state.step;
+    return `<button class="run ${r.id === state.selected ? 'sel' : ''}" data-id="${esc(r.id)}">
+      ${here ? '<span class="pill ok" style="align-self:flex-start">This step</span>' : ''}
+      <span class="n">Run ${i + 1} · ${esc(r.label)}</span>
+      <span class="verdict ${d ? d.verdict : r.verdict || ''}">${d ? d.verdict.replaceAll('_', ' ') : r.summary ? esc(r.verdict.replaceAll('_', ' ')) : esc(r.status === 'failed' ? 'failed' : 'running…')}</span>
+      ${r.summary ? '<span class="small muted">From the record of an earlier session</span>' : ''}
+      ${dmg ? `<span class="metric">Rows the job changed <b>${dmg.damaged}</b></span><span class="metric">Left alone <b>${dmg.genuine + dmg.createdAfter}</b></span>` : ''}
+      ${reh ? `<span class="metric">Checkout's worst insert <b>${ms(reh.checkout.worstMillis)}</b></span>
+        <span class="metric">Table rewrites <b>${reh.scripts.flatMap(s => s.steps).filter(s => s.rewrote).length}</b></span>` : ''}
+      ${br ? `<span class="metric"><span>Fork · ready</span><b>${ms(br.forkMillis)} · ${ms(Math.round(br.readyMillis / 1000) * 1000)}</b></span>` : ''}</button>`;
+  }).join('');
+  document.querySelectorAll('.run').forEach(b => b.onclick = () => { state.selected = b.dataset.id; renderRuns(); });
+  const run = runs.find(r => r.id === state.selected) || runs[runs.length - 1];
+  $('result').innerHTML = run ? renderResult(run) : '';
+}
+
+/**
+ * Orders by status at each point of the incident, and the proof of a surgical repair: from before the job to after the
+ * repair, each status may change only by what checkout wrote meanwhile.
+ */
+function countsTable(inc, afterRepair) {
+  if (!inc || !inc.before || !Object.keys(inc.before).length) return '';
+  const statuses = [...new Set([...Object.keys(inc.before), ...Object.keys(inc.after || {}), ...Object.keys(afterRepair || {})])].sort();
+  const n = (m, k) => (m && m[k]) || 0;
+  // The status the job selects and the one it writes, as the server defines the job.
+  const ip = state.status?.incidentProgress || {};
+  const fmt = v => Number(v).toLocaleString();
+  const delta = v => (v > 0 ? '+' : '') + fmt(v);
+  const exact = afterRepair && statuses.every(k => n(afterRepair, k) - n(inc.before, k) === n(inc.written, k));
+  return `<div class="tablewrap" style="margin-top:12px"><table class="counts">
+    <tr><th>Orders by status</th><th class="num">Before the job</th><th class="num">After the job</th>${afterRepair ? '<th class="num">After the repair</th><th class="num">Repair vs before</th><th class="num">Checkout wrote</th><th></th>' : '<th class="num">Change</th>'}</tr>
+    ${statuses.map(k => {
+      const job = n(inc.after, k) - n(inc.before, k);
+      if (!afterRepair) return `<tr><td>${esc(k)}</td><td class="num">${fmt(n(inc.before, k))}</td><td class="num">${fmt(n(inc.after, k))}</td>
+        <td class="num">${job ? `<span class="tag ${k === ip.jobSelects ? 'bad' : 'warn'}">${delta(job)}</span>` : '0'}</td></tr>`;
+      const net = n(afterRepair, k) - n(inc.before, k), ok = net === n(inc.written, k);
+      return `<tr><td>${esc(k)}</td><td class="num">${fmt(n(inc.before, k))}</td><td class="num">${fmt(n(inc.after, k))}</td><td class="num">${fmt(n(afterRepair, k))}</td>
+        <td class="num">${delta(net)}</td><td class="num">${delta(n(inc.written, k))}</td><td>${ok ? '<span class="tag ok">✓</span>' : '<span class="tag bad">✗</span>'}</td></tr>`;
+    }).join('')}</table></div>
+    ${afterRepair ? `<p class="small ${exact ? '' : 'muted'}" style="margin-top:6px">${exact
+      ? 'Surgical: from before the job to after the repair, every status changed by exactly what checkout wrote meanwhile, and nothing else.'
+      : 'Not exact: some status changed by more than checkout wrote. Read the checks above.'}</p>`
+      : `<p class="small muted" style="margin-top:6px">The job set ${fmt(inc.changed)} ${esc(ip.jobSelects)} orders to ${esc(ip.jobValue)}; checkout's ${fmt(Object.values(inc.written || {}).reduce((a, b) => a + b, 0))} new orders are in the change too.</p>`}`;
+}
+
+/** What the planner did: the actions that ran, in order (a plan's first draft can name a path the planner later left). */
+function planHtml(by) {
+  const plans = by('plan');
+  const ran = by('action').map(a => a.text);
+  const shown = ran.length ? ran : (plans[plans.length - 1]?.data || []).map(st => st.action);
+  if (!shown.length) return '';
+  return `<h3>What the planner did</h3><div class="plan">${shown.map(a => `<span class="${ran.includes(a) ? 'done' : ''} ${/^no[A-Z]/.test(a) ? 'skip' : ''}">${esc(a)}</span>`).join('<span class="arrow">→</span>')}</div>`
+    + (plans.length > 1 ? `<p class="small muted" style="margin-top:6px">The planner replanned ${plans.length - 1} time(s) as each action changed what it knew.</p>` : '');
+}
+
+function renderRecoveryResult(run) {
+  const by = k => (run.entries || []).filter(e => e.kind === k);
+  const ctx = by('incidentContext')[0]?.data;
+  const decision = by('recoveryDecision')[0]?.data;
+  const plans = by('plan');
+  const actions = by('action').map(a => a.text);
+  const damage = by('damage')[0];
+  const repair = by('repairRehearsal')[0]?.data;
+  let html = '';
+  if (decision) html += `<div class="decision ${decision.verdict}"><b>${decision.verdict.replaceAll('_', ' ')}</b>
+      <ul>${decision.reasons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+      ${decision.evidenceHash ? `<span class="small muted">Evidence artifact <code>${esc(decision.evidenceHash.slice(0, 16))}…</code> on the record of ${esc(decision.incidentId)}.</span>` : ''}</div>`;
+  if (run.error) html += `<div class="decision failed"><b>The run failed</b><div>${esc(run.error)}</div></div>`;
+  html += planHtml(by);
+  const counts = by('counts')[0]?.data;
+  const cycle = state.status?.incidentProgress?.incident;
+  if (counts?.repaired && cycle) html += `<h3>Orders on main, by status</h3>${countsTable(cycle, counts.repaired)}`;
+  html += '<div class="grid2">';
+  html += `<div class="sub-box"><h3>What the agent knew</h3>${ctx ? `
+      <b class="small">Read</b><ul class="plain"><li>${ctx.sources.map(esc).join(' and ')}</li></ul>
+      <b class="small">The incident</b><ul class="plain"><li>${ctx.incident ? `${esc(ctx.incident.text)} <span class="who">— ${esc(ctx.incident.writtenBy)} · ${esc(ctx.incident.datapack)}</span>` : '<span class="muted">Only the alert: the incident id and the time.</span>'}</li></ul>
+      <b class="small">The job's run</b><ul class="plain"><li>${ctx.marker ? `${esc(ctx.marker.job)}${ctx.marker.runId ? ' run <code>' + esc(ctx.marker.runId) + '</code>' : ''}: started ${esc(ctx.marker.startedAt)} UTC at <code>${esc(ctx.marker.lsn)}</code>${ctx.marker.finishedAt
+        ? `, finished ${esc(ctx.marker.finishedAt)} UTC at <code>${esc(ctx.marker.lsnAfter)}</code>, reporting ${Number(ctx.marker.rowsChanged).toLocaleString()} rows changed` : ' (no end marker)'}
+        <span class="who">— ${esc(ctx.marker.writtenBy)} · ${esc(ctx.marker.datapack)}</span>` : '<span class="muted">No marker: no point in time to compare against.</span>'}</li></ul>
+      <b class="small">Runbook</b><ul class="plain">${Object.keys(ctx.runbook).length ? Object.values(ctx.runbook).map(x => `<li><b>${esc(x.id)}</b> ${esc(x.text.slice(x.id.length, 130))}…</li>`).join('') : '<li class="muted">None.</li>'}</ul>` : '<span class="muted">…</span>'}</div>`;
+  html += `<div class="sub-box"><h3>The damage and the repair</h3>${damage ? `<p class="small">${esc(damage.text)}</p>` : '<p class="small muted">No comparison was possible.</p>'}
+      ${repair ? `<b class="small">Rehearsed on a branch of main</b><ul class="plain">${repair.checks.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}</div>`;
+  html += '</div>';
+  return html;
+}
+
+function renderResult(run) {
+  if (!run.summary && state.useCase === 'recovery') return renderRecoveryResult(run);
+  if (run.summary) return `<div class="decision ${esc(run.verdict)}"><b>${esc(run.verdict.replaceAll('_', ' '))}</b>
+    <p class="small muted" style="margin-top:6px">This run went ${esc(run.label)} in an earlier session; its steps, checks and evidence are on the
+    record of ${esc(USE_CASES[state.useCase].record)}. Read them in <b>Audit &amp; promote</b>.</p></div>`;
+  const by = k => (run.entries || []).filter(e => e.kind === k);
+  const ctx = by('context')[0]?.data;
+  const review = by('review')[0];
+  const plans = by('plan');
+  const actions = by('action').map(a => a.text);
+  const decision = by('decision')[0]?.data;
+  const steps = [...by('statement'), ...by('rollback')].map(e => ({...e.data, rollback: e.kind === 'rollback'}));
+  // The stall limit the policy states, as the agent read it; without one, the server's default for labelling.
+  const stall = ctx?.stallMillis || 3000;
+  const planCheck = by('plans')[0];
+  const rollback = by('rollbackCheck')[0];
+  let html = '';
+  if (decision) html += `<div class="decision ${decision.verdict}"><b>${decision.verdict.replaceAll('_', ' ')}</b>
+      <ul>${decision.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+      ${decision.changes.length ? `<b>Changes</b><ul>${decision.changes.map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}
+      ${decision.evidenceHash ? `<span class="small muted">Evidence artifact <code>${esc(decision.evidenceHash.slice(0, 16))}…</code> on the record of ${esc(decision.prId)}.</span>` : ''}</div>`;
+  if (run.error) html += `<div class="decision failed"><b>The run failed</b><div>${esc(run.error)}</div></div>`;
+  html += planHtml(by);
+  html += '<div class="grid2">';
+  html += `<div class="sub-box"><h3>What the agent knew</h3>${ctx ? `
+      <b class="small">Shared knowledge</b><ul class="plain">${Object.keys(ctx.rules).length ? Object.values(ctx.rules).map(r => `<li><b>${esc(r.id)}</b> ${esc(r.text.slice(r.id.length, 140))}…</li>`).join('') : '<li class="muted">No standard, no policy.</li>'}</ul>
+      <b class="small">Memory</b><ul class="plain">${ctx.incidents.map(i => `<li>${esc(i.text)} <span class="who">— ${esc(i.writtenBy)} · ${esc(i.datapack)}</span></li>`).join('')}
+        ${ctx.queries.map(q => `<li>Critical: <b>${esc(q.name)}</b> <code>${esc(q.sql)}</code> <span class="who">— ${esc(q.writtenBy)} · ${esc(q.datapack)}</span></li>`).join('')}
+        ${!ctx.incidents.length && !ctx.queries.length ? '<li class="muted">No incident and no critical query on orders.</li>' : ''}</ul>
+      ${ctx.setAside.length ? `<b class="small">Set aside</b><ul class="plain">${ctx.setAside.map(a => `<li><span class="aside">${esc(a.text.slice(0, 110))}…</span> <span class="muted">${esc(a.reason)}</span> <span class="who">— ${esc(a.writtenBy)} · ${esc(a.datapack)}</span></li>`).join('')}</ul>` : ''}` : '<span class="muted">…</span>'}</div>`;
+  html += `<div class="sub-box"><h3>Review against the standard</h3><p class="small muted">${esc(review?.text || '…')}</p>
+      ${review?.data?.findings?.length ? `<ul class="plain">${review.data.findings.map(f => `<li><span class="tag warn">${esc(f.ruleId)}</span> ${esc(f.script)} #${f.statement}: ${esc(f.problem)}</li>`).join('')}</ul>` : ''}</div>`;
+  html += '</div>';
+  if (steps.length) html += `<h3>On the rehearsal branch</h3><div class="tablewrap"><table><tr><th>Step</th><th>Statement</th><th class="num">Took</th><th>Evidence</th><th class="num">Checkout's worst insert</th><th class="num">WAL</th></tr>
+    ${steps.map(s => `<tr><td>${s.rollback ? 'rollback ' : ''}${esc(s.script.replace('.sql', ''))} #${s.number}</td><td class="sql">${esc(s.text)}</td><td class="num">${ms(s.millis)}</td>
+      <td>${s.ok ? '' : '<span class="tag bad">failed</span>'}${s.rewrote ? '<span class="tag bad">rewrote the table</span>' : ''}${s.migrationWaitedOnLock ? '<span class="tag warn">waited for its lock</span>' : ''}${s.checkoutWaitedOnLock ? '<span class="tag warn">checkout queued</span>' : ''}${s.attempts > 1 ? `<span class="tag warn">${s.attempts} attempts</span>` : ''}${s.error && !s.ok ? `<div class="small muted">${esc(s.error)}</div>` : ''}</td>
+      <td class="num">${s.worstCheckoutMillis > stall ? `<span class="tag bad">${ms(s.worstCheckoutMillis)}</span>` : ms(s.worstCheckoutMillis)}</td><td class="num">${bytes(s.walBytes)}</td></tr>`).join('')}</table></div>`;
+  if (planCheck) html += `<h3>Critical queries</h3><p class="small muted">${esc(planCheck.text)}</p>${(planCheck.data || []).length ? `<div class="tablewrap"><table><tr><th>Query</th><th>Before</th><th>After</th><th class="num">Buffers</th></tr>
+    ${planCheck.data.map(c => `<tr><td>${esc(c.before.name)}</td><td>${esc(c.before.node)} ${c.before.index ? 'on <code>' + esc(c.before.index) + '</code>' : ''}</td><td>${esc(c.after.node)} ${c.after.index ? 'on <code>' + esc(c.after.index) + '</code>' : ''}</td>
+      <td class="num">${c.before.buffers} → ${c.regressed ? `<span class="tag bad">${c.after.buffers}</span>` : c.after.buffers}</td></tr>`).join('')}</table></div>` : ''}`;
+  if (rollback) html += `<h3>Rollback</h3><p class="small muted">${esc(rollback.text)}</p>`;
+  return html;
+}
+
+/**
+ * Promotion: a lesson an agent wrote to its own memory moves into the datapack's shared knowledge base, where every agent
+ * and person working in the datapack finds it by search, as they find the runbook. One way; only the owner can promote.
+ */
+function promoteItem(m) {
+  const lessons = state.lessons;
+  if (lessons == null && m.s.lessons) load('lessons', '/lessons');
+  const list = lessons || [];
+  return `<li class="${m.s.lessons ? '' : 'wait'}"><div><div class="h">Promote what the runs taught</div>
+    <div class="d">While running, the agents write lessons to <b>their own memory</b>: other agents do not search it. Promoting moves a lesson
+      into the datapack's <b>shared knowledge base</b>, so every agent and person working in it finds the lesson by search, as they find the
+      standard or the runbook. It is one way, and only the datapack's owner can promote.</div>
+    ${list.length ? `<ul class="plain" style="margin-top:10px">${list.map(l => `<li>${esc(l.text)} <span class="who">— memory of this run's agent</span></li>`).join('')}</ul>`
+      : `<p class="hint">${m.s.lessons ? 'Loading the lessons…' : 'No lesson waiting: a run that learns something writes one (and promoted lessons leave this list).'}</p>`}
+    <div class="row act-row"><button class="btn act" id="promote" ${m.s.lessons ? '' : 'disabled'}>Promote ${m.s.lessons || ''} lesson${m.s.lessons === 1 ? '' : 's'} to shared knowledge</button></div></div></li>`;
+}
+
+/** Shows a record read back from Meko under the button that read it, in the audit step. */
+function renderAudit(a) {
+  state.audit = {record: USE_CASES[state.useCase].record, data: a};
+  render();
+  requestAnimationFrame(() => $('auditInline')?.scrollIntoView({behavior: 'smooth', block: 'start'}));
+}
+
+function auditBlock() {
+  const a = state.audit;
+  if (!a || a.record !== USE_CASES[state.useCase].record) return '';
+  const d = a.data;
+  return `<div class="audit-inline" id="auditInline"><h3>The record of ${esc(a.record)}, read back by its id</h3>
+    ${!d.turns.length ? '<p class="hint">Nothing recorded yet: the record fills as runs go (a turn takes a few seconds to become readable).</p>'
+    : `<div class="tablewrap"><table><tr><th>Run</th><th>Event</th><th>What was done</th><th>What came of it</th><th>Written by</th></tr>
+    ${d.turns.map(t => `<tr><td>${esc(t.run)}</td><td>${esc(t.event)}</td><td>${esc(t.input)}</td><td>${esc(t.output)}</td><td class="who">${esc(t.writer)}</td></tr>`).join('')}</table></div>`}
+    ${d.evidence ? `<h3>Evidence artifact <code>${esc(d.evidenceHash.slice(0, 16))}…</code></h3><div class="log">${esc(JSON.stringify(d.evidence, null, 2))}</div>` : ''}</div>`;
+}
+
+/* ------------------------------------------------------------------ refresh */
+async function refresh() {
+  try { state.status = await api('/status'); } catch (e) { say(e.message); }
+  const s = state.status || {};
+  // Clusters live in a datapack: another datapack, another list.
+  const datapackId = s.meko?.connected ? s.meko.datapackId : null;
+  if (datapackId !== state.listedFor) { state.listedFor = datapackId; state.clusters = null; state.clChoice = null; state.orgDatapacks = null; }
+  // A job started before this page loaded (or before a reload): follow it.
+  if (s.job?.status === 'running' && !polling) follow(s.job.id, s.job.type, jobStep(s.job.type), localRuns().find(r => r.id === s.job.id)?.label);
+  if (s.progressError) say(s.progressError);
+  // The server is still reading this datapack's record back: look again shortly, not in 20 s.
+  if (s.progress?.loading) setTimeout(() => { if (!polling) refresh(); }, 2000);
+  render();
+  renderRuns();
+}
+refresh();
+setInterval(() => { if (!polling) refresh(); }, 20000);
+</script>
+</body>
+</html>

@@ -1,7 +1,9 @@
 # Meko Workshop: Same Agents, Only the Context Changes
 
-A hands-on session (about 2 hours) for 20 or more people. Each participant runs three use cases, adding context to
-their own Meko datapack between runs, and watches what the agents do differently. The agents, the planner and the code
+A hands-on session (about 2 hours) for 20 or more people. It opens with *New Session, Same Context*: an AI
+assistant's next session starts empty, and connected to Meko it starts with what the last session established. Then
+each participant runs three use cases, adding context to their own Meko datapack between runs, and watches what the
+agents do differently. The agents, the planner and the code
 never change. No model key is needed.
 
 The demo and the workshop are the same application. The demo is the default; the workshop is a profile with its own
@@ -9,7 +11,11 @@ page.
 
 ## What participants learn
 
-Each stage adds one kind of context, and participants run the use cases again to see what changes.
+First, the simplest case of a context silo: what an AI assistant learns in one session is gone in the next, and in
+another tool. *New Session, Same Context* shows what crosses with Meko: memory Meko extracts from a conversation,
+recalled in a new session and in another harness.
+
+Then each stage adds one kind of context, and participants run the use cases again to see what changes.
 
 | Stage | What is in the datapack | What to look for |
 |---|---|---|
@@ -89,8 +95,18 @@ Learned*, two participants pair up, each with their own Meko account.
    first, datapacks shared with you marked as such, and others marked *has other content*, since they already hold
    context and the stages would not start clean.
 
-One datapack serves all three use cases. Each use case adds only its own context, at its own step, so the others'
-earlier stages stay as they were.
+Step 1 offers two layouts:
+
+* **One datapack for all use cases** (the default): the three use cases share one datapack. Each adds only its own
+  context, at its own step, so the others' earlier stages stay as they were.
+* **One datapack per use case**: each use case gets its own datapack at its own step 1 (suggested names share a stem:
+  `…-dispute`, `…-kyc`, `…-learned`). Each starts truly empty whatever the others added, switching tabs switches to
+  that use case's datapack, and *Start over* replaces only the selected use case's datapack.
+
+Every datapack the workshop creates is filed into a **`meko-workshop` project** in your Meko account, created the first
+time: one per use case goes in the folder for its vertical, **SDLC** (New Session, Same Context) or **BFSI** (the
+others), and one for all use cases goes in **All use cases**. A datapack chosen with *Use an existing one* stays where it
+is. If filing fails, the datapack is still created and used, and step 1 says why it was not filed.
 
 Without a Meko key the workshop runs on an in-memory stand-in that starts empty: every step works the same way, but
 nothing is kept across a restart. Useful for practice; the live datapack is the point of the session.
@@ -124,10 +140,44 @@ The output has two parts:
   * The conversation, as chat bubbles (where nobody speaks, as in *The Organization Learned*, the records the agents
     wrote to the case's conversation in Meko); what the agents did (asks and redone work highlighted); and every Meko
     call: what was sent and how much came back.
+  * **Self-learning** (with a live datapack): Meko's own view of how well the datapack answers the run. **Check with
+    Meko** asks the questions the run's agents searched with again, through `context_search` (memory, knowledge and
+    conversations at once). It shows the rating Meko gives each (*low*, *mid*, *high*) with its hint, the datapack's
+    quality figure and the to-dos from its Self-learning tab. At a later stage, **Replay earlier weak searches** re-runs
+    the ones an earlier stage's check found weak (`selflearning_verify`) and shows each one's band before and now. Press
+    *Check with Meko* after the *No context* run, then *Replay* after the documents run: the policy questions should
+    move from low to high. These are extra searches, made by the agent `workshop:coverage-check`, and count against the
+    participant's Meko search limit. The agents' own searches, and so the runs and their numbers, are unchanged.
 
 Ask participants to say what they expect before each run. Runs stay in the browser, per datapack.
 
 ## The use cases, step by step
+
+### New Session, Same Context (SDLC · AI assistants, about 10 minutes)
+
+**The story.** Every AI harness keeps context inside the session. Close it, switch tools, or hand the work to a
+teammate, and the next session starts empty: you explain the stack, the decisions and the constraints again.
+
+**The harness.** A minimal agent session built into the page, standing in for any real harness (Claude Code, Codex, a
+support copilot): its context lives in the session and goes when the session ends. Connected to Meko, a new session
+loads at its start what Meko returns for its task and for the project's standing context (its stack, conventions,
+constraints and decisions), as a harness does; each fact says which search found it. Nothing about the outcome is
+scripted: what you type is yours, the facts are what Meko extracts from it, and what a new session knows is what
+Meko's memory search returns.
+
+| Step | What you do | What happens | What to look for |
+|---|---|---|---|
+| 0. Create your datapack | As in the other use cases' step 1: choose one datapack for all use cases or one per use case, then a new datapack or an existing one. With one already in use, the step shows it | | |
+| 1. Session 1, in Claude Code (stand-in) | Tell it about your project: edit the example messages or write your own, and send them | Each message goes into the session, and to the datapack as the session's conversation | |
+| 2. End the session | Press **End the session** | The session's context is discarded. Meko extracts facts from what you typed, in the background | Under *Meko stored from session 1*: the facts in Meko's own words. What did it keep, and how did it phrase it? |
+| 3. Next morning: send a prompt in a new session | Type a prompt (edit the example), and press **Send the prompt** | The same prompt goes to a new session twice: on its own, and connected to Meko, where the harness loads what Meko returns for the prompt and for the project's standing context. Of what Meko returns, the right context is kept: here by a rule, keeping what scores at least 70% of Meko's top score for the prompt (what only the project search found is kept as standing context); the rest is set aside, with its score. Each side shows exactly what the model receives: the context, then the prompt | What the model receives on each side: empty context, or session 1's facts in Meko's words, with who wrote them. What was set aside, and why. How many of session 1's facts were sent, set aside or not found, and the input's size. The workshop calls no model: it shows the input |
+| 4. Switch the harness | Press **Send the prompt in Codex** | The same prompt in another tool (stand-in), on the same datapack | What Codex's model receives, and *written by*: its context was written in Claude Code |
+| 5. Try it in your own harness | Connect your own tool to Meko's MCP server with your key and this datapack, open a new session, and ask what it knows about the project | | The strongest proof: your tool, not this page |
+
+The steps use the same navigation as the other use cases: a stepper, one step at a time, and *Next step* once the
+current one is done. With one datapack for all use cases, a datapack created here is the one the use cases that follow use too; with one per
+use case, this use case gets its own. Meko extracts facts in the background,
+so the facts appear a moment after the session ends; *Check what Meko stored* looks again.
 
 ### 1. Don't Make Me Explain It Again (BFSI · Payments, about 20 minutes)
 
@@ -142,9 +192,9 @@ crosses between them.
 | Step | What you do | What happens | What to look for |
 |---|---|---|---|
 | 1. Create your datapack | Create or choose it | | |
-| 2. Run with no context | Press **Run** | The chatbot writes what the customer established to Meko during the run; the specialist recalls it. No policy is in reach, so the case goes to payments operations, undecided. | Under *Memory*: who wrote what the specialist knew. Was the customer asked again? Why is nothing decided? |
+| 2. Run with no context | Press **Run** | The chatbot writes what the customer established to Meko during the run, and the specialist recalls what it can. It then looks for a dispute policy: with none in reach, its rule is to hand the case to payments operations rather than decide. | Under *Memory*: who wrote what the specialist knew. Was the customer asked again? Why is nothing decided? |
 | 3. Add the documents | Press **Upload the documents** (`card-dispute-07-failed-capture-policy.md` and `card-dispute-03-chargeback-policy.md`), then **Check my datapack** | The step is done when both show *uploaded* (or *one-line version*). | |
-| 4. Run with shared knowledge | Press **Run** | The specialist finds the policies, picks the one whose scope covers this case, and decides by that policy's own rule on a provisional refund. | Which steps disappeared? Did the outcome change? Under *Right context*: the look-alike chargeback policy, and why it was set aside. |
+| 4. Run with shared knowledge | Press **Run** | The specialist looks for the policies, picks the one whose scope covers this case, and applies that policy's own rule on a provisional refund. | Which steps disappeared? Did the outcome change? Under *Right context*: the look-alike chargeback policy, and why it was set aside. |
 | 5. Audit | Press **Audit** | A compliance auditor, given only the transaction id, reads the whole record back from the conversation and checks it against the policy. | How many records did it have to request? Was the settlement checked before the decision? |
 
 ### 2. What Changed Since Last Review? (BFSI · KYC, about 20 minutes)
@@ -159,10 +209,10 @@ alone changes nothing (with no earlier review there is nothing to compare with),
 | Step | What you do | What happens | What to look for |
 |---|---|---|---|
 | 1. Create your datapack | Create or choose it | | |
-| 2. Run with no context | Press **Run** | With no earlier review to compare with, the review re-verifies everything and leaves the risk class to the reviewer. | How many evidence requests? Under *What the agents did*: which work is redone. |
+| 2. Run with no context | Press **Run** | With no earlier review to compare with, the agent's only path is to re-verify everything; the risk class is left to the reviewer. | How many evidence requests? Under *What the agents did*: which work is redone. |
 | 3. Add last quarter's reviews | Press **Add their reviews** | Another desk's agent reviewed this customer last quarter, in its own application, and wrote the reviews to memory. They go into your datapack as that agent wrote them: the right one to compare with, and two look-alikes. | |
 | 4. Add the documents | Press **Upload the documents** (`kyc-periodic-review-standard.md`), then **Check my datapack** | | |
-| 5. Run with the standard and their reviews | Press **Run** | The review compares with the latest review of exactly this customer, and judges each change by the standard's own rules: what is material, and what to request for it. | Under *Memory*: who wrote the review it compared with. Under *Right context*: the older review and the other customer's review, and why each was set aside. Under *Shared knowledge*: the rules it judged by. Compare the evidence requests with step 2. |
+| 5. Run with the standard and their reviews | Press **Run** | The agent looks for the latest review of exactly this customer to compare with, and judges each change by the rules the standard states: what is material, and what to request for it. | Under *Memory*: who wrote the review it compared with. Under *Right context*: the older review and the other customer's review, and why each was set aside. Under *Shared knowledge*: the rules it judged by. Compare the evidence requests with step 2. |
 | 6. Audit | Press **Audit** | A model-risk reviewer, given only the review id, reads the record back and re-checks the materiality judgement against the standard's text. | Did the review compare against the latest review? Were the requests proportionate? |
 
 Each KYC run starts a new review cycle, so a review never compares with its own previous run.
@@ -191,7 +241,7 @@ The use case can be run two ways. Pick it with the toggle on the use case's step
 | 1. Create your datapack | Create or choose it | | |
 | 2. Run without the lesson | Press **Run** | A failed payment reaches the APAC desk's investigator with nothing promoted. It tests hypotheses until one holds. This is the baseline: what it finds is not promoted. | How many hypotheses does it test? |
 | 3. The EU desk solves case 1 | Press **Run** | The EU desk's agent investigates case 1 the hard way, then promotes the root cause from memory to collective memory. | Under *Shared knowledge*: what was promoted, and by whom. |
-| 4. Run with the lesson | Press **Run** | The same case as step 2, for the APAC desk's investigator again. It finds the lesson, checks the conditions the pattern states against this case, and validates instead of investigating. | Compare with the *Without the lesson* card: the same case and agent; only the context changed. Under *Decision traces*: what the pattern-fit decision rested on. |
+| 4. Run with the lesson | Press **Run** | The same case as step 2, for the APAC desk's investigator again. It looks for the lesson, checks the conditions the pattern states against this case and, where they hold, validates instead of investigating. | Compare with the *Without the lesson* card: the same case and agent; only the context changed. Under *Decision traces*: what the pattern-fit decision rested on. |
 
 Each of the first two runs starts a new learning epoch (a rerun on a used datapack must not see an older lesson, and
 promotion is one way), and the last reads the epoch of case 1, so what it reuses is exactly what case 1 promoted.
@@ -234,7 +284,7 @@ ids?
 ## Facilitator notes
 
 * **Read numbers off the screen.** Every count and minute is measured from the run; this guide states none on purpose.
-  Minutes are estimates (see `effort/estimates.yml`); counts are what the planner did.
+  Minutes are estimates (see [`estimates.yml`](../src/main/resources/effort/estimates.yml)); counts are what the planner did.
 * **Common problems.**
   * *Meko: no datapack yet*: create one at step 1. If the datapack in use was deleted in the Meko app, step 1 says so:
     create a new one. (`MEKO_DATAPACK_NAME` is not needed for the workshop.)
@@ -246,7 +296,7 @@ ids?
   * *Promotion failed*: the key is not the datapack's owner or a maintainer.
   * *Run with the lesson keeps waiting (shared datapack)*: the EU desk has not run case 1 yet, or has not shared the
     datapack; press *Check my datapack* once it has.
-* **Timing.** Intro 15 min, setup 15, each use case about 20, exercises 15, wrap-up 10. A run takes from a few seconds
+* **Timing.** Intro 15 min, setup 15, New Session, Same Context 10, each use case about 20, exercises 15, wrap-up 10. A run takes from a few seconds
   up to about a minute against live Meko.
 * **Starting over.** A datapack keeps everything written to it, across restarts, and promotion is one way: a clean
   start is a new datapack (*Start over with a new datapack*).

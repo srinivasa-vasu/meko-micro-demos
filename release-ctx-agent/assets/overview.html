@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rehearse Before You Release</title>
+<meta name="description" content="Meko and YugabyteDB AMP: a release agent creates a full-size branch on AMP, rehearses a pull request's migrations under checkout's writes, and decides with the context other teams left in Meko. The story, what was measured, and what it means for developers, platform teams and release managers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* ------------------------------------------------------------------ theme tokens: the demo app's palette */
+:root {
+  --bg: #091016; --panel: #101a24; --panel-2: #0c141c; --ink: #edf3f8; --muted: #8ea0b2; --rule: #263443;
+  --thread: #71ddb9; --thread-ink: #06130f; --thread-soft: #14382c; --loss: #ff8b8b; --loss-soft: #3a1c1f;
+  --ask: #f5c66a; --ask-soft: #3a2e14; --blue: #8fbcff; --blue-soft: #16263d;
+  --shadow: 0 0 0 1px var(--rule), 0 10px 30px rgba(0, 0, 0, .25);
+  --glow: radial-gradient(circle at 10% 0, #173128 0, #0b1219 35%, #091016 75%);
+  --accent-panel: linear-gradient(120deg, #142821, #101a22); --accent-edge: #2a5546;
+  --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #f2f6f5; --panel: #ffffff; --panel-2: #f6f9f8; --ink: #0e1a22; --muted: #536472; --rule: #d3dde2;
+  --thread: #0f7a5c; --thread-ink: #ffffff; --thread-soft: #dcf3ea; --loss: #c2412d; --loss-soft: #fbe7e3;
+  --ask: #a15c07; --ask-soft: #fcefd9; --blue: #2d5fb3; --blue-soft: #e3ecfa;
+  --shadow: 0 0 0 1px var(--rule), 0 8px 24px rgba(14, 26, 34, .05);
+  --glow: radial-gradient(circle at 10% 0, #dff1ea 0, #eef4f2 35%, #f2f6f5 75%);
+  --accent-panel: linear-gradient(120deg, #e3f4ed, #f3faf7); --accent-edge: #9fd3bf;
+  color-scheme: light;
+}
+
+/* ------------------------------------------------------------------ base */
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (min-width: 960px) and (min-height: 680px) { html { scroll-snap-type: y proximity; } }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--glow) fixed, var(--bg); color: var(--ink); font: 400 clamp(16px, 1.05vw, 19px)/1.55 var(--body); -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--display); margin: 0; letter-spacing: -0.025em; }
+h1 { font-size: clamp(40px, 5.4vw, 84px); line-height: 1.02; font-weight: 800; }
+h2 { font-size: clamp(30px, 3.3vw, 52px); line-height: 1.08; font-weight: 800; }
+h3 { font-size: clamp(19px, 1.45vw, 24px); line-height: 1.15; font-weight: 700; }
+p { margin: 0; max-width: 62ch; }
+code { font: 0.86em var(--mono); background: var(--panel-2); border: 1px solid var(--rule); border-radius: 6px; padding: 1px 6px; }
+:focus-visible { outline: 3px solid var(--thread); outline-offset: 3px; border-radius: 4px; }
+button { font: inherit; color: inherit; }
+
+/* ------------------------------------------------------------------ chrome */
+.topbar { position: fixed; top: 18px; right: 22px; z-index: 10; display: flex; gap: 10px; align-items: center; }
+.theme-btn { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; background: var(--panel); border: 1px solid var(--rule); box-shadow: var(--shadow); color: var(--ink); }
+.theme-btn:hover { color: var(--thread); }
+.theme-btn .moon { display: none; }
+.theme-btn.dark .sun { display: none; } .theme-btn.dark .moon { display: block; }
+.theme-btn.help { font: 700 17px var(--display); }
+.counter.typing { color: var(--thread); }
+.counter { padding: 9px 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--rule); box-shadow: var(--shadow); font: 600 13px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rail { position: fixed; left: 24px; top: 50%; transform: translateY(-50%); z-index: 5; display: flex; flex-direction: column; gap: 12px; }
+.rail::before { content: ""; position: absolute; left: 6px; top: 6px; bottom: 6px; width: 2px; background: var(--thread); opacity: .3; }
+.rail a { position: relative; display: block; width: 14px; height: 14px; border-radius: 50%; background: var(--bg); border: 2px solid var(--thread); }
+.rail a.on { background: var(--thread); }
+.rail a span { position: absolute; left: 24px; top: -4px; white-space: nowrap; font-size: 13px; color: var(--muted); opacity: 0; transition: opacity .15s; pointer-events: none; }
+.rail a:hover span, .rail a:focus-visible span { opacity: 1; }
+@media (max-width: 960px) { .rail { display: none; } .topbar { top: 10px; right: 10px; } }
+.progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 11; }
+.progress i { display: block; height: 100%; width: 0; background: var(--thread); transition: width .3s ease-out; }
+:root.focus { scroll-snap-type: none; }
+.focus .rail, .focus .topbar > :not(.counter) { display: none; }
+.focus .topbar { top: auto; bottom: 14px; right: 18px; opacity: .6; }
+.focus section:not(.current) { display: none; }
+.keys { background: var(--panel); color: var(--ink); border: 1px solid var(--rule); border-radius: 16px; box-shadow: var(--shadow); padding: 22px 24px; max-width: min(440px, calc(100vw - 32px)); }
+.keys::backdrop { background: rgba(0, 0, 0, .5); }
+.keys h3 { margin-bottom: 14px; }
+.keys dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 18px; margin: 0; }
+.keys dd { margin: 0; font-size: 15px; color: var(--muted); }
+.keys form { margin-top: 18px; text-align: right; }
+.keys form button { border: 1px solid var(--rule); background: var(--panel-2); border-radius: 999px; padding: 6px 16px; cursor: pointer; font-size: 14px; font-weight: 600; }
+
+/* ------------------------------------------------------------------ slides */
+section { min-height: 100vh; scroll-snap-align: start; padding: clamp(70px, 9vh, 110px) clamp(18px, 7vw, 130px) clamp(48px, 7vh, 90px) clamp(18px, 8vw, 150px); display: flex; flex-direction: column; justify-content: center; gap: clamp(18px, 2.4vh, 30px); }
+section + section { border-top: 1px solid var(--rule); }
+@media (max-width: 960px) { section { min-height: auto; } }
+.eyebrow { color: var(--thread); font-weight: 800; font-size: 12px; text-transform: uppercase; letter-spacing: .16em; }
+.lede { font-size: clamp(19px, 1.45vw, 25px); color: var(--muted); max-width: 56ch; }
+.quote { font: 700 clamp(19px, 1.6vw, 26px)/1.3 var(--display); color: var(--thread); max-width: 40ch; }
+.hint { font-size: 14px; color: var(--muted); }
+.card { background: var(--panel); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); min-width: 0; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 1100px) { .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid3 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 700px) { .grid2, .grid4 { grid-template-columns: minmax(0, 1fr); } }
+
+/* the pull request */
+.pr { background: var(--panel); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; max-width: 1150px; }
+.pr .head { display: flex; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--rule); font: 600 14px var(--mono); color: var(--muted); }
+.pr .line { display: grid; grid-template-columns: 34px minmax(0, 1fr) minmax(0, 360px); gap: 14px; align-items: baseline; padding: 9px 18px; border-bottom: 1px dashed var(--rule); }
+.pr .line:last-child { border-bottom: 0; }
+.pr .n { font: 700 14px var(--mono); color: var(--muted); }
+.pr pre { margin: 0; font: 14px/1.45 var(--mono); white-space: pre-wrap; color: var(--ink); }
+.pr .rel { padding: 6px 18px; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--thread); background: var(--panel-2); }
+.trap { font-size: 14.5px; color: var(--muted); opacity: 0; transition: opacity .3s; }
+.trap b { color: var(--loss); }
+.reveal .trap { opacity: 1; }
+@media (max-width: 900px) { .pr .line { grid-template-columns: 28px minmax(0, 1fr); } .trap { grid-column: 2; } }
+.toggle { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: var(--panel); border: 1px solid var(--rule); box-shadow: var(--shadow); align-self: flex-start; }
+.toggle button { border: 0; background: transparent; padding: 6px 14px; border-radius: 999px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
+.toggle button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+/* numbers */
+.big { font: 800 clamp(38px, 4vw, 64px)/1 var(--display); font-variant-numeric: tabular-nums; }
+.big.bad { color: var(--loss); } .big.good { color: var(--thread); }
+.stat .what { font-size: 15px; color: var(--muted); margin-top: 8px; }
+.stat .then { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--rule); font-size: 15px; }
+.stat .then b { color: var(--thread); }
+.note { font-size: 13.5px; color: var(--muted); }
+
+/* lifecycle */
+.life { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; counter-reset: s; }
+.life > div { counter-increment: s; background: var(--panel); border-radius: 14px; padding: 16px; box-shadow: var(--shadow); position: relative; }
+.life > div::before { content: counter(s); display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--thread); color: var(--thread-ink); font: 700 15px var(--display); margin-bottom: 10px; }
+.life b { font-family: var(--display); font-size: 19px; display: block; }
+.life span { font-size: 14.5px; color: var(--muted); }
+.life code { font-size: 12px; }
+.life .t { display: block; margin-top: 8px; font: 700 15px var(--mono); color: var(--thread); }
+@media (max-width: 1100px) { .life { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* datapack picture */
+.pack { background: var(--accent-panel); border-radius: 20px; padding: 22px; box-shadow: 0 0 0 1px var(--accent-edge), 0 10px 30px rgba(0, 0, 0, .2); }
+.pack h3 { color: var(--thread); }
+.pack .stores { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.pack .store { background: var(--panel-2); box-shadow: 0 0 0 1px var(--rule); border-radius: 12px; padding: 14px; }
+.pack .store b { display: block; font-family: var(--display); font-size: 18px; }
+.pack .store span { font-size: 14px; color: var(--muted); }
+.pack .store.amp { box-shadow: 0 0 0 1px var(--blue); }
+.pack .store.amp b { color: var(--blue); }
+.who { font-size: 13px; color: var(--ask); }
+@media (max-width: 1100px) { .pack .stores { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* comparison table */
+table.cmp { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--panel); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; font-size: 15.5px; }
+table.cmp th, table.cmp td { padding: 11px 14px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+table.cmp tr:last-child td { border-bottom: 0; }
+table.cmp th { font: 700 13px var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+table.cmp th.meko { color: var(--thread); }
+table.cmp td:first-child { font-weight: 600; }
+table.cmp td.no { color: var(--loss); } table.cmp td.yes { color: var(--thread); font-weight: 600; }
+.wrap-x { overflow-x: auto; }
+
+/* plans */
+.plans { display: flex; flex-direction: column; gap: 12px; }
+.planrow { display: grid; grid-template-columns: 220px minmax(0, 1fr) 190px; gap: 16px; align-items: center; background: var(--panel); border-radius: 14px; padding: 14px 18px; box-shadow: var(--shadow); }
+.planrow .lbl { font: 800 13px/1.3 var(--display); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.planrow .lbl small { display: block; text-transform: none; letter-spacing: 0; font: 500 13.5px var(--body); margin-top: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { padding: 4px 9px; border-radius: 8px; font: 600 12.5px var(--mono); background: var(--panel-2); border: 1px solid var(--rule); white-space: nowrap; }
+.chip.ctx { background: var(--thread-soft); color: var(--thread); border-color: transparent; }
+.chip.skip { background: transparent; border-style: dashed; color: var(--muted); text-decoration: line-through; }
+.verdict { justify-self: start; font-weight: 700; font-size: 14px; border-radius: 999px; padding: 4px 12px; }
+.verdict.no { background: var(--loss-soft); color: var(--loss); } .verdict.mid { background: var(--ask-soft); color: var(--ask); } .verdict.ok { background: var(--thread-soft); color: var(--thread); }
+@media (max-width: 1000px) { .planrow { grid-template-columns: minmax(0, 1fr); } }
+
+/* evidence list */
+.evid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.evid > div { border-top: 3px solid var(--thread); padding-top: 10px; }
+.evid b { font-family: var(--display); font-size: 20px; display: block; }
+.evid span { font-size: 14.5px; color: var(--muted); }
+@media (max-width: 1000px) { .evid { grid-template-columns: minmax(0, 1fr); } }
+
+/* record */
+.record { background: var(--panel); border-radius: 16px; box-shadow: var(--shadow); padding: 6px 0; max-width: 1150px; }
+.turn { display: grid; grid-template-columns: 120px minmax(0, 1fr) 210px; gap: 14px; padding: 10px 18px; border-bottom: 1px dashed var(--rule); font-size: 15px; }
+.turn:last-child { border-bottom: 0; }
+.turn .ev { font: 700 13px var(--mono); color: var(--thread); }
+.turn .by { font-size: 13px; color: var(--ask); }
+@media (max-width: 900px) { .turn { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+.close h1 { max-width: 20ch; }
+.flow { display: grid; grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr) 34px minmax(0, 1fr); align-items: stretch; gap: 10px; }
+.flow .arrow { display: grid; place-items: center; color: var(--muted); font: 700 26px var(--display); }
+.flow .step { border-radius: 16px; padding: 18px 20px; background: var(--panel); box-shadow: var(--shadow); border-top: 4px solid var(--rule); }
+.flow .step .k { font: 800 12px var(--body); letter-spacing: .14em; text-transform: uppercase; }
+.flow .step h3 { margin: 6px 0 10px; }
+.flow .step ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; font-size: 15px; color: var(--muted); }
+.flow .ctx { border-top-color: var(--ask); } .flow .ctx .k { color: var(--ask); }
+.flow .try { border-top-color: var(--blue); } .flow .try .k { color: var(--blue); }
+.flow .proof { border-top-color: var(--thread); background: var(--accent-panel); box-shadow: 0 0 0 1px var(--accent-edge), 0 10px 30px rgba(0, 0, 0, .2); } .flow .proof .k { color: var(--thread); }
+.asks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.asks > div { border-left: 3px solid var(--thread); padding: 2px 0 2px 12px; }
+.asks b { display: block; font-size: 15px; }
+.asks span { font-size: 14px; color: var(--muted); }
+@media (max-width: 1000px) { .flow { grid-template-columns: minmax(0, 1fr); } .flow .arrow { transform: rotate(90deg); } .asks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* hero: the picture of forward and backward forks */
+.hero { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(20px, 3vw, 48px); align-items: center; }
+.hero h1 { font-size: clamp(38px, 4.4vw, 72px); }
+.hero h1 em { font-style: normal; color: var(--thread); }
+.hero .lede { margin-top: 18px; }
+.moments { display: flex; flex-direction: column; gap: 14px; }
+.moment { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 14px; align-items: baseline; padding: 14px 18px; border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); border-left: 4px solid var(--loss); }
+.moment .at { font: 800 clamp(22px, 1.8vw, 30px)/1 var(--mono); color: var(--loss); }
+.moment b { display: block; font: 700 clamp(17px, 1.3vw, 21px)/1.25 var(--display); }
+.moment span { font-size: 15px; color: var(--muted); }
+.existed { font-size: clamp(16px, 1.15vw, 19px); color: var(--muted); max-width: 60ch; }
+.existed b { color: var(--ink); }
+.pillars { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.pillar { border-radius: 16px; padding: 16px 20px; background: var(--panel); box-shadow: var(--shadow); }
+.pillar .name { font: 800 12px var(--body); letter-spacing: .14em; text-transform: uppercase; }
+.pillar.amp { border-top: 4px solid var(--blue); } .pillar.amp .name { color: var(--blue); }
+.pillar.meko { border-top: 4px solid var(--ask); } .pillar.meko .name { color: var(--ask); }
+.pillar h3 { margin: 6px 0 10px; }
+.pillar .facts { display: flex; flex-wrap: wrap; gap: 6px; }
+.pillar .facts span { padding: 4px 10px; border-radius: 999px; font-size: 13.5px; font-weight: 600; background: var(--panel-2); border: 1px solid var(--rule); }
+.pillar.amp .facts span { color: var(--blue); } .pillar.meko .facts span { color: var(--ask); }
+.then-line { font: 700 clamp(19px, 1.6vw, 26px)/1.3 var(--display); color: var(--thread); }
+@media (max-width: 800px) { .pillars { grid-template-columns: minmax(0, 1fr); } .moment { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 1000px) { .hero { grid-template-columns: minmax(0, 1fr); } }
+
+/* the world today vs with Meko + AMP */
+.world { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.world > div { border-radius: 18px; padding: 20px 22px; box-shadow: var(--shadow); background: var(--panel); }
+.world .today { border-top: 4px solid var(--loss); }
+.world .with { border-top: 4px solid var(--thread); background: var(--accent-panel); box-shadow: 0 0 0 1px var(--accent-edge), 0 10px 30px rgba(0, 0, 0, .2); }
+.world h3 { margin-bottom: 12px; }
+.world .today h3 { color: var(--loss); } .world .with h3 { color: var(--thread); }
+.world ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.world li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; font-size: 15.5px; }
+.world li::before { font-weight: 800; }
+.world .today li::before { content: "✗"; color: var(--loss); }
+.world .with li::before { content: "✓"; color: var(--thread); }
+.world li b { color: var(--ink); }
+.world li span { color: var(--muted); }
+@media (max-width: 900px) { .world { grid-template-columns: minmax(0, 1fr); } }
+.halves { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: stretch; }
+.halves .card h3 { margin-bottom: 8px; }
+.halves .amp h3 { color: var(--blue); } .halves .meko h3 { color: var(--ask); }
+.halves .both { background: var(--accent-panel); box-shadow: 0 0 0 1px var(--accent-edge), 0 10px 30px rgba(0, 0, 0, .2); }
+.halves .both h3 { color: var(--thread); }
+.halves ul { margin: 6px 0 0; padding-left: 18px; font-size: 15px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+.halves .gap { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--rule); font-size: 14.5px; }
+.halves .gap b { color: var(--loss); }
+@media (max-width: 1100px) { .halves { grid-template-columns: minmax(0, 1fr); } }
+.divider h2 { max-width: 22ch; }
+/* a use case explained: the change, what can go wrong, what it costs */
+.ucx { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.ucx > div { background: var(--panel); border-radius: 16px; padding: 18px 20px; box-shadow: var(--shadow); border-top: 4px solid var(--rule); }
+.ucx h3 { font-size: 15px; font-family: var(--body); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
+.ucx .chg { border-top-color: var(--blue); } .ucx .chg h3 { color: var(--blue); }
+.ucx .risk { border-top-color: var(--loss); } .ucx .risk h3 { color: var(--loss); }
+.ucx .cost { border-top-color: var(--ask); } .ucx .cost h3 { color: var(--ask); }
+.ucx ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; color: var(--muted); }
+.ucx li b { color: var(--ink); font-weight: 600; }
+.ucx dl { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; }
+.ucx dt { font-weight: 600; color: var(--ink); font-size: 15px; }
+.ucx dd { margin: 0 0 2px; font-size: 14.5px; color: var(--muted); }
+.ucx .lead-in { font-size: 15px; color: var(--muted); margin-bottom: 12px; }
+.ucx .lead-in b { color: var(--ink); }
+.ucx pre { margin: 0 0 10px; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; background: var(--panel-2); border: 1px solid var(--rule); border-radius: 10px; padding: 8px 10px; color: var(--ink); }
+.ucx .so { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--rule); font-size: 14.5px; color: var(--thread); font-weight: 600; }
+@media (max-width: 1100px) { .ucx { grid-template-columns: minmax(0, 1fr); } }
+/* the brief: two use cases, by persona */
+.personas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.personas > div { background: var(--panel); border-radius: 14px; padding: 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
+.personas h3 { font-size: 18px; }
+.personas .pain { font-size: 14px; color: var(--loss); }
+.personas .gain { font-size: 14px; color: var(--muted); }
+.personas .gain b { color: var(--thread); font-weight: 600; }
+.personas .gain i { font-style: normal; font: 800 11px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--ask); margin-right: 6px; }
+@media (max-width: 1200px) { .personas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 800px) { .personas { grid-template-columns: minmax(0, 1fr); } }
+.divider .tag { display: inline-block; padding: 4px 12px; border-radius: 999px; font: 700 12px var(--body); letter-spacing: .1em; text-transform: uppercase; background: var(--thread-soft); color: var(--thread); align-self: flex-start; }
+</style>
+<script>
+  try { const t = localStorage.getItem('meko-deck-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* default */ }
+</script>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="counter" id="counter" aria-live="polite"></span>
+  <button type="button" class="theme-btn help" id="helpBtn" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">?</button>
+  <button type="button" class="theme-btn" id="themeBtn" aria-label="Switch theme">
+    <svg class="sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+    <svg class="moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+  </button>
+</div>
+<div class="progress" aria-hidden="true"><i id="progress"></i></div>
+<nav class="rail" id="rail" aria-label="Slides"></nav>
+<dialog class="keys" id="keysHelp" aria-labelledby="keysTitle">
+  <h3 id="keysTitle">Keyboard shortcuts</h3>
+  <dl>
+    <dt><kbd>→</kbd> <kbd>↓</kbd> <kbd>Space</kbd></dt><dd>Next slide</dd>
+    <dt><kbd>←</kbd> <kbd>↑</kbd></dt><dd>Previous slide</dd>
+    <dt><kbd>Home</kbd> <kbd>End</kbd></dt><dd>First / last slide</dd>
+    <dt><kbd>1</kbd>…<kbd id="keysLast">9</kbd></dt><dd>Go to slide: type its number (<kbd>Enter</kbd> to jump at once)</dd>
+    <dt><kbd>R</kbd></dt><dd>The pull request: show / hide what each line does</dd>
+    <dt><kbd>F</kbd></dt><dd>Focus mode: one slide at a time</dd>
+    <dt><kbd>T</kbd></dt><dd>Switch light / dark theme</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Leave focus mode, close this panel</dd>
+  </dl>
+  <form method="dialog"><button type="submit">Close</button></form>
+</dialog>
+
+<!-- ============================================================ 1. hero -->
+<section id="top" data-title="Meko × AMP">
+  <div class="eyebrow">Meko × YugabyteDB AMP</div>
+  <div class="hero">
+    <div>
+      <h1>Two nights every team with a busy database <em>has had</em>.</h1>
+      <p class="lede">Neither needed a hero. Both needed a realistic copy of the data, on demand, and what another team
+        already knew.</p>
+    </div>
+    <div class="moments">
+      <div class="moment"><span class="at">01:07</span><div><b>A routine migration ships.</b>
+        <span>It passed review and staging. It queues behind the nightly report, and checkout stops taking orders for 11 minutes.</span></div></div>
+      <div class="moment"><span class="at">02:13</span><div><b>A nightly job ships a one-line bug.</b>
+        <span>Every paid order now says "pending". Restoring a backup would lose every order taken since.</span></div></div>
+    </div>
+  </div>
+  <p class="existed">Both times, the answer existed. A realistic copy to try the change on was <b>a ticket and a day away</b>. What would have
+    caught it, a standard, a postmortem, a job log, sat in <b>another team's tools</b>.</p>
+  <div class="pillars">
+    <div class="pillar amp"><span class="name">AMP</span><h3>A production-like branch, when the agent needs it.</h3>
+      <div class="facts"><span>No ticket: the agent creates it over MCP</span><span>Zero-copy, all the data</span><span>Ready in seconds</span>
+        <span>From now, or from a moment in the past</span><span>Deleted after, within a core budget</span></div></div>
+    <div class="pillar meko"><span class="name">Meko</span><h3>What every team knows, readable by the agent.</h3>
+      <div class="facts"><span>Standards and runbooks</span><span>Incidents</span><span>Critical queries</span><span>Job markers</span>
+        <span>Who wrote each fact, and where</span><span>A record of every decision</span></div></div>
+  </div>
+  <p class="then-line">So the agent tries the change before it ships, undoes a mistake row by row, and leaves the proof.</p>
+</section>
+
+<!-- ============================================================ 1a. use case 1, explained -->
+<section id="case1" data-title="Use case 1: the change and the risk">
+  <div class="eyebrow">Use case 1 · SDLC · Retail checkout</div>
+  <h2>Rehearse before you release: a routine schema change on the busiest table.</h2>
+  <p class="lede">The store-pickup feature needs four new things on <code>orders</code>, the table checkout writes on every purchase.
+    The pull request looks routine; a reviewer would approve it. Release management's agent must decide before the change board meets.</p>
+  <div class="ucx">
+    <div class="chg"><h3>The change</h3>
+      <p class="lead-in">Customers can now <b>buy online and pick up in store</b>. To support it, each order needs:</p>
+      <dl>
+        <dt>How it is fulfilled</dt><dd>Shipped or picked up, with only those two values allowed.</dd>
+        <dt>A public order reference</dt><dd>A unique id for the pickup code, generated for every order.</dd>
+        <dt>Which store</dt><dd>Linked to the stores table.</dd>
+        <dt>A fast lookup for each store's pickups</dt><dd>A new index.</dd>
+      </dl>
+      <p class="lead-in" style="margin:12px 0 0">A second release makes the reference <b>required and unique</b>, and removes an older index the
+        author believes the new one replaces. Both run while checkout takes orders and the nightly reporting job reads the table.</p></div>
+    <div class="risk"><h3>What can go wrong</h3><ul>
+      <li><b>The whole table is rewritten.</b> Generating a new id for every existing order copies all of them, and no one can write to the table meanwhile.</li>
+      <li><b>The change waits in line, and checkout waits behind it.</b> The nightly report holds the table for up to 40 minutes; this happened before (INC-2291: checkout stalled 11 minutes).</li>
+      <li><b>Checks that freeze writes.</b> Validating every row, and building the new index, block new orders until they finish.</li>
+      <li><b>A dashboard slows to a crawl.</b> The "replaced" index is the one the warehouse's pick list relies on.</li>
+      <li><b>The undo was never tried.</b> And it is needed exactly when things go wrong.</li></ul></div>
+    <div class="cost"><h3>What it costs</h3><ul>
+      <li><b>Checkout stalls</b>: every second is orders not taken.</li>
+      <li><b>Stores can't pick</b>: the pick-list dashboard times out, pickups run late.</li>
+      <li><b>Release night becomes an incident</b>, and the next release gets a freeze.</li>
+      <li><b>The change board approves blind</b>: a PR description, not evidence.</li></ul>
+      <div class="so">The question: is it safe, and if not, what exactly must change?</div></div>
+  </div>
+</section>
+
+<!-- ============================================================ 1a'. use case 2, explained -->
+<section id="case2" data-title="Use case 2: the incident and the risk">
+  <div class="eyebrow">Use case 2 · OPS · Operational anomaly</div>
+  <h2>Undo a bad batch job: a defect corrupts orders while checkout keeps writing.</h2>
+  <p class="lede">A nightly job, <code>nightly-reprice</code>, ships with a bug in its filter. It runs at night, commits, and is gone
+    before anyone notices. Checkout never stops. The on-call SRE agent opens INC-3107 when the warehouse has nothing to pick.</p>
+  <div class="ucx">
+    <div class="chg"><h3>What happened</h3>
+      <p class="lead-in">A nightly job reprices open orders. Tonight's version has a <b>bug in its filter</b>:</p>
+      <dl>
+        <dt>It touches the wrong orders</dt><dd>Every order that was already <b>paid</b> is set back to <b>pending</b>, in one commit, in seconds.</dd>
+        <dt>Nothing stops</dt><dd>Checkout keeps taking new orders, some paid and some pending.</dd>
+        <dt>The damage hides in plain sight</dt><dd>The wrongly pending orders now sit beside orders that really are pending and orders created since. They look identical.</dd>
+      </dl></div>
+    <div class="risk"><h3>What can go wrong in the fix</h3><ul>
+      <li><b>Restore last night's backup.</b> Every order taken since the job is lost.</li>
+      <li><b>Flip "pending" back to "paid".</b> Orders that were never paid become paid, and ship for free.</li>
+      <li><b>Find the exact moment before the job.</b> The alert says when it was noticed, not when the job ran; the database needs a precise point, and only the job scheduler recorded it.</li>
+      <li><b>Fix it live.</b> An untested repair on the table checkout is writing to, with no way back.</li></ul></div>
+    <div class="cost"><h3>What it costs</h3><ul>
+      <li><b>Fulfilment stops</b>: no paid orders, nothing to pick or ship.</li>
+      <li><b>Customers see "pending"</b> for orders they paid for: support calls, double payments.</li>
+      <li><b>Finance can't reconcile</b> until every row is right again.</li>
+      <li><b>Hours of forensics</b>, and a repair nobody can prove.</li></ul>
+      <div class="so">The question: which rows did the job change, exactly, and how do we put back only those?</div></div>
+  </div>
+</section>
+
+<!-- ============================================================ 1b. the brief -->
+<section id="brief" data-title="Who it is for">
+  <div class="eyebrow">Who it is for</div>
+  <h2>Every role around a busy database, in both moments.</h2>
+  <div class="personas">
+    <div><h3>Developer</h3>
+      <div class="pain">"It passed on staging." · "Was it my job's change?"</div>
+      <div class="gain"><i>Release</i>Sees what the migration does on <b>a full-size branch</b> before review, with no ticket for it, which rule each line breaks, and the safe form working.</div>
+      <div class="gain"><i>Recovery</i>A defect in their job is <b>undone row by row</b>, with the exact rows it changed, not a restore that blames everyone's data.</div></div>
+    <div><h3>Platform / DBA</h3>
+      <div class="pain">"Nobody reads the standard." · "Don't make me restore."</div>
+      <div class="gain"><i>Release</i>Writes the migration standard <b>once</b>, in a datapack; every release agent applies it, limits included.</div>
+      <div class="gain"><i>Recovery</i>Writes the repair runbook once; forks of the past cost <b>seconds</b>, and <code>main</code> is touched only by a rehearsed repair.</div></div>
+    <div><h3>SRE / Ops</h3>
+      <div class="pain">"The postmortem said so, again." · "Restore and lose the last hour?"</div>
+      <div class="gain"><i>Release</i>Their incident, in a shared datapack, makes the next release <b>rehearse with the reporting job</b>: it does not happen twice.</div>
+      <div class="gain"><i>Recovery</i>An alert becomes a <b>surgical repair</b>: the position from the scheduler, the rows from the fork, nothing written since lost.</div></div>
+    <div><h3>Release manager</h3>
+      <div class="pain">"I approve on trust."</div>
+      <div class="gain"><i>Release</i>Approves on a <b>record</b>: every step, measurement and the evidence artifact, read back from the PR id.</div>
+      <div class="gain"><i>Recovery</i>Knows a bad job can be undone without a freeze: shipping stays <b>safe and fast</b>.</div></div>
+    <div><h3>Security / Compliance</h3>
+      <div class="pain">"Who changed which rows, and why?"</div>
+      <div class="gain"><i>Release</i>Every approval names its rules, its evidence and <b>who wrote each fact</b>.</div>
+      <div class="gain"><i>Recovery</i>The incident's record holds the position, the rows repaired and the checks: an <b>audit trail by id</b>.</div></div>
+    <div><h3>Executive</h3>
+      <div class="pain">"Why did checkout stop?" · "How much did we lose?"</div>
+      <div class="gain"><i>Release</i><b>Fewer outages</b> from routine changes; branch compute for minutes, checked against the budget.</div>
+      <div class="gain"><i>Recovery</i><b>Minutes, not a lost night</b> of orders; and what one team learns protects every other team.</div></div>
+  </div>
+</section>
+
+<!-- ============================================================ 1b. the world today -->
+<section id="today" data-title="The world today">
+  <div class="eyebrow">The world view</div>
+  <h2>Today, a realistic place to try a change is a ticket away, and what teams know does not travel.</h2>
+  <div class="world">
+    <div class="today"><h3>How it works today</h3><ul>
+      <li><div><b>Changes are tried on staging.</b> <span>A copy with a fraction of the rows, none of the traffic, and none of the night jobs. The migration that rewrites 1,000,000 rows takes a second there.</span></div></li>
+      <li><div><b>Standards live on a wiki.</b> <span>The reviewer has to remember that <code>uuidv7()</code> as a default rewrites the table. Most do not.</span></div></li>
+      <li><div><b>Incidents end in a postmortem.</b> <span>The SRE team learns that migrations queue behind the 01:00 reporting job. The release team never reads it.</span></div></li>
+      <li><div><b>Nobody owns "which queries matter".</b> <span>The warehouse's dashboard query is known to the warehouse team, and dropped by a checkout pull request.</span></div></li>
+      <li><div><b>Undoing a bad job means a restore.</b> <span>Restore the table, or the whole cluster, to before the job, and lose every order written since.</span></div></li>
+      <li><div><b>Evidence is a PR description.</b> <span>The change board approves on trust, and the incident review reconstructs what happened from chat.</span></div></li>
+    </ul></div>
+    <div class="with"><h3>With Meko + AMP</h3><ul>
+      <li><div><b>Every change is tried on its own branch first.</b> <span>The agent creates it itself, no ticket: a zero-copy fork of <code>main</code> in seconds, with all the data, under checkout's writes and the long transactions an incident names; deleted after.</span></div></li>
+      <li><div><b>The standard is read by the agent.</b> <span>Rules in the datapack's knowledge base: every limit the rehearsal uses (lock timeout, retries, stall limit, regression factor) comes from the rule that states it.</span></div></li>
+      <li><div><b>Incidents protect the next release.</b> <span>The SRE team's incident, in a datapack it shares, makes the release agent rehearse with the reporting job running.</span></div></li>
+      <li><div><b>Critical queries are registered.</b> <span>Teams write them to shared memory; every rehearsal and every repair runs them before and after.</span></div></li>
+      <li><div><b>Undoing a bad job is surgical.</b> <span>Branch <code>main</code> as of the WAL position the scheduler recorded before the job, compare, repair only the rows it changed. Nothing written since is lost.</span></div></li>
+      <li><div><b>Every decision has a record.</b> <span>Each step, its numbers and the evidence artifact, on a record read back from the PR or incident id alone.</span></div></li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ============================================================ 1c. why both -->
+<section id="both" data-title="Why it takes both">
+  <div class="eyebrow">The difference</div>
+  <h2>Either half alone leaves the agent guessing.</h2>
+  <div class="halves">
+    <div class="card amp"><h3>AMP alone</h3><p class="note" style="font-size:16px">Where to try.</p><ul>
+      <li>Zero-copy forks of <code>main</code> in seconds, also as of a past WAL position</li>
+      <li>Endpoints for minutes, checked against a core budget</li>
+      <li>The whole lifecycle as MCP calls an agent makes itself</li></ul>
+      <div class="gap"><b>The gap:</b> a fork finds only what you know to test. No standard, no reporting job, no critical queries; and an alert has a time, while a fork needs a WAL position.</div></div>
+    <div class="card meko"><h3>Meko alone</h3><p class="note" style="font-size:16px">What to try, and what happened.</p><ul>
+      <li>Each team's memory and knowledge, in datapacks they own and share</li>
+      <li>Every fact with who wrote it and where it came from</li>
+      <li>Records and evidence, read back by id</li></ul>
+      <div class="gap"><b>The gap:</b> knowing the rule is not proving the change. Without a realistic copy to try it on, the evidence is an estimate.</div></div>
+    <div class="card both"><h3>Meko + AMP</h3><p class="note" style="font-size:16px">An agent that knows what to test, tries it on a branch it made itself, and leaves proof.</p><ul>
+      <li>Context decides the plan: the same GOAP agent adds the reporting job, the plan check and the rollback only when the datapack holds a reason</li>
+      <li>The scheduler's marker in Meko turns an alert's time into the WAL position AMP forks at</li>
+      <li>Measured results go back to Meko: the record, the evidence, and lessons every team can find</li></ul></div>
+  </div>
+</section>
+
+<!-- ============================================================ 1d. use case 1 -->
+<section id="uc1" class="divider" data-title="Use case 1: Rehearse before you release">
+  <span class="tag">Use case 1 · SDLC</span>
+  <h2>Rehearse before you release.</h2>
+  <p class="lede">A pull request changes <code>orders</code>, the table checkout writes on every purchase. Release management's agent
+    must decide whether it is safe, before the change board meets.</p>
+  <div class="world">
+    <div class="today"><h3>Today</h3><ul>
+      <li><div><b>Reviewed by eye, tested on staging.</b> <span>It passes. On the real table, it rewrites every row and checkout stalls.</span></div></li>
+      <li><div><b>The reporting job is not in the test.</b> <span>The migration queues behind it; so does every insert.</span></div></li>
+      <li><div><b>"The new index covers it."</b> <span>Nobody checks the warehouse's query until its dashboard times out.</span></div></li>
+    </ul></div>
+    <div class="with"><h3>With Meko + AMP</h3><ul>
+      <li><div><b>Reviewed against the standard, rewritten to it.</b> <span>Then both versions are measured on a full-size branch.</span></div></li>
+      <li><div><b>Rehearsed with the reporting job's transaction.</b> <span>Because the SRE team's incident names it.</span></div></li>
+      <li><div><b>Every registered critical query is planned before and after.</b> <span>The index drop is removed with the evidence attached.</span></div></li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ============================================================ 2. the pull request -->
+<section id="pr" data-title="The pull request">
+  <div class="eyebrow">The story · Retail · Buy online, pick up in store</div>
+  <h2>Seven routine lines. Most of them would stall checkout.</h2>
+  <p class="lede">Store pickup needs four things on <code>orders</code>, the table checkout writes on every purchase. The
+    pull request adds them, then tightens them, as teams ship schema changes. A reviewer would approve it.</p>
+  <div class="toggle" role="group" aria-label="Show what each line does">
+    <button type="button" data-reveal="off" aria-pressed="true">As reviewed</button>
+    <button type="button" data-reveal="on" aria-pressed="false">What PostgreSQL 18 does</button>
+  </div>
+  <div class="pr" id="prBox">
+    <div class="head"><span>PR-4821 · orders</span><span>2 migrations</span></div>
+    <div class="rel">Release 1 · add</div>
+    <div class="line"><span class="n">1</span><pre>ADD COLUMN fulfillment_type text NOT NULL DEFAULT 'SHIP'
+  CHECK (fulfillment_type IN ('SHIP','PICKUP'))</pre><span class="trap"><b>Locks and scans</b> every row for the inline CHECK, and queues behind any long transaction</span></div>
+    <div class="line"><span class="n">2</span><pre>ADD COLUMN public_ref uuid DEFAULT uuidv7()</pre><span class="trap"><b>Rewrites the whole table</b>: <code>uuidv7()</code> is volatile, so every row gets its own value</span></div>
+    <div class="line"><span class="n">3</span><pre>ADD COLUMN store_id bigint REFERENCES stores (id)</pre><span class="trap"><b>Validates every row</b> while it locks both tables</span></div>
+    <div class="line"><span class="n">4</span><pre>CREATE INDEX orders_pickup_idx ON orders (store_id, status)
+  WHERE fulfillment_type = 'PICKUP'</pre><span class="trap"><b>Blocks writes</b> for the whole build</span></div>
+    <div class="rel">Release 2 · tighten</div>
+    <div class="line"><span class="n">5</span><pre>ALTER COLUMN public_ref SET NOT NULL</pre><span class="trap"><b>Scans every row</b> under ACCESS EXCLUSIVE</span></div>
+    <div class="line"><span class="n">6</span><pre>ADD CONSTRAINT orders_public_ref_key UNIQUE (public_ref)</pre><span class="trap"><b>Builds an index</b> while writes wait</span></div>
+    <div class="line"><span class="n">7</span><pre>DROP INDEX orders_status_idx  -- "the new index covers it"</pre><span class="trap"><b>It does not.</b> The warehouse dashboard's query loses its index</span></div>
+  </div>
+</section>
+
+<!-- ============================================================ 3. measured -->
+<section id="measured" data-title="What it does to checkout">
+  <div class="eyebrow">Measured on AMP</div>
+  <h2>What the pull request does to checkout</h2>
+  <p class="lede">The same migrations, as written and as rewritten to the standard, with checkout inserting an order every
+    200 ms and the nightly reporting job holding its transaction open.</p>
+  <div class="grid4">
+    <div class="card stat"><div class="big bad">22.8 s</div><div class="what">checkout's worst insert while line 2 rewrote the table</div>
+      <div class="then">Rewritten: <b>2.25 s</b>, bounded by the lock timeout</div></div>
+    <div class="card stat"><div class="big bad">222 MB</div><div class="what">of WAL for release 1's DDL, most of it the rewrite</div>
+      <div class="then">Rewritten: <b>135 KB</b> (the backfill writes its own)</div></div>
+    <div class="card stat"><div class="big bad">11.3 s</div><div class="what">line 1 waited for its lock behind the reporting job, every checkout insert queued behind it</div>
+      <div class="then">Rewritten: gave up after <b>2 s</b>, retried, done on the third try</div></div>
+    <div class="card stat"><div class="big bad">5 → 14,379</div><div class="what">buffers read by the warehouse pick-list query after line 7</div>
+      <div class="then">Keep <code>orders_status_idx</code>: <b>5</b></div></div>
+  </div>
+  <p class="note">PostgreSQL 18.2 on an AMP endpoint with 0.5 vCPU, 1,000,000 orders, a client about 250 ms away, the
+    reporting transaction held for 15 s. Numbers from one run of this demo; every workshop run measures and shows its own.</p>
+</section>
+
+<!-- ============================================================ 4. AMP -->
+<section id="amp" data-title="AMP: a safe place to try">
+  <div class="eyebrow">YugabyteDB AMP</div>
+  <h2>A full-size branch, for minutes, for the price of minutes. No ticket.</h2>
+  <p class="lede">AMP's whole lifecycle is MCP calls, so the agent runs it itself: fork, endpoint, rehearse, delete.
+    <code>main</code> is never changed.</p>
+  <div class="life">
+    <div><b>Check the budget</b><span><code>amp_core_budget</code>: the account's vCPU, before anything is reserved</span></div>
+    <div><b>Fork main</b><span><code>amp_branch_create</code>: zero-copy, all 1,000,000 orders</span><span class="t">≈ 3 s</span></div>
+    <div><b>Give it an endpoint</b><span><code>amp_compute_create</code>: 0.5 vCPU, admitting one address</span><span class="t">a few minutes</span></div>
+    <div><b>Rehearse</b><span>Both releases, under checkout's writes and every long transaction an incident names</span></div>
+    <div><b>Delete it</b><span><code>amp_branch_delete</code>: the branch and its compute, also when a run fails</span><span class="t">≈ 5 s</span></div>
+  </div>
+  <p class="note">Durations from the AMP session behind this demo. Each Postgres database on AMP has its own WAL and pages;
+    billing is by fractional cores.</p>
+</section>
+
+<!-- ============================================================ 5. Meko -->
+<section id="meko" data-title="Meko: what to try">
+  <div class="eyebrow">Meko</div>
+  <h2>Each team owns what it knows. A share carries it across.</h2>
+  <p class="lede">The release agent never talks to the SRE team's agent or the warehouse team's. It reads their datapack beside
+    its own, and every fact says which datapack it came from and who wrote it.</p>
+  <div class="grid2">
+    <div class="pack">
+      <h3>Release team's datapack</h3>
+      <div class="stores" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+        <div class="store"><b>Shared knowledge</b><span>Zero-downtime migration standard (MIG-01…06) and release policy (REL-01…04): the lock timeout and stall limit configure the rehearsal.</span><div class="who">release management</div></div>
+        <div class="store"><b>Records</b><span>PR-4821's conversation, the evidence artifact, and the lessons the rehearsals teach.</span><div class="who">release agent</div></div>
+        <div class="store amp"><b>AMP pool</b><span>Cluster <code>checkout</code>: <code>main</code> with the order history, and the rehearsal branches while they live.</span><div class="who">created in the datapack</div></div>
+      </div>
+    </div>
+    <div class="pack">
+      <h3>The organization's shared datapack</h3>
+      <div class="stores" style="grid-template-columns:minmax(0,1fr)">
+        <div class="store"><b>Memory</b><span>Incident INC-2291: a migration queued behind the reporting job. Critical queries: the warehouse pick list, the checkout order history. And look-alikes about other tables.</span><div class="who">platform SRE · warehouse · checkout, shared with release management</div></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">One Meko project, <i>meko-amp-workshop</i>, with a folder for each side. Reading a shared datapack is enough; one <code>context_search</code> per datapack returns its knowledge and memory together.</p>
+</section>
+
+<!-- ============================================================ 6. comparison -->
+<section id="compare" data-title="Branches alone are not enough">
+  <div class="eyebrow">Use case 1 · AMP's value, Meko's value</div>
+  <h2>A branch only finds what you know to look for.</h2>
+  <div class="wrap-x"><table class="cmp">
+    <tr><th></th><th>One shared dev database</th><th>AMP branches only</th><th class="meko">AMP + Meko</th></tr>
+    <tr><td>Where the migration is tried</td><td>A copy someone keeps, undone by hand</td><td class="yes">A zero-copy fork of main, deleted after</td><td class="yes">The same</td></tr>
+    <tr><td>Real-sized data</td><td class="no">Rarely</td><td class="yes">Always</td><td class="yes">Always</td></tr>
+    <tr><td>Rules to judge each statement by</td><td class="no">A wiki page</td><td class="no">None</td><td class="yes">The standard, from shared knowledge</td></tr>
+    <tr><td>The reporting job's long transaction</td><td class="no">Only by luck</td><td class="no">Only by luck</td><td class="yes">From the SRE team's incident, in a datapack they share</td></tr>
+    <tr><td>Line 7, the dropped index</td><td class="no">Not checked</td><td class="no">Which queries matter?</td><td class="yes">The warehouse and checkout teams' critical queries</td></tr>
+    <tr><td>Rollback</td><td class="no">Rarely tested</td><td>Possible</td><td class="yes">Rehearsed: the policy says so</td></tr>
+    <tr><td>What the change board gets</td><td class="no">The PR description</td><td>Logs</td><td class="yes">A record, read back from the PR id</td></tr>
+  </table></div>
+</section>
+
+<!-- ============================================================ 7. plans -->
+<section id="plans" data-title="Context changes the plan">
+  <div class="eyebrow">Same agent, same planner</div>
+  <h2>Context changes the plan.</h2>
+  <p class="lede">The GOAP planner picks the plan-check and rollback actions only when the context calls for them. The code
+    is the same in every run.</p>
+  <div class="plans">
+    <div class="planrow"><div class="lbl">No context<small>AMP only</small></div>
+      <div class="chips"><span class="chip">fork</span><span class="chip">rehearse as written</span><span class="chip skip">checkCriticalQueries</span><span class="chip skip">rehearseRollback</span><span class="chip">delete</span><span class="chip">decide</span></div>
+      <span class="verdict no">Not decided</span></div>
+    <div class="planrow"><div class="lbl">+ Shared knowledge<small>standard, policy</small></div>
+      <div class="chips"><span class="chip ctx">review: 9 findings</span><span class="chip">fork</span><span class="chip ctx">rehearse rewritten, 2 s lock timeout</span><span class="chip skip">checkCriticalQueries</span><span class="chip ctx">rehearseRollback</span><span class="chip">delete</span><span class="chip">decide</span></div>
+      <span class="verdict mid">Changes requested</span></div>
+    <div class="planrow"><div class="lbl">+ The org's shared context<small>incident, critical queries</small></div>
+      <div class="chips"><span class="chip ctx">review</span><span class="chip">fork</span><span class="chip ctx">rehearse with the reporting job</span><span class="chip ctx">checkCriticalQueries</span><span class="chip ctx">rehearseRollback</span><span class="chip">delete</span><span class="chip">decide</span></div>
+      <span class="verdict ok">Approved with changes</span></div>
+  </div>
+  <p class="note">With shared knowledge only, the release still drops an index that nothing has proven unused (MIG-05). The
+    warehouse team's query is what proves it is needed.</p>
+</section>
+
+<!-- ============================================================ 8. evidence -->
+<section id="evidence" data-title="Evidence, not estimates">
+  <div class="eyebrow">What the rehearsal measures</div>
+  <h2>Every result comes from the database itself.</h2>
+  <div class="evid">
+    <div><b>Table rewritten?</b><span><code>pg_relation_filenode('orders')</code> before and after each statement</span></div>
+    <div><b>What it wrote</b><span>WAL bytes, from <code>pg_current_wal_lsn()</code> before and after</span></div>
+    <div><b>Who waited on a lock</b><span><code>pg_stat_activity</code> sampled every 250 ms: the migration, and checkout queued behind it</span></div>
+    <div><b>What checkout felt</b><span>The latency of every insert in flight during each statement</span></div>
+    <div><b>Did a query regress?</b><span><code>EXPLAIN (ANALYZE, BUFFERS)</code> of each critical query, before and after</span></div>
+    <div><b>Did the rollback restore it?</b><span><code>orders</code>' columns, indexes and constraints, by definition</span></div>
+  </div>
+</section>
+
+<!-- ============================================================ 9. record -->
+<section id="record" data-title="The change board reads it back">
+  <div class="eyebrow">Decision trace</div>
+  <h2>The change board has one id. That is enough.</h2>
+  <p class="lede">Every action writes a turn on PR-4821's record in Meko; the evidence is stored whole as an artifact.</p>
+  <div class="record">
+    <div class="turn"><span class="ev">context</span><span>Rules MIG-01…06, REL-01…04. Incident INC-2291 and two critical queries on orders, from the org's shared datapack; two memories about other tables set aside.</span><span class="by">release-mgmt:rehearsal-agent</span></div>
+    <div class="turn"><span class="ev">review</span><span>MIG-02 release-1 #2: a volatile default rewrites the table under ACCESS EXCLUSIVE …</span><span class="by">release-mgmt:rehearsal-agent</span></div>
+    <div class="turn"><span class="ev">branch</span><span>Forked main at its latest LSN; the endpoint answered.</span><span class="by">release-mgmt:rehearsal-agent</span></div>
+    <div class="turn"><span class="ev">rehearsal</span><span>With the reporting job's long transaction: statements, retries, WAL, checkout's worst insert.</span><span class="by">release-mgmt:rehearsal-agent</span></div>
+    <div class="turn"><span class="ev">plans</span><span>warehouse pick list: buffers before → after, index scan → sequential scan. REGRESSED.</span><span class="by">release-mgmt:rehearsal-agent</span></div>
+    <div class="turn"><span class="ev">decision</span><span>APPROVED_WITH_CHANGES. Remove DROP INDEX orders_status_idx. Evidence artifact 9f3c…</span><span class="by">release-mgmt:rehearsal-agent</span></div>
+  </div>
+  <p class="note">Illustrative shape of the record; the workshop's audit step reads the real one back.</p>
+</section>
+
+<!-- ============================================================ 9b. undo 2:13 -->
+<section id="uc2" class="divider" data-title="Use case 2: Undo a bad batch job">
+  <span class="tag">Use case 2 · OPS</span>
+  <h2>Undo a bad batch job.</h2>
+  <p class="lede">A code defect ships in <code>nightly-reprice</code>: it marks every paid order pending. Checkout keeps taking
+    orders, the warehouse has nothing to pick, and the on-call SRE agent opens INC-3107.</p>
+  <div class="world">
+    <div class="today"><h3>Today</h3><ul>
+      <li><div><b>Restore a backup, or point-in-time-restore the cluster.</b> <span>Every order written since the job is lost, or replayed by hand.</span></div></li>
+      <li><div><b>Or guess with an UPDATE.</b> <span>"Set pending back to paid": and the orders that were genuinely pending are now paid.</span></div></li>
+      <li><div><b>The time is known, the position is not.</b> <span>The alert says 02:13; which transaction was the job's lives in the scheduler's logs.</span></div></li>
+      <li><div><b>The fix is run directly on the live table.</b> <span>Hoping it touches only what it should.</span></div></li>
+    </ul></div>
+    <div class="with"><h3>With Meko + AMP</h3><ul>
+      <li><div><b>Branch <code>main</code> as of just before the job.</b> <span>AMP forks at a past WAL position in seconds, with no running compute on <code>main</code>.</span></div></li>
+      <li><div><b>Compare, and find exactly the damage.</b> <span>Rows that differ, still hold the job's value, and existed before it. The count must equal what the job's run reported changing.</span></div></li>
+      <li><div><b>The position comes from Meko.</b> <span>The scheduler's agent recorded it in the shared datapack; the recovery agent finds it from the incident's time.</span></div></li>
+      <li><div><b>Rehearse the repair on a branch first.</b> <span>Each registered critical query must give back its answer from before the job; then the same repair runs on <code>main</code>.</span></div></li>
+    </ul></div>
+  </div>
+</section>
+
+<section id="undo" data-title="Undo: three agents, one share">
+  <div class="eyebrow">Use case 2 · How the agents meet</div>
+  <h2>A fork of the past, found through a share.</h2>
+  <p class="lede">AMP can branch <code>main</code> as of the moment before the job, but only by WAL position, and an alert carries a time.</p>
+  <div class="grid3">
+    <div class="card"><h3>The SRE agent</h3><p class="note" style="font-size:16px;margin-top:8px">Knows <b>when</b>: paid orders fell to zero at 02:13. Records INC-3107 in the org's shared datapack. Knows no WAL position.</p></div>
+    <div class="card"><h3>The scheduler's agent</h3><p class="note" style="font-size:16px;margin-top:8px">Knows <b>where</b>: before every job it records the WAL position, with the job and the time, in the same shared datapack.</p></div>
+    <div class="card"><h3>The recovery agent</h3><p class="note" style="font-size:16px;margin-top:8px">Knows <b>neither</b>, and talks to neither. With the share, it finds both: the incident, and the marker from just before the job.</p></div>
+  </div>
+  <div class="plans">
+    <div class="planrow"><div class="lbl">Only the alert<small>a time, no position</small></div>
+      <div class="chips"><span class="chip">recallIncident</span><span class="chip">noPositionToCompare</span><span class="chip skip">forkBeforeJob</span><span class="chip skip">rehearseRepair</span><span class="chip">decide</span></div>
+      <span class="verdict no">Not recovered</span></div>
+    <div class="planrow"><div class="lbl">+ The org's shared context<small>the scheduler's marker</small></div>
+      <div class="chips"><span class="chip ctx">recallIncident</span><span class="chip ctx">forkBeforeJob</span><span class="chip">findDamage</span><span class="chip">closeFork</span><span class="chip ctx">rehearseRepair</span><span class="chip">applyRepair</span><span class="chip">decide</span></div>
+      <span class="verdict ok">Recovered</span></div>
+  </div>
+  <p class="note">The scheduler's start and end markers share a run id, so the agent undoes one specific run, and the rows it finds must
+    equal the rows that run reported changing, or the repair is held. The repair passes only if the critical queries the teams
+    registered return what they returned on the fork from before the job. Orders by status before the job and after the repair differ by
+    exactly what checkout wrote meanwhile, as the database counted it: the proof the repair was surgical. Verified on AMP: a fork at a recorded position holds
+    exactly the state at that position, with no running compute on main.</p>
+</section>
+
+<!-- ============================================================ 9c. compare recovery -->
+<section id="compare2" data-title="Recovery: what each brings">
+  <div class="eyebrow">Use case 2 · AMP's value, Meko's value</div>
+  <h2>The past is only useful if you can find it.</h2>
+  <div class="wrap-x"><table class="cmp">
+    <tr><th></th><th>Backup restore</th><th>AMP forks only</th><th class="meko">AMP + Meko</th></tr>
+    <tr><td>Orders written after the job</td><td class="no">Lost</td><td class="yes">Kept</td><td class="yes">Kept</td></tr>
+    <tr><td>The point to go back to</td><td class="no">The last backup</td><td class="no">A WAL position nobody has</td><td class="yes">The scheduler's marker, from the shared datapack</td></tr>
+    <tr><td>Which run did it</td><td class="no">Guessed</td><td class="no">Guessed</td><td class="yes">The run that last finished before the incident was detected</td></tr>
+    <tr><td>Rows repaired</td><td class="no">The whole table</td><td>Whatever the UPDATE matches</td><td class="yes">Exactly the rows the run changed, checked against its own count</td></tr>
+    <tr><td>Proof before touching main</td><td class="no">None</td><td>Possible</td><td class="yes">Rehearsed on a branch; the runbook (REC-03) says so</td></tr>
+    <tr><td>What the incident review gets</td><td class="no">Chat history</td><td>Logs</td><td class="yes">The incident's record: position, rows, checks, evidence</td></tr>
+  </table></div>
+</section>
+
+<!-- ============================================================ 11. close -->
+<section id="close" class="close" data-title="The takeaway">
+  <div class="eyebrow">The takeaway</div>
+  <h1>The right context in. A safe branch to try on. An audit trail out.</h1>
+  <div class="flow">
+    <div class="step ctx"><span class="k">Meko · the right context</span><h3>The agent knows what applies, and from whom.</h3><ul>
+      <li>Each team keeps its own datapack; a share carries it across, no integration to build.</li>
+      <li>Only what applies: incidents about other tables or other topics are set aside, and shown as such.</li>
+      <li>Limits come from the rule that states them: a changed standard changes the next run.</li>
+      <li>Context decides the plan: no reason in the datapack, no extra step.</li></ul></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step try"><span class="k">AMP · a safe branch</span><h3>Try it first, undo it precisely.</h3><ul>
+      <li>A full-size branch in seconds, created by the agent: no ticket, no queue.</li>
+      <li>From now to rehearse a change; from a recorded moment to undo one.</li>
+      <li>Measured by the database itself, then deleted, within a core budget.</li></ul></div>
+    <div class="arrow" aria-hidden="true">→</div>
+    <div class="step proof"><span class="k">Meko · the audit trail</span><h3>Every decision can be read back from one id.</h3><ul>
+      <li>Each step on the PR's or the incident's record, with who did it.</li>
+      <li>Every fact with the team that wrote it and the datapack it came from.</li>
+      <li>The full evidence stored as an artifact, addressed by its hash.</li>
+      <li>Lessons promoted to shared knowledge, so the next run starts smarter.</li></ul></div>
+  </div>
+  <div class="asks">
+    <div><b>What did the agent know?</b><span>The rules and facts it read, by source.</span></div>
+    <div><b>Who said so?</b><span>The team and agent behind each fact.</span></div>
+    <div><b>What did it measure?</b><span>Stalls, rewrites, plans, rows, counts.</span></div>
+    <div><b>Why this decision?</b><span>The reasons and the evidence, on the record.</span></div>
+  </div>
+</section>
+
+<script>
+(function () {
+  const sections = [...document.querySelectorAll('section')];
+  const rail = document.getElementById('rail');
+  const counter = document.getElementById('counter');
+  const progress = document.getElementById('progress');
+  const root = document.documentElement;
+  sections.forEach((s, i) => {
+    const a = document.createElement('a');
+    a.href = '#' + s.id;
+    a.innerHTML = '<span>' + (i + 1) + '. ' + s.dataset.title + '</span>';
+    a.setAttribute('aria-label', s.dataset.title);
+    rail.appendChild(a);
+  });
+  const dots = [...rail.children];
+  document.getElementById('keysLast').textContent = sections.length;
+  let current = 0, typed = '', typedTimer;
+  function paintCounter() {
+    counter.textContent = (typed ? typed + '_' : current + 1) + ' / ' + sections.length;
+    counter.classList.toggle('typing', !!typed);
+  }
+  function mark(i) {
+    current = i;
+    dots.forEach((d, j) => d.classList.toggle('on', j === i));
+    sections.forEach((s, j) => s.classList.toggle('current', j === i));
+    paintCounter();
+    progress.style.width = ((i + 1) / sections.length * 100) + '%';
+  }
+  const seen = new IntersectionObserver(entries => {
+    if (root.classList.contains('focus')) return;
+    entries.forEach(e => { if (e.isIntersecting) mark(sections.indexOf(e.target)); });
+  }, {threshold: 0.5});
+  sections.forEach(s => seen.observe(s));
+  function go(i) {
+    i = Math.max(0, Math.min(sections.length - 1, i));
+    mark(i);
+    if (!root.classList.contains('focus')) sections[i].scrollIntoView({behavior: 'smooth'});
+  }
+  mark(0);
+
+  // Typed slide numbers: jump once the number can't grow (or on Enter, or after a pause).
+  const commitTyped = () => { clearTimeout(typedTimer); const n = Number(typed); typed = ''; if (n >= 1 && n <= sections.length) go(n - 1); else paintCounter(); };
+  function typeDigit(d) {
+    typed = (typed + d).replace(/^0+/, '').slice(-2);
+    clearTimeout(typedTimer);
+    if (!typed) return paintCounter();
+    if (Number(typed) * 10 > sections.length) return commitTyped();
+    paintCounter();
+    typedTimer = setTimeout(commitTyped, 800);
+  }
+
+  const themeBtn = document.getElementById('themeBtn');
+  const dark = () => root.dataset.theme !== 'light';
+  const paint = () => themeBtn.classList.toggle('dark', dark());
+  function toggleTheme() {
+    root.dataset.theme = dark() ? 'light' : 'dark';
+    try { localStorage.setItem('meko-deck-theme', root.dataset.theme); } catch (e) { /* not kept */ }
+    paint();
+  }
+  themeBtn.onclick = toggleTheme;
+  paint();
+
+  const prBox = document.getElementById('prBox');
+  const revealButtons = [...document.querySelectorAll('[data-reveal]')];
+  function reveal(on) {
+    prBox.classList.toggle('reveal', on);
+    revealButtons.forEach(b => b.setAttribute('aria-pressed', String((b.dataset.reveal === 'on') === on)));
+  }
+  revealButtons.forEach(b => b.onclick = () => reveal(b.dataset.reveal === 'on'));
+
+  const help = document.getElementById('keysHelp');
+  document.getElementById('helpBtn').onclick = () => help.open ? help.close() : help.showModal();
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    if (/^[0-9]$/.test(k)) { e.preventDefault(); return typeDigit(k); }
+    if (k === 'Enter' && typed && !e.target.closest('button, a')) { e.preventDefault(); return commitTyped(); }
+    if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || (k === ' ' && !e.shiftKey)) { e.preventDefault(); go(current + 1); }
+    else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp' || (k === ' ' && e.shiftKey)) { e.preventDefault(); go(current - 1); }
+    else if (k === 'Home') { e.preventDefault(); go(0); }
+    else if (k === 'End') { e.preventDefault(); go(sections.length - 1); }
+    else if (k === 't' || k === 'T') toggleTheme();
+    else if (k === 'r' || k === 'R') reveal(!prBox.classList.contains('reveal'));
+    else if (k === 'f' || k === 'F') { root.classList.toggle('focus'); go(current); }
+    else if (k === 'Escape') { if (typed) { typed = ''; paintCounter(); } else root.classList.remove('focus'); }
+    else if (k === '?') help.open ? help.close() : help.showModal();
+  });
+})();
+</script>
+</body>
+</html>

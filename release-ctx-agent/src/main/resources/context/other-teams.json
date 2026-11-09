@@ -1,0 +1,58 @@
+[
+  {
+    "agent": "platform-sre:incident-agent",
+    "team": "Platform SRE",
+    "text": "Incident INC-2291: a schema migration on the orders table waited for its ACCESS EXCLUSIVE lock behind the nightly reporting job, which holds a read transaction on orders for up to 40 minutes from 01:00. Every checkout insert queued behind the migration, and checkout stalled for 11 minutes. Rehearse every migration on orders with the reporting job's long transaction running.",
+    "metadata": {
+      "kind": "incident",
+      "table": "orders",
+      "incident": "INC-2291",
+      "workload": "reporting-long-transaction",
+      "topic": "migration"
+    }
+  },
+  {
+    "agent": "platform-sre:incident-agent",
+    "team": "Platform SRE",
+    "text": "Incident INC-2304: autovacuum on the payments ledger table fell behind during the quarter-end batch, and payment lookups slowed down until the batch finished. Watch autovacuum on payments during quarter-end batches.",
+    "metadata": {
+      "kind": "incident",
+      "table": "payments",
+      "incident": "INC-2304",
+      "topic": "performance"
+    }
+  },
+  {
+    "agent": "warehouse:pick-list-agent",
+    "team": "Warehouse",
+    "text": "The warehouse pick-list dashboard depends on one query on the orders table, run every 30 seconds: the 50 oldest PAID orders still to pick, by created_at. It is a critical query for the warehouse.",
+    "metadata": {
+      "kind": "critical-query",
+      "table": "orders",
+      "name": "warehouse pick list",
+      "sql": "SELECT id, customer_id, amount, created_at FROM orders WHERE status = 'PAID' ORDER BY created_at LIMIT 50"
+    }
+  },
+  {
+    "agent": "checkout:order-history-agent",
+    "team": "Checkout",
+    "text": "The checkout order-history page depends on one query on the orders table: a customer's 20 most recent orders, by created_at. It is a critical query for checkout.",
+    "metadata": {
+      "kind": "critical-query",
+      "table": "orders",
+      "name": "customer order history",
+      "sql": "SELECT id, status, amount, created_at FROM orders WHERE customer_id = 4242 ORDER BY created_at DESC LIMIT 20"
+    }
+  },
+  {
+    "agent": "warehouse:shipments-agent",
+    "team": "Warehouse",
+    "text": "The carrier hand-off screen depends on one query on the shipments table: shipments awaiting a carrier, oldest first. It is a critical query for the warehouse.",
+    "metadata": {
+      "kind": "critical-query",
+      "table": "shipments",
+      "name": "carrier hand-off",
+      "sql": "SELECT id FROM shipments WHERE carrier_id IS NULL ORDER BY created_at LIMIT 100"
+    }
+  }
+]
