@@ -1,5 +1,7 @@
 # Meko × YugabyteDB AMP: Rehearse Before You Release
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/srinivasa-vasu/meko-micro-demos?quickstart=1) Run it in the cloud: see [In GitHub Codespaces](#in-github-codespaces).
+
 A pull request changes `orders`, the table checkout writes on every purchase. Every line of it looks routine; most of
 them would stall checkout in production. A release agent proves the migrations safe **before** the change board sees
 them: it forks the production database on **[YugabyteDB AMP](https://www.yugabyte.com/amp/)**, rehearses the
@@ -100,9 +102,12 @@ Every rehearsal creates its own branch and deletes it:
    names the reporting job, its long transaction runs too. Every result comes from the database itself (below).
 5. **Plan check and rollback**, when the context calls for them. The planner picks `checkCriticalQueries` only when
    critical queries are known, and `rehearseRollback` only when the policy requires it; otherwise it takes the skip.
+   When a critical query regresses because the release drops the index it used, the agent puts that exact index back
+   on the fork, from its definition before the migrations, plans the query again, and drops it once more. "Keep the
+   index" is a change only once that brings the query back within the policy's limit; otherwise the release is blocked.
 6. **Delete** the branch and its endpoint (`amp_branch_delete`). `main` is never changed.
-7. **Decide and record.** The verdict, its reasons and the evidence go on `PR-4821`'s record in Meko (a conversation
-   keyed by the pull request id, and an artifact). What the rehearsal taught goes to memory as lessons, which the
+7. **Decide and record.** The verdict, what blocked it (if anything), the changes it asks for, its reasons and the
+   evidence go on `PR-4821`'s record in Meko (a conversation keyed by the pull request id, and an artifact). What the rehearsal taught goes to memory as lessons, which the
    datapack owner can promote to shared knowledge.
 
 ## Datapacks, sharing and the project
@@ -170,6 +175,7 @@ Nothing is estimated. Each value is read from PostgreSQL on the fork:
 | Who waited on a lock | `pg_stat_activity`, sampled every 250 ms: the migration's session, and checkout's |
 | What checkout felt | The latency of every checkout insert in flight during the statement (network round trip included) |
 | Did a critical query regress? | `EXPLAIN (ANALYZE, BUFFERS)` before and after: buffers read, plan node, index |
+| Would keeping a dropped index fix it? | The index put back on the fork from its definition before the migrations, the query planned again, the index dropped again |
 | Did the rollback restore the schema? | `orders`' columns, indexes and constraints, by definition, before and after |
 
 ### Measured on AMP while building this demo
@@ -201,6 +207,7 @@ Requirements:
 - This machine's public IP: AMP endpoints admit only listed addresses. The page detects it.
 
 ```bash
+mvn -q install -DskipTests -pl meko-client,workshop-kit   # once, from the repository root: the shared projects
 cd release-ctx-agent
 export MEKO_API_KEY=mko_tkn_...
 mvn spring-boot:run
@@ -208,6 +215,19 @@ open http://localhost:8082
 ```
 
 No model key is needed: the agent is deterministic.
+
+### In GitHub Codespaces
+
+[Open the repository in Codespaces](https://codespaces.new/srinivasa-vasu/meko-micro-demos?quickstart=1), add
+`MEKO_API_KEY` (and `AMP_PASSWORD`, if you like) as Codespaces secrets when asked, then:
+
+```bash
+cd release-ctx-agent && mvn spring-boot:run
+```
+
+and open the forwarded port 8082. The shared projects are installed when the codespace is created. AMP's endpoints
+admit the codespace's public address, which the page detects; after a codespace restarts, its address may differ, and
+endpoints created before then admit only the old one.
 
 | Variable | Default | What it does |
 |---|---|---|
@@ -242,6 +262,21 @@ connection's TLS mode does not check the host name.
 A rehearsal holds one branch with a 0.5 vCPU endpoint for a few minutes, then deletes it, also when the run fails.
 `main` keeps its 0.5 vCPU endpoint until you delete the cluster in the Meko app. The page shows the account's AMP
 budget; the agent checks it before forking and stops with the tier's cap if a branch would exceed it.
+
+## Reading the results
+
+Under the run cards, **Run by run: what the context changed** sets the runs side by side:
+
+- **What each run knew**: the rules it found, the limits it read from them (lock timeout and retries, stall limit,
+  regression factor), other teams' incidents and critical queries, what it set aside and why, and what the planner did
+  because of it (the reporting job's workload, the plan check, the rollback). What a run knew that the run before it
+  did not is marked **+**.
+- **Statement by statement**: each statement of the pull request as written, what it met in each run (a table
+  rewrite, a stall, a lock wait, a rule's finding, a critical query's plan), and the change the context recommends: the
+  statement as rewritten to the standard, or "keep this index", each with where it came from (the standard in a
+  datapack's knowledge base, or a team's critical query in its memory). The rewritten migrations mark which statement
+  each part replaces (`-- @replaces 2`).
+- **Outcome**: each run's verdict, what blocked it, and the changes it asks for.
 
 ## Workshop
 
@@ -296,6 +331,8 @@ before it is promoted; a lesson repeated by a later run is written once.
 
 - The rewritten migrations are prepared alongside the pull request, not generated: the agent's part is finding which
   rules the pull request breaks and proving the rewrite on the fork.
+- "Keep the index" is proven by putting the index back on the fork after the migrations, which is the release without
+  that statement as far as the query's plan goes; the release without it is not rehearsed again end to end.
 - The reporting job's transaction is held for 15 s in the rehearsal, not the incident's 40 minutes: enough to show the
   queue, short enough for a workshop.
 - Checkout latency includes the round trip from this machine to AMP; compare runs from the same place.

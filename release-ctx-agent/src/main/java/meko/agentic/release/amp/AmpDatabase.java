@@ -1,6 +1,6 @@
 package meko.agentic.release.amp;
 
-import meko.agentic.release.meko.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;

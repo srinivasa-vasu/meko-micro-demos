@@ -12,21 +12,6 @@ spring:
   profiles:
     active: ${APP_PROFILE:openrouter}
 
-  ai:
-    mcp:
-      client:
-        enabled: ${MEKO_ENABLED:true}
-        name: sre-support-agent
-        version: 0.1.0
-        type: SYNC
-        # The WRITE timeout, in effect: a Meko write runs a server-side extraction and was observed
-        # taking over 30s on its own, which failed write-back. Reads are bounded separately and
-        # tighter by meko.read-timeout, so raising this does not let a hung read stall a run.
-        request-timeout: ${MEKO_WRITE_TIMEOUT:90s}
-        streamable-http:
-          connections:
-            mekodata:
-              url: ${MEKO_MCP_URL:https://mcp.mekodata.ai/mcp}
   jackson:
     serialization:
       indent-output: true
@@ -41,10 +26,20 @@ management:
         include: health,info,metrics
 
 meko:
-  # Must match the connection key above; the old build checked for "meko" while the
-  # connection was named "mekodata", so the Authorization header was silently dropped.
-  connection-name: mekodata
+  # The connection is the shared meko-client: the key, the server, and how this app names itself.
+  enabled: ${MEKO_ENABLED:true}
   api-key: ${MEKO_API_KEY:}
+  mcp-url: ${MEKO_MCP_URL:https://mcp.mekodata.ai/mcp}
+  client-name: ${spring.application.name}
+  conversation-owner: ${MEKO_AGENT_ID:sre-agent}
+  # The WRITE timeout: a Meko write runs a server-side extraction and was observed taking over
+  # 30s on its own, which failed write-back. Reads are bounded separately, and tighter, by
+  # read-timeout below, so raising this does not let a hung read stall a run.
+  timeouts:
+    "[memory_add]": ${MEKO_WRITE_TIMEOUT:90s}
+    "[memory_update]": ${MEKO_WRITE_TIMEOUT:90s}
+    "[memory_promote]": ${MEKO_WRITE_TIMEOUT:90s}
+    "[memory_delete_by_id]": ${MEKO_WRITE_TIMEOUT:90s}
 
   # The id is looked up once at startup via datapack_list and cached.
   datapack-name: ${MEKO_DATAPACK_NAME:change-risk}
@@ -57,7 +52,7 @@ meko:
   # memory_search is cross-agent within a datapack, so changing this does not hide history.
   agent-id: ${MEKO_AGENT_ID:sre-agent}
   # How long a Meko READ is waited for before the run carries on without it (and reports the
-  # recall as partial). Writes use spring.ai.mcp.client.request-timeout above.
+  # recall as partial). Writes use meko.timeouts above.
   read-timeout: ${MEKO_READ_TIMEOUT:30s}
   # The seed plants one record under this second identity, so the demo can show the SRE agent
   # solving an incident using a record another agent wrote. Must differ from agent-id above.

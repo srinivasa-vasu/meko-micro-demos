@@ -4,12 +4,11 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -54,26 +53,38 @@ public class MekoClient {
             List.of("results", "memories", "promoted_memories", "datapacks", "conversations",
                     "messages");
 
-    private final SyncMcpToolCallbackProvider provider;
+    /** The connection: the shared Meko client, used only for its verbatim calls and the tool list. */
+    private final MekoMcpClient meko;
     private final ObjectMapper mapper = new ObjectMapper();
     private final String agentId;
     private final Map<String, String> conversations = new HashMap<>();
 
-    public MekoClient(SyncMcpToolCallbackProvider provider,
+    public MekoClient(MekoMcpClient meko,
                       @Value("${meko.agent-id:meko-console}") String agentId) {
-        this.provider = provider;
+        this.meko = meko;
         this.agentId = agentId;
     }
 
     public boolean connected() {
-        return provider.getToolCallbacks().length > 0;
+        return !registered().isEmpty();
     }
 
     public List<String> tools() {
-        return Arrays.stream(provider.getToolCallbacks())
-                .map(c -> c.getToolDefinition().name())
-                .sorted()
-                .toList();
+        return registered().stream().map(MekoMcpClient.Tool::name).sorted().toList();
+    }
+
+    /** The tools the server offers; none when it cannot be reached (no key, or the server is down). */
+    private List<MekoMcpClient.Tool> registered() {
+        try {
+            return meko.tools();
+        } catch (Exception e) {
+            log.warn("Could not list Meko's tools: {}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private MekoMcpClient.Tool registered(String tool) {
+        return registered().stream().filter(t -> matches(t.name(), tool)).findFirst().orElse(null);
     }
 
     public String agentId() {
@@ -91,30 +102,24 @@ public class MekoClient {
      * with a particular argument set — which, given how often the schemas mislead, is often.
      */
     public McpCall callRaw(String tool, Map<String, Object> arguments) {
-        var callback = Arrays.stream(provider.getToolCallbacks())
-                .filter(c -> matches(c.getToolDefinition().name(), tool))
-                .findFirst()
-                .orElse(null);
-        if (callback == null) {
+        var registered = registered(tool);
+        if (registered == null) {
             return McpCall.failed(tool, arguments,
                     "Tool not registered. Available: " + String.join(", ", tools()));
         }
 
-        var started = System.currentTimeMillis();
-        String raw;
-        try {
-            raw = callback.call(mapper.writeValueAsString(arguments));
-        } catch (RuntimeException e) {
-            log.warn("{} failed with {}", tool, arguments, e);
-            return new McpCall(tool, callback.getToolDefinition().name(), arguments, false,
-                    e.getMessage(), null, null, List.of(), System.currentTimeMillis() - started);
+        var call = meko.raw(registered.name(), arguments);
+        if (call.raw() == null) {
+            log.warn("{} failed with {}: {}", tool, arguments, call.error());
+            return new McpCall(tool, registered.name(), arguments, false,
+                    call.error(), null, null, List.of(), call.millis());
         }
-
-        var error = errorIn(raw);
+        // The server's own error flag, else an error payload inside a normal answer.
+        var raw = call.raw();
+        var error = call.ok() ? errorIn(raw) : call.error();
         return new McpCall(
-                tool, callback.getToolDefinition().name(), arguments,
-                error == null, error, raw, flatten(raw), rows(raw),
-                System.currentTimeMillis() - started);
+                tool, registered.name(), arguments,
+                error == null, error, raw, flatten(raw), rows(raw), call.millis());
     }
 
     /** Call a tool with conversation_id and agent_id attached. Wrong for the datapack_* family. */
@@ -166,18 +171,15 @@ public class MekoClient {
      * rather than sent, since an argument you did not mean to test muddies the answer.
      */
     public ToolTemplate template(String tool, String datapackId) {
-        var callback = Arrays.stream(provider.getToolCallbacks())
-                .filter(c -> matches(c.getToolDefinition().name(), tool))
-                .findFirst()
-                .orElse(null);
-        if (callback == null) {
+        var registered = registered(tool);
+        if (registered == null) {
             return new ToolTemplate(tool, null, Map.of(), List.of(), List.of(),
                     "Tool not registered.");
         }
-        var schema = parse(callback.getToolDefinition().inputSchema());
+        var schema = parse(registered.inputSchema());
         var properties = schema == null ? null : schema.get("properties");
         if (properties == null || !properties.isObject()) {
-            return new ToolTemplate(tool, callback.getToolDefinition().name(), Map.of(),
+            return new ToolTemplate(tool, registered.name(), Map.of(),
                     List.of(), List.of(), null);
         }
         var required = new ArrayList<String>();
@@ -199,7 +201,7 @@ public class MekoClient {
                 optional.add(name);
             }
         }
-        return new ToolTemplate(tool, callback.getToolDefinition().name(), args,
+        return new ToolTemplate(tool, registered.name(), args,
                 List.copyOf(required), List.copyOf(optional), null);
     }
 
@@ -829,7 +831,7 @@ public class MekoClient {
         return value != null && value.isString() && !value.stringValue().isBlank() ? value.stringValue() : null;
     }
 
-    /** Spring AI namespaces MCP callbacks with the connection name. */
+    /** A tool by its server name; a name with a connection prefix (an older client's) still matches. */
     private boolean matches(String registered, String tool) {
         return registered != null && (registered.equals(tool) || registered.endsWith("_" + tool));
     }

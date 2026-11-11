@@ -7,6 +7,8 @@ branches; the fourth is a console for Meko's MCP tools.
 
 Each demo is its own Maven project with its own README. Start there for the details.
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/srinivasa-vasu/meko-micro-demos?quickstart=1) Try any of them in the cloud: nothing to install (see [In the cloud](#in-the-cloud)).
+
 | Demo | What it shows | Port |
 |---|---|---|
 | [`goap-ctx-agent`](goap-ctx-agent/README.md) | Five agent workflows across system boundaries, run side by side without Meko, with your own database, and with Meko. The same agents and the same GOAP planner; only the context changes. | 8080 |
@@ -24,6 +26,14 @@ Each demo has its own port, so all of them can run at once. All of them read the
 - A model provider key for `support-ctx-agent` (OpenRouter by default, or Groq or Gemini)
 
 ## Quick start
+
+Every demo reaches Meko through one shared project, `meko-client`; `goap-ctx-agent` and `release-ctx-agent` also share
+`workshop-kit` (the workshop pages' layout and navigation). Install them once from the repository root, and again after
+pulling changes to them:
+
+```bash
+mvn -q install -DskipTests -pl meko-client,workshop-kit
+```
 
 ```bash
 # Runs offline; "With Meko" uses an in-memory stand-in
@@ -51,9 +61,35 @@ open http://localhost:8090
 Live Meko setup for each demo (knowledge base documents to upload, seeding the datapack, model profiles) is in that
 demo's README.
 
+## In the cloud
+
+[Open the repository in GitHub Codespaces](https://codespaces.new/srinivasa-vasu/meko-micro-demos?quickstart=1). The
+codespace comes with Java 21 and Maven, and installs the shared `meko-client` and `workshop-kit` as it starts. While it
+is created, GitHub offers optional secrets: `MEKO_API_KEY` (live Meko, and AMP for `release-ctx-agent`), `AMP_PASSWORD`,
+and a model key for the provider you run with: `GROQ_API_KEY` (the default for `goap-ctx-agent`'s model mode),
+`OPENROUTER_API_KEY` (the default for `support-ctx-agent`) or `GOOGLE_API_KEY` (Gemini). Add them later under *Settings → Codespaces → Secrets*
+on GitHub, then rebuild the codespace.
+
+In the codespace's terminal, start a demo as in the quick start, without the install step:
+
+```bash
+cd goap-ctx-agent && mvn spring-boot:run      # runs offline; no key needed
+```
+
+Codespaces forwards the port and offers to open the page in the browser. The ports are private to your GitHub account
+unless you choose to share them. Each demo's README has its own options.
+
+For `release-ctx-agent`, AMP's endpoints admit the codespace's own public address, which the page detects: the app, in
+the codespace, is what connects to AMP. A codespace that stops and starts again may come back with another address;
+endpoints created before then still admit only the old one, so create the cluster again, or give it the new address.
+
 ## Repository layout
 
 ```
+.devcontainer/       The GitHub Codespaces (dev container) setup: Java 21, Maven, the four ports
+pom.xml              Builds the projects that share code together (mvn -pl goap-ctx-agent -am spring-boot:run)
+meko-client/         The Meko MCP client every demo shares: connection, key, timeouts, tool calls
+workshop-kit/        The workshop pages' shell they share: top bar, steps sidebar, navigation, theme
 goap-ctx-agent/      Embabel GOAP stories, with and without Meko
 release-ctx-agent/   Meko × AMP: rehearse a release, undo a bad batch job
 support-ctx-agent/   Incident commander: memory-first planning and cost reporting

@@ -24,6 +24,8 @@ meko:
   datapack-name: ${MEKO_DATAPACK_NAME:meko-workshop}
   mcp-url: ${MEKO_MCP_URL:https://mcp.mekodata.ai/mcp}
   client-name: ${spring.application.name}
+  # The agent id that owns this application's record conversations.
+  conversation-owner: case-records
 
 management:
   endpoints:

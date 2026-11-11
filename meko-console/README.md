@@ -1,5 +1,7 @@
 # Meko console
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/srinivasa-vasu/meko-micro-demos?quickstart=1) In the codespace, with `MEKO_API_KEY` as a Codespaces secret: `cd meko-console && mvn spring-boot:run`, then open the forwarded port 8090.
+
 A debugging console for Meko's MCP surface. Call any tool, and see **exactly what was sent and
 exactly what came back** — the arguments, the resolved tool name, the raw body, the text leaves
 and the parsed rows, all on one screen.
@@ -13,6 +15,7 @@ that shows only the parsed result cannot answer the question it exists for.
 ```bash
 export MEKO_API_KEY=...                 # required
 export MEKO_MCP_URL=https://mcp.mekodata.ai/mcp   # optional, this is the default
+mvn -q install -DskipTests -f ../pom.xml -pl meko-client   # once: the shared Meko client
 mvn spring-boot:run
 ```
 
@@ -122,8 +125,8 @@ opens it here. Picking a tool fills in the arguments from that tool's own input 
   `agent_id`. The one deliberate omission is `conversation_id` on `conversation_list`.
 - **Optional arguments are listed below the field, not sent.** Add only the ones you mean to test.
 
-**Reset arguments from schema** fills the template in again. A tool name matches with or without
-Spring AI's connection prefix, and an unknown name fails and lists the registered tools.
+**Reset arguments from schema** fills the template in again. A tool is named as the server names
+it, and an unknown name fails and lists the registered tools.
 
 ### Use the width, and the keyboard
 

@@ -1,6 +1,6 @@
 package meko.agentic.goap.sessions;
 
-import meko.agentic.goap.context.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import meko.agentic.goap.story.store.ContextStore;
 import meko.agentic.goap.story.store.ContextStores;
 import meko.agentic.goap.story.store.LocalContextStore;

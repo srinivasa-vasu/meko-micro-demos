@@ -1,6 +1,6 @@
 package meko.agentic.goap.story.store;
 
-import meko.agentic.goap.context.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 

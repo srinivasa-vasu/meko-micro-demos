@@ -1,5 +1,7 @@
 # Meko × Embabel GOAP: Agents That Don't Lose the Plot
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/srinivasa-vasu/meko-micro-demos?quickstart=1) In the codespace: `cd goap-ctx-agent && mvn spring-boot:run` (it runs offline without a key), then open the forwarded port 8080.
+
 Six relatable agent workflows **across system boundaries**, each run by the **same agents, the same Embabel GOAP
 planner and the same code**, with and without **[Meko](https://mekodata.ai/)**. A toggle (*Show the build-it-yourself
 comparison*) adds a third lane, **your application's own database**, to show what Meko adds over what you would build
@@ -62,6 +64,23 @@ The same application runs a hands-on workshop for groups: `SPRING_PROFILES_ACTIV
 where each participant adds context to their own empty datapack stage by stage (shared knowledge, then another desk's earlier reviews,
 then promotion to collective memory) and reruns three use cases to see what changes. No model key is needed. See
 [docs/WORKSHOP.md](docs/WORKSHOP.md): setup, and each use case step by step.
+
+**Where the workshop's progress lives.** With a Meko key, each run is recorded in the participant's **progress
+datapack** (`meko-workshop-progress-…`, created once and filed in the `meko-workshop` project under *Workshop
+progress*): one record (a single conversation) for the participant, each run a turn on it tagged with its workshop
+datapack, and the run itself an artifact. The page reads its progress back from there, so
+another browser, a restart or cleared storage shows the same runs. It is kept apart from the workshop datapacks on
+purpose: the agents never search it, so no stage can find an earlier stage's record as context, and the first stage
+stays empty. Runs are server-side jobs, one at a time (a second one, from another tab say, is refused with what is
+running): a page that reloads, or opens in another browser, while a run goes on follows it again, and a run that finished
+with no page listening is picked up and recorded on the next load. Without a key (the offline stand-in) and in the pair
+exercise, progress stays in the browser.
+
+**Cleaning up.** Every run opens conversations in its workshop datapack (one per case its agents work), and an
+account's conversations are limited (1,000 on the free tier). A full pass through the workshop uses about 40 to 55;
+deleting a datapack frees everything in it. **Start over** offers to delete the datapack it leaves behind, and step 1's
+list of existing datapacks has a **Delete** button on each workshop datapack of yours (`meko-workshop-…`) that is not
+in use. Only those can be deleted from the page: never the progress datapack, never one the workshop did not create.
 
 ## What you see in the app
 
@@ -206,7 +225,9 @@ an API key: sign up at [cloud.mekodata.ai/signup](https://cloud.mekodata.ai/sign
 
 ```bash
 git clone https://github.com/srinivasa-vasu/meko-micro-demos.git
-cd meko-micro-demos/goap-ctx-agent
+cd meko-micro-demos
+mvn -q install -DskipTests -pl meko-client,workshop-kit   # the shared projects, once
+cd goap-ctx-agent
 mvn spring-boot:run           # offline: "With Meko" uses an in-memory stand-in
 ```
 

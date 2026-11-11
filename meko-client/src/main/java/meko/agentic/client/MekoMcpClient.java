@@ -1,6 +1,5 @@
-package meko.agentic.goap.context;
+package meko.agentic.client;
 
-import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.StringNode;
@@ -41,14 +40,8 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li>{@code conversation_add_message} is queued: a turn takes a few seconds to become readable.</li>
  * </ul>
  */
-@Component
 public class MekoMcpClient {
     private static final String PROTOCOL_VERSION = "2025-06-18";
-    /**
-     * Owner of every case and transaction conversation. Many agents write to one conversation, and
-     * conversation_add_message must use the agent_id that created it, so each turn names its real writer in metadata.
-     */
-    public static final String CONVERSATION_OWNER = "case-records";
     private static final Set<String> ROW_METADATA = Set.of(
             "id", "memory_id", "hash", "score", "raw_similarity_score", "match_type", "rank",
             "rerank_score", "distance", "agent_id", "user_id", "conversation_id", "run_id",
@@ -69,7 +62,9 @@ public class MekoMcpClient {
      * Per-tool timeouts. Calls that make model calls on Meko's side (fact extraction) get longer than the default;
      * conversation_get (about 1.4 s measured) is retried once, so it gets a short one.
      */
-    private static final Map<String, Integer> TIMEOUT_SECONDS = Map.of("memory_add", 60, "memory_update", 60, "conversation_get", 15);
+    private static final Map<String, Integer> TIMEOUT_SECONDS = Map.of("memory_add", 60, "memory_update", 60, "conversation_get", 15,
+            // AMP calls block until the control plane finishes; the compute create can outlast a gateway (504).
+            "amp_cluster_create", 300, "amp_compute_create", 300, "amp_branch_delete", 120, "amp_cluster_delete", 180);
     private final AtomicLong requestIds = new AtomicLong(1);
     private volatile boolean initialized;
     private volatile String mcpSessionId;
@@ -85,6 +80,14 @@ public class MekoMcpClient {
 
     public void beforeDatapackSwitch(Runnable hook) {
         beforeSwitch.add(hook);
+    }
+
+    /**
+     * Owner of this application's record conversations ({@code meko.conversation-owner}). conversation_add_message must
+     * use the agent_id that created the conversation, so each turn names its real writer in metadata.
+     */
+    public String conversationOwner() {
+        return properties.getConversationOwner();
     }
 
     public MekoMcpClient(MekoProperties properties) {
@@ -125,7 +128,7 @@ public class MekoMcpClient {
             status.put("connected", false);
             status.put("diagnosis", e.getMessage());
         }
-        if (Boolean.TRUE.equals(status.get("connected"))) status.put("knowledge", knowledgeCounts());
+        if (Boolean.TRUE.equals(status.get("connected"))) status.put("knowledge", cachedKnowledgeCounts());
         status.put("lastError", lastError);
         return status;
     }
@@ -134,13 +137,40 @@ public class MekoMcpClient {
      * What the datapack's shared knowledge holds: documents uploaded through the Meko app, and memories promoted by
      * agents. Null values mean the datapack status endpoint did not say.
      */
+    /** The document counts change only on an upload or a promotion: kept for 15 s, or until {@link #forgetKnowledgeCounts}. */
+    private volatile Map<String, Object> counts;
+    private volatile String countsFor;
+    private volatile long countsAt;
+
+    private Map<String, Object> cachedKnowledgeCounts() {
+        String id;
+        try {
+            id = datapack();
+        } catch (Exception e) {
+            return Map.of("error", String.valueOf(e.getMessage()));
+        }
+        Map<String, Object> cached = counts;
+        if (cached != null && id.equals(countsFor) && System.currentTimeMillis() - countsAt < 15_000) return cached;
+        Map<String, Object> fresh = knowledgeCounts();
+        if (!fresh.containsKey("error")) {
+            counts = fresh;
+            countsFor = id;
+            countsAt = System.currentTimeMillis();
+        }
+        return fresh;
+    }
+
+    public void forgetKnowledgeCounts() {
+        counts = null;
+    }
+
     private Map<String, Object> knowledgeCounts() {
         Map<String, Object> counts = new LinkedHashMap<>();
         try {
             JsonNode described = callTool("datapack_describe", args(
                     "datapack_id", datapack(),
                     "include_status", true,
-                    "conversation_id", conversation(CONVERSATION_OWNER + ":status", "Datapack status", Map.of())));
+                    "conversation_id", conversation(conversationOwner() + ":status", "Datapack status", Map.of())));
             counts.put("documents", described.path("knowledge_base_file_count").isNumber() ? described.path("knowledge_base_file_count").asInt() : null);
             counts.put("promoted", described.path("collective_memory_count").isNumber() ? described.path("collective_memory_count").asInt() : null);
         } catch (Exception e) {
@@ -211,7 +241,7 @@ public class MekoMcpClient {
     private String create(String sessionKey, String title, Map<String, Object> metadata) throws Exception {
         long createdIn = generation;
         JsonNode created = callTool("conversation_create", args(
-                "agent_id", CONVERSATION_OWNER,
+                "agent_id", conversationOwner(),
                 "session_id", sessionKey,
                 "title", title,
                 "run_id", sessionKey,
@@ -244,16 +274,27 @@ public class MekoMcpClient {
         return useDatapack(name, create, knownId, null);
     }
 
-    /**
-     * As {@link #useDatapack(String, boolean, String)}; a datapack created with {@code folderId} is created straight into
-     * that project folder (one call, rather than create and then file).
-     */
+    /** As {@link #useDatapack(String, boolean, String)}; a datapack created with {@code folderId} is created straight into that project folder. */
     public String useDatapack(String name, boolean create, String knownId, String folderId) throws Exception {
         if (!properties.keyed()) throw new IllegalStateException("No Meko API key: set MEKO_API_KEY and restart.");
-        // Writes still queued for the datapack in use finish first, outside this client's lock: a queued writer may need
-        // the lock itself (re-initialising an expired MCP session), so draining under it could wait forever.
+        // Writes still queued for the datapack in use finish first, outside this client's lock.
         beforeSwitch.forEach(Runnable::run);
         return switchTo(name, create, knownId, folderId);
+    }
+
+    /**
+     * Creates a datapack without switching to it (the organization's shared one, created for a solo run), straight into
+     * {@code folderId} if given. Returns its id.
+     */
+    public String createDatapack(String name, String folderId) throws Exception {
+        listed = null;
+        JsonNode result = callTool("datapack_create", args("name", name, "folder_id", folderId, "conversation_id", lookupConversation()));
+        for (String path : List.of("datapack_id", "id")) {
+            if (result.path(path).isString()) return result.path(path).asString();
+        }
+        if (result.path("datapack").path("id").isString()) return result.path("datapack").path("id").asString();
+        for (Map<String, String> row : listDatapacks()) if (name.equals(row.get("name"))) return row.get("id");
+        throw new IllegalStateException("datapack_create returned no id for " + name + ": " + result);
     }
 
     private synchronized String switchTo(String name, boolean create, String knownId, String folderId) throws Exception {
@@ -322,8 +363,32 @@ public class MekoMcpClient {
         lastError = "The datapack in use no longer exists: create or choose another.";
     }
 
-    /** Forgets when the datapack was last confirmed, so the next check asks Meko (tests). */
-    void expireConfirmation() {
+    /**
+     * Deletes a datapack, with everything in it: its memory, knowledge base and conversations (which count against the
+     * account's limits). The datapack in use is forgotten when it is the one deleted: a new one is chosen next.
+     */
+    public void deleteDatapack(String id) throws Exception {
+        boolean inUse;
+        synchronized (this) {
+            inUse = id.equals(datapackId);
+        }
+        // Writes still queued for the datapack in use finish first, as before a switch.
+        if (inUse) beforeSwitch.forEach(Runnable::run);
+        callTool("datapack_delete", args("datapack_id", id, "conversation_id", lookupConversation()));
+        synchronized (this) {
+            listed = null;
+            if (id.equals(datapackId)) {
+                datapackId = null;
+                properties.setDatapackId(null);
+                properties.setDatapackName(null);
+                forgetConversations();
+                lastError = null;
+            }
+        }
+    }
+
+    /** Forgets when the datapack was last confirmed, so the next check asks Meko again. */
+    public void expireConfirmation() {
         confirmedAt = 0;
     }
 
@@ -356,6 +421,13 @@ public class MekoMcpClient {
 
     /** Project and folder ids already found or created, by "project" and "project/folder": one lookup per start. */
     private final Map<String, String> projectIds = new ConcurrentHashMap<>();
+    /** Names a project was created under before: an owned project still called one of them is renamed, not duplicated. */
+    private final Map<String, List<String>> formerNames = new ConcurrentHashMap<>();
+
+    /** Records the names {@code project} had before, so the project already holding the datapacks is kept, under its new name. */
+    public void formerlyNamed(String project, List<String> names) {
+        formerNames.put(project, List.copyOf(names));
+    }
 
     /**
      * Files a datapack into a folder of one of this key's own projects, creating the project and the folder the first
@@ -384,7 +456,7 @@ public class MekoMcpClient {
     public synchronized void findProject(String project) throws Exception {
         if (projectIds.containsKey(project)) return;
         String conversation = lookupConversation();
-        String projectId = ownedProject(project, conversation);
+        String projectId = ownedOrRenamed(project, null, conversation);
         if (projectId == null) return;
         projectIds.put(project, projectId);
         for (JsonNode row : callTool("project_describe", args("project_id", projectId, "conversation_id", conversation)).path("folders").values()) {
@@ -399,7 +471,7 @@ public class MekoMcpClient {
         String conversation = lookupConversation();
         String projectId = projectIds.get(project);
         if (projectId == null) {
-            projectId = ownedProject(project, conversation);
+            projectId = ownedOrRenamed(project, projectDescription, conversation);
             if (projectId == null) {
                 JsonNode created = callTool("project_create", args("project_name", project, "description", projectDescription,
                         "folders", List.of(folder), "conversation_id", conversation));
@@ -424,6 +496,21 @@ public class MekoMcpClient {
             projectIds.put(project + "/" + folder, folderId);
         }
         return folderId;
+    }
+
+    /** An owned project by its name; failing that, one still under a former name, renamed (and re-described) to the current one. */
+    private String ownedOrRenamed(String project, String description, String conversation) throws Exception {
+        String id = ownedProject(project, conversation);
+        if (id != null) return id;
+        for (String former : formerNames.getOrDefault(project, List.of())) {
+            id = ownedProject(former, conversation);
+            if (id == null) continue;
+            Map<String, Object> update = new java.util.LinkedHashMap<>(Map.of("project_id", id, "project_name", project, "conversation_id", conversation));
+            if (description != null) update.put("description", description);
+            callTool("project_update", update);
+            return id;
+        }
+        return null;
     }
 
     private String ownedProject(String name, String conversation) throws Exception {
@@ -453,8 +540,8 @@ public class MekoMcpClient {
         String id = lookupConversationId;
         if (id != null) return id;
         id = callTool("conversation_create", args(
-                "agent_id", CONVERSATION_OWNER,
-                "session_id", CONVERSATION_OWNER + ":datapack-lookup",
+                "agent_id", conversationOwner(),
+                "session_id", conversationOwner() + ":datapack-lookup",
                 "title", "Datapack lookup")).path("id").asString();
         if (!id.isBlank()) lookupConversationId = id;
         return id;
@@ -490,7 +577,7 @@ public class MekoMcpClient {
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("name", tool);
         params.put("arguments", arguments);
-        Duration timeout = Duration.ofSeconds(TIMEOUT_SECONDS.getOrDefault(tool, 30));
+        Duration timeout = timeoutFor(tool);
         JsonNode result;
         try {
             result = rpcResult(tool, post(mcpRequest("tools/call", params), true, timeout));
@@ -511,6 +598,68 @@ public class MekoMcpClient {
         return payload;
     }
 
+    /** A tool the server offers: its name, what it says it does, and its input schema as JSON. */
+    public record Tool(String name, String description, String inputSchema) {}
+
+    /**
+     * One call exactly as made: the arguments sent, and what came back verbatim. {@code raw} is the tool's content as
+     * the server sent it (a JSON array of content items); {@code ok} is false when the server marked the result an
+     * error ({@code error} then holds its text) or the call never got an answer ({@code raw} is then null).
+     */
+    public record RawCall(String tool, Map<String, Object> arguments, boolean ok, String error, String raw, long millis) {}
+
+    private volatile List<Tool> tools;
+
+    /** The tools the server offers, with their schemas (listed once per MCP session). */
+    public List<Tool> tools() throws Exception {
+        ensureInitialized();
+        List<Tool> known = tools;
+        if (known != null) return known;
+        List<Tool> out = new ArrayList<>();
+        String cursor = null;
+        do {
+            Map<String, Object> params = new LinkedHashMap<>();
+            if (cursor != null) params.put("cursor", cursor);
+            JsonNode result = rpcResult("tools/list", post(mcpRequest("tools/list", params), true));
+            for (JsonNode t : result.path("tools").values()) {
+                out.add(new Tool(t.path("name").asString(""), t.path("description").asString(""),
+                        t.path("inputSchema").isMissingNode() ? "{}" : objectMapper.writeValueAsString(t.path("inputSchema"))));
+            }
+            cursor = result.path("nextCursor").asString(null);
+        } while (cursor != null && !cursor.isBlank());
+        out.sort(java.util.Comparator.comparing(Tool::name));
+        return tools = List.copyOf(out);
+    }
+
+    /**
+     * Calls a tool with exactly these arguments (nothing is added, nothing retried) and reports what came back,
+     * verbatim. Never throws: a refused or failed call is a result like any other. For consoles and probes; agents use
+     * {@link #callTool}, which unwraps the payload and throws on an error.
+     */
+    public RawCall raw(String tool, Map<String, Object> arguments) {
+        long started = System.currentTimeMillis();
+        try {
+            ensureInitialized();
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("name", tool);
+            params.put("arguments", arguments);
+            Duration timeout = timeoutFor(tool);
+            JsonNode result = rpcResult(tool, post(mcpRequest("tools/call", params), true, timeout));
+            String raw = objectMapper.writeValueAsString(result.path("content"));
+            boolean failed = result.path("isError").asBoolean(false);
+            String error = failed ? result.path("content").path(0).path("text").asString("the server marked the result an error") : null;
+            return new RawCall(tool, arguments, !failed, error, raw, System.currentTimeMillis() - started);
+        } catch (Exception e) {
+            return new RawCall(tool, arguments, false, String.valueOf(e.getMessage()), null, System.currentTimeMillis() - started);
+        }
+    }
+
+    /** How long a call to {@code tool} is waited for: the application's setting, else this client's default. */
+    private Duration timeoutFor(String tool) {
+        Duration configured = properties.getTimeouts().get(tool);
+        return configured != null ? configured : Duration.ofSeconds(TIMEOUT_SECONDS.getOrDefault(tool, 30));
+    }
+
     private void ensureInitialized() throws Exception {
         // A key is enough to connect: the datapack may be chosen later (the workshop creates it from its page).
         if (!properties.keyed()) throw new IllegalStateException("Meko is not configured: set MEKO_API_KEY");
@@ -520,7 +669,7 @@ public class MekoMcpClient {
             Map<String, Object> params = new LinkedHashMap<>();
             params.put("protocolVersion", PROTOCOL_VERSION);
             params.put("capabilities", Map.of());
-            params.put("clientInfo", Map.of("name", properties.getClientName(), "version", "0.3.0"));
+            params.put("clientInfo", Map.of("name", properties.getClientName(), "version", "0.1.0"));
             HttpResponse<String> response = post(mcpRequest("initialize", params), false);
             rpcResult("initialize", response);
             mcpSessionId = response.headers().firstValue("mcp-session-id").orElse(null);
@@ -540,6 +689,7 @@ public class MekoMcpClient {
             synchronized (this) {
                 initialized = false;
                 mcpSessionId = null;
+                tools = null;
             }
             ensureInitialized();
             response = send(payload, true, timeout);
@@ -639,6 +789,11 @@ public class MekoMcpClient {
      * {@link #documentStatus} follows that. Identical content already in the datapack is not sent again.
      */
     public Upload uploadKnowledgeDocument(String conversationId, String agentId, String filename, byte[] bytes) throws Exception {
+        return uploadKnowledgeDocument(conversationId, agentId, filename, bytes, datapack());
+    }
+
+    /** As {@link #uploadKnowledgeDocument(String, String, String, byte[])}, into the knowledge base of {@code datapackId}. */
+    public Upload uploadKnowledgeDocument(String conversationId, String agentId, String filename, byte[] bytes, String datapackId) throws Exception {
         String hash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes));
         byte[] head = java.util.Arrays.copyOf(bytes, Math.min(3072, bytes.length));
         JsonNode issued = callTool("knowledgebase_upload_document", args(
@@ -648,7 +803,7 @@ public class MekoMcpClient {
                 "content_head_base64", java.util.Base64.getEncoder().encodeToString(head),
                 "conversation_id", conversationId,
                 "agent_id", agentId,
-                "datapack_id", datapack()));
+                "datapack_id", datapackId));
         String key = issued.path("key").asString("");
         if (issued.path("already_uploaded").asBoolean(false)) return new Upload(key, true);
         String url = issued.path("url").asString("");
@@ -667,7 +822,7 @@ public class MekoMcpClient {
     }
 
     /** A multipart form POST to presigned storage: every field in the order given, then the file, named "file". */
-    void postForm(String url, JsonNode fields, String filename, byte[] bytes) throws Exception {
+    protected void postForm(String url, JsonNode fields, String filename, byte[] bytes) throws Exception {
         String boundary = "----meko-" + java.util.UUID.randomUUID();
         java.io.ByteArrayOutputStream body = new java.io.ByteArrayOutputStream();
         java.util.function.Consumer<String> write = text -> body.writeBytes(text.getBytes(StandardCharsets.UTF_8));

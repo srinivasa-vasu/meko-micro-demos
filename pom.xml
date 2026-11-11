@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      Builds the demos that share code, together. Each demo keeps its own Spring Boot parent; this file only lists them.
+      Run one demo from here:  mvn -pl goap-ctx-agent -am spring-boot:run
+    -->
+    <groupId>meko.agentic</groupId>
+    <artifactId>meko-micro-demos</artifactId>
+    <version>0.1.0</version>
+    <packaging>pom</packaging>
+    <name>meko-micro-demos</name>
+
+    <modules>
+        <module>meko-client</module>
+        <module>workshop-kit</module>
+        <module>goap-ctx-agent</module>
+        <module>release-ctx-agent</module>
+        <module>meko-console</module>
+        <module>support-ctx-agent</module>
+    </modules>
+</project>

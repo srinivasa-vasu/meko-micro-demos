@@ -1,6 +1,6 @@
 package meko.agentic.release.amp;
 
-import meko.agentic.release.meko.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
@@ -131,7 +131,7 @@ public class AmpClient {
         all[args.length] = "datapack_id";
         all[args.length + 1] = meko.datapack();
         all[args.length + 2] = "conversation_id";
-        all[args.length + 3] = meko.conversation(MekoMcpClient.CONVERSATION_OWNER + ":amp", "AMP lifecycle", java.util.Map.of());
+        all[args.length + 3] = meko.conversation(meko.conversationOwner() + ":amp", "AMP lifecycle", java.util.Map.of());
         return meko.callTool(tool, meko.args(all));
     }
 

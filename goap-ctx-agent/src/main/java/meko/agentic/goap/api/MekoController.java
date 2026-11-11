@@ -1,6 +1,6 @@
 package meko.agentic.goap.api;
 
-import meko.agentic.goap.context.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import meko.agentic.goap.story.StorySeeder;
 import meko.agentic.goap.story.store.OutageSwitch;
 import meko.agentic.goap.story.store.ReceiptLog;

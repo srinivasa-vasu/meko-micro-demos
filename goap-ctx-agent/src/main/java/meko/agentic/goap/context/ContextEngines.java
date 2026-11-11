@@ -1,5 +1,6 @@
 package meko.agentic.goap.context;
 
+import meko.agentic.client.MekoProperties;
 import org.springframework.stereotype.Component;
 
 @Component

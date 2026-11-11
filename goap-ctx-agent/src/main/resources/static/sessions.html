@@ -1,42 +1,31 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>New session. Same context. · Meko</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/workshop-kit/workshop.css">
 <style>
-:root{--bg:#091016;--panel:#101a24;--panel2:#0c141c;--ink:#edf3f8;--muted:#8ea0b2;--line:#263443;--accent:#71ddb9;--warn:#f5c66a;--bad:#ff8b8b;--blue:#8fbcff;
-  --accent-bg:#14382c;--warn-bg:#3a2e14;--bad-bg:#3a1c1f;--blue-bg:#16263d;--btn:#1a2632;--chip:#17222d;--text2:#c5d1dc;--on-accent:#06130f}
-:root[data-theme="light"]{--bg:#f4f6f9;--panel:#ffffff;--panel2:#f3f6f9;--ink:#14202b;--muted:#5a6878;--line:#d6dee7;--accent:#0b8462;--warn:#946300;--bad:#c23a3a;--blue:#2a5fc4;
-  --accent-bg:#dcf2ea;--warn-bg:#f7ecd0;--bad-bg:#f9e0e0;--blue-bg:#e1eafa;--btn:#f3f6f9;--chip:#f0f4f8;--text2:#2e3d4b;--on-accent:#ffffff}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-main{max-width:1180px;margin:0 auto;padding:18px}
-/* Inside the workshop: its full width, and the intro as a panel, like the workshop's use case description. */
-body.embedded main{padding:0;max-width:none}
-body.embedded header{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px}
-header .k{color:var(--accent);font-weight:800;font-size:11px;letter-spacing:.12em;text-transform:uppercase}
-h1{margin:4px 0 6px;font-size:24px}
-.lead{color:var(--text2);max-width:880px;margin:0}
+/* This page's own names for the kit's colours: they follow its theme (light, dark, or the system's). */
+:root{--panel:var(--surface);--panel2:var(--surface-2);--chip:var(--sunken);--text2:var(--ink-2);--blue:var(--info);--btn:var(--surface);--on-accent:var(--accent-ink);
+  --accent-bg:var(--accent-soft);--warn-bg:var(--warn-soft);--bad-bg:var(--bad-soft);--blue-bg:var(--info-soft)}
+/* Inside the workshop: the frame takes this page's height, so the columns scroll with the workshop's page. */
+body.embedded .app{min-height:0}
+body.embedded .side,body.embedded .insight{position:static;height:auto}
+body.embedded .side-foot .btn{display:none}
+.step-card h2{font-size:21px}
+.what{color:var(--muted);margin:6px 0 12px;font-size:13.5px;max-width:95ch}
 .boundary{margin-top:10px;border:1px dashed var(--line);border-radius:10px;padding:8px 12px;color:var(--text2);font-size:13px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px}
-.panel.locked{opacity:.45;pointer-events:none}
-h2{margin:0 0 4px;font-size:17px;display:flex;gap:10px;align-items:center}
-h2 .n{display:inline-flex;width:24px;height:24px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:13px;align-items:center;justify-content:center}
-.panel.done h2 .n{background:var(--accent);color:var(--on-accent)}
-.what{color:var(--muted);margin:0 0 10px;font-size:13px}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.btn{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);background:var(--btn);color:var(--ink);padding:7px 13px;border-radius:9px;cursor:pointer;font:inherit}
-.btn:disabled{opacity:.5;cursor:default}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:800}
-textarea,input.text{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 10px;font:inherit}
+.ucd .lead{color:var(--text2);font-size:13.5px;margin-top:6px}
+textarea,input.text{width:100%;max-width:none;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 10px;font:inherit}
 textarea{min-height:58px;resize:vertical}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:900px){.cols{grid-template-columns:1fr}}
-.box{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px}
-.box h3{margin:0 0 8px;font-size:13.5px;display:flex;gap:8px;align-items:center}
-.pill{display:inline-flex;gap:6px;align-items:center;padding:3px 9px;border-radius:99px;background:var(--chip);color:var(--muted);font-size:11.5px;white-space:nowrap}
-.pill.ok{background:var(--accent-bg);color:var(--accent)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.step-card .box{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;min-width:0}
+.step-card .box h3{margin:0 0 8px;font-size:13.5px;display:flex;gap:8px;align-items:center}
 .chat{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto}
 .bubble{max-width:85%;padding:7px 11px;border-radius:12px;font-size:13px}
 .bubble.person{align-self:flex-start;background:var(--chip)}
@@ -50,60 +39,45 @@ textarea{min-height:58px;resize:vertical}
 .num{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 11px;min-width:120px}
 .num b{font-size:20px;display:block}
 .num span{font-size:11.5px;color:var(--muted)}
-.input{white-space:pre-wrap;font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0;max-height:420px;overflow:auto}
+.input{white-space:pre-wrap;font:12.5px/1.5 var(--mono);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:6px 0;max-height:420px;overflow:auto}
 .reply{background:var(--blue-bg);border-radius:10px;padding:8px 11px;font-size:13px;margin:6px 0}
-details{margin-top:8px}summary{cursor:pointer;color:var(--muted);font-size:12.5px}
-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
-td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.step-card details{margin-top:8px}.step-card summary{cursor:pointer;color:var(--muted);font-size:12.5px}
+.step-card table{font-size:12px;margin-top:6px}
 td.fail{color:var(--bad)}
-.status{color:var(--muted);font-size:12.5px;min-height:18px;margin-top:6px}
-/* The steps, as the workshop's other use cases show theirs: a horizontal track, one step at a time, Back and Next. */
-.track{display:flex;gap:0;overflow-x:auto;padding-bottom:2px;margin-bottom:6px}
-.step{position:relative;flex:1 0 120px;display:flex;flex-direction:column;align-items:center;gap:5px;border:0;background:transparent;cursor:pointer;color:var(--muted);font:inherit;padding:2px 4px;text-align:center}
-.step:disabled{cursor:default;opacity:.55}
-.step::before{content:"";position:absolute;top:18px;left:-50%;right:50%;height:2px;background:var(--line)}
-.step:first-child::before{display:none}
-.step.linked::before{background:var(--accent)}
-.step .dot{position:relative;z-index:1;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--panel2);border:2px solid var(--line);color:var(--muted);font-weight:800}
-.step.done .dot{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
-.step.current .dot{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
-.step .t{font-size:12px;font-weight:700;color:var(--ink);line-height:1.3}
-.step .s{font-size:11px}
-.stepbody h2{margin-top:14px}.stepbody h2 .n{display:none}
-.nav{display:flex;gap:8px;margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
-/* The datapack step, as the workshop's use cases show theirs. */
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px;background:var(--panel2)}
-.seg button{border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:7px;cursor:pointer;font:inherit;font-weight:600}
-.seg button[aria-selected="true"]{background:var(--accent-bg);color:var(--accent)}
 .lbl{display:block;font-size:12.5px;font-weight:700;color:var(--text2);margin-bottom:4px}
-.hint{font-size:12px;color:var(--muted);margin-top:5px}
 .dp-list{display:flex;flex-direction:column;gap:4px;max-height:240px;overflow:auto;max-width:720px}
 .dp{display:flex;gap:10px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);cursor:pointer}
 .dp:has(input:checked){border-color:var(--accent)}
 .dp.other .dp-n{color:var(--muted)}
 .dp-n{font-weight:700}.dp-m{font-size:12px;color:var(--muted);margin-right:auto}
-code{background:var(--chip);padding:1px 5px;border-radius:5px;font-size:12.5px}
 a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}a:hover{text-decoration-thickness:2px}
+/* The store in use, as the workshop's sidebar rows read: one line, a dot for its state, the detail on hover. */
+.store{display:flex;align-items:center;gap:6px;min-width:0}
+.store::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.store.ok::before{background:var(--accent)}.store.warn::before{background:var(--warn)}
 </style>
 </head>
 <body>
-<main>
-<header id="head">
-  <div class="k">SDLC · AI assistants</div>
-  <h1>New session. Same context.</h1>
-  <p class="lead">Every AI harness keeps context inside the session. Close it, switch tools, or hand the work to a teammate,
-    and the next session starts empty: you explain the stack, the decisions and the constraints again. Connect the harness
-    to a Meko datapack, and the next session, in any harness, starts with what the last one established.</p>
-  <div class="boundary"><b>The harness.</b> A minimal agent session built into this page, standing in for any real
-    harness (Claude Code, Codex, a support copilot): its context lives in the session and goes when the session ends.
-    What you type is yours; the facts are what Meko extracts from it; what a new session knows is what Meko returns.
-    <span id="store" class="pill">checking…</span></div>
-</header>
+<div class="app" id="app">
+  <aside class="side">
+    <div class="brand">
+      <span class="k">SDLC · AI assistants</span>
+      <h1>New session. Same context.</h1>
+    </div>
+    <div class="stepshead"><span>Steps</span></div>
+    <nav class="steps" id="stepper" aria-label="Steps"></nav>
+    <div class="env"><div class="row2"><span>Store</span><b id="store" class="store">checking…</b></div></div>
+    <div class="side-foot">
+      <button class="btn iconbtn" id="themeBtn" title="Switch light / dark" aria-label="Switch light or dark theme">◐</button>
+      <span class="small muted">Any harness, one datapack.</span>
+    </div>
+  </aside>
 
-<section class="panel" id="flow">
-<nav class="track" id="stepper" aria-label="Steps"></nav>
+  <main class="main">
+    <div class="top"><span class="eyebrow" id="eyebrow"></span></div>
+    <section class="card step-card" id="flow">
 <section class="stepbody" id="p0" hidden>
-  <h2><span class="n">0</span>Create a fresh datapack for the workshop</h2>
+  <h2>Create a fresh datapack for the workshop</h2>
   <p class="what">Your datapack is where memory, shared knowledge and collective memory live. Start from a new, empty
     one, so session 2 can only know what session 1 established.</p>
   <div id="dpForm"></div>
@@ -111,7 +85,7 @@ a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}a:
 </section>
 
 <section class="stepbody" id="p1">
-  <h2><span class="n">1</span>Session 1, in Claude Code (stand-in)</h2>
+  <h2>Session 1, in Claude Code (stand-in)</h2>
   <p class="what">Tell the assistant about your project, as you would at the start of a session. Edit the example or write
     your own; concrete facts work best. Each message goes to the session, and, with Meko, to the datapack.</p>
   <div class="cols">
@@ -133,7 +107,7 @@ a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}a:
 </section>
 
 <section class="stepbody" id="p2">
-  <h2><span class="n">2</span>End the session</h2>
+  <h2>End the session</h2>
   <p class="what">Close it, as you close a terminal at the end of the day. The session's context is discarded. What
     remains is what Meko stored from it: the facts Meko extracted from what you typed, in its own words.</p>
   <div class="row"><button class="btn primary" id="end">End the session</button><button class="btn" id="refresh">Check what Meko stored</button>
@@ -142,7 +116,7 @@ a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}a:
 </section>
 
 <section class="stepbody" id="p3">
-  <h2><span class="n">3</span>Next morning: send a prompt in a new session</h2>
+  <h2>Next morning: send a prompt in a new session</h2>
   <p class="what">Send a prompt to a new session. The harness builds what it sends to the model: the context it could
     load, then your prompt. The same prompt, twice: once with no store, as a harness on its own, and once connected to
     Meko, where it loads what Meko returns for the prompt and for the project's standing context (its stack,
@@ -157,7 +131,7 @@ a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}a:
 </section>
 
 <section class="stepbody" id="p4">
-  <h2><span class="n">4</span>Switch the harness</h2>
+  <h2>Switch the harness</h2>
   <p class="what">Same project, same prompt, another tool: a new session in Codex (stand-in), connected to the same
     datapack. What does its model receive, and who wrote that context?</p>
   <div class="row"><button class="btn primary" id="switch">Send the prompt in Codex</button><span class="status" id="st4"></span></div>
@@ -165,16 +139,32 @@ a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}a:
 </section>
 
 <section class="stepbody" id="p5">
-  <h2><span class="n">5</span>Try it in your own harness</h2>
+  <h2>Try it in your own harness</h2>
   <p class="what">The proof that matters is your own tool. Connect your harness (Claude Code, Codex, Cursor, any MCP
     client) to Meko's MCP server, <code>https://mcp.mekodata.ai/mcp</code>, with your API key and the datapack
     <b id="dpName">in use</b>. See <a id="docs" href="https://docs.mekodata.ai/integrations/connect-to-ai-agent/" target="_blank" rel="noopener">connecting an AI agent</a>.
     Then, in a new session of your tool, ask: <i>"What do you know about this project?"</i></p>
 </section>
-<div class="nav"><button class="btn" id="back">&larr; Back</button><button class="btn" id="next">Next step &rarr;</button></div>
-</section>
-</main>
+    </section>
+    <div class="nav">
+      <button class="btn ghost" id="back">← Back</button>
+      <span class="row"><span class="why" id="nextWhy"></span><button class="btn" id="next">Next →</button></span>
+    </div>
+  </main>
 
+  <aside class="insight">
+    <div class="box ucd"><h3>The use case</h3>
+      <p class="lead">Every AI harness keeps context inside the session. Close it, switch tools, or hand the work to a teammate,
+        and the next session starts empty: you explain the stack, the decisions and the constraints again. Connect the harness
+        to a Meko datapack, and the next session, in any harness, starts with what the last one established.</p>
+      <div class="boundary"><b>The harness.</b> A minimal agent session built into this page, standing in for any real
+        harness (Claude Code, Codex, a support copilot): its context lives in the session and goes when the session ends.
+        What you type is yours; the facts are what Meko extracts from it; what a new session knows is what Meko returns.</div>
+    </div>
+    <div class="box"><h3>What to look for</h3><div class="look" id="look"></div></div>
+  </aside>
+</div>
+<script src="/workshop-kit/workshop.js"></script>
 <script>
 const el = id => document.getElementById(id);
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
@@ -184,8 +174,10 @@ if (new URLSearchParams(location.search).has('embedded')) {
   const report = () => parent.postMessage({sessionsHeight: document.documentElement.scrollHeight}, location.origin);
   new ResizeObserver(report).observe(document.body);
 }
-// Stored plain ("light") or as JSON ("\"light\"", as the workshop page used to); inside the workshop, its messages set it.
-try { document.documentElement.dataset.theme = (localStorage.getItem('theme') || 'dark').replace(/"/g, ''); } catch (e) { /* default */ }
+// Stored plain ("light") or as JSON ("\"light\"", as the workshop page used to): read either. Inside the workshop, its
+// messages set the theme; on its own, the kit's toggle does.
+try { const v = localStorage.getItem('theme'); if (v && v.includes('"')) localStorage.setItem('theme', v.replace(/"/g, '')); } catch (e) { /* not kept */ }
+WK.theme(el('themeBtn'), 'theme');
 
 const CLAUDE = 'claude_code:payments-api', CODEX = 'codex:payments-api';
 // Examples to start from: the participant edits or replaces them. What Meko keeps is its own extraction of what is sent.
@@ -215,7 +207,7 @@ const factHtml = (f, cls) => '<div class="fact' + (cls ? ' ' + cls : '') + '">' 
 // The steps, in order: each is done by what it did, and Next lights up once the current one is.
 let needsDatapack = false, begun = false, switched = false, current = 0;
 /** The workshop's datapack step, as its use cases have it: the layout, new or existing, and the datapack in use. */
-let layout = 'shared', dpModeS = 'new', dpListS = null, dpPickedS = null, dpInUse = null;
+let layout = 'shared', dpModeS = null, dpListS = null, dpPickedS = null, dpInUse = null;
 const FLOW = [
   {id: 'p0', t: 'Create your datapack', done: () => !needsDatapack && dpInUse !== null},
   {id: 'p1', t: 'Session 1, in Claude Code', done: () => sent > 0},
@@ -225,33 +217,51 @@ const FLOW = [
   {id: 'p5', t: 'Try it in your own harness', done: () => false}];
 /** The steps shown: step 0 only while no datapack is in use (when it is, the flow starts at session 1). */
 const shownSteps = () => FLOW.filter(f => f.id !== 'p0' || FROM_WORKSHOP);
+/** What to look at in each step: the insight column follows the step. */
+const LOOK = {
+  p0: 'Start from a new, empty datapack: session 2 can then know only what session 1 established.',
+  p1: 'On the right of the session: what it holds, which is only what you said in it. Concrete facts (the stack, a rule, a decision) are what Meko extracts best.',
+  p2: 'Ending the session discards its context. Under <b>Meko stored</b>: the facts in Meko\'s own words, and who wrote them (the Claude Code session).',
+  p3: 'The two boxes: what the model receives with no store, and with Meko. How many of session 1\'s facts were sent, which were set aside as not needed for this prompt, and how many words you would type again without Meko.',
+  p4: 'Codex never saw session 1. Under <b>Sent</b>, who wrote each fact: the Claude Code session. One datapack, any harness.',
+  p5: 'Your own tool, connected to Meko\'s MCP server and this datapack: ask it what it knows about the project.'};
+/** The step an action was started from: it pulses in the list while the action runs. */
+let runningAt = -1;
 function renderFlow() {
   const steps = shownSteps();
   if (!steps.includes(FLOW[current])) current = FLOW.indexOf(steps[0]);
   const at = steps.indexOf(FLOW[current]);
-  // A step is reachable once every step before it is done.
-  const reachable = i => steps.slice(0, i).every(f => f.done());
-  el('stepper').innerHTML = steps.map((f, i) => {
-    const isDone = f.done(), here = f === FLOW[current];
-    return '<button class="step' + (isDone ? ' done' : '') + (i > 0 && steps[i - 1].done() ? ' linked' : '') + (here ? ' current' : '') + '" data-step="' + FLOW.indexOf(f) + '"' +
-      (reachable(i) ? '' : ' disabled') + '><span class="dot">' + (isDone && !here ? '&#10003;' : i + 1) + '</span><span class="t">' + esc(f.t) + '</span>' +
-      '<span class="s">' + (isDone ? 'done' : 'step ' + (i + 1)) + '</span></button>';
-  }).join('');
-  document.querySelectorAll('[data-step]').forEach(b => b.onclick = () => { current = Number(b.dataset.step); renderFlow(); });
+  // A step is open once every step before it is done; a locked one says which comes first.
+  const waitFor = i => { const open = steps.slice(0, i).findIndex(f => !f.done()); return open < 0 ? null : 'Finish step ' + (open + 1) + ' first: ' + steps[open].t + '.'; };
+  WK.stepList(el('stepper'), steps.map((f, i) => ({key: FLOW.indexOf(f), title: f.t, done: f.done(), current: f === FLOW[current],
+    locked: !!waitFor(i), running: busyS && FLOW.indexOf(f) === runningAt, sub: busyS && FLOW.indexOf(f) === runningAt ? 'Running…' : f.done() ? 'Done' : waitFor(i) || 'To do',
+    tip: waitFor(i) || f.t})), k => {
+    // Browsable while an action runs; a locked step is not entered.
+    const i = steps.indexOf(FLOW[Number(k)]), wait = waitFor(i);
+    if (wait) { el('nextWhy').textContent = wait; return; }
+    current = Number(k); renderFlow();
+  });
   FLOW.forEach(f => el(f.id).hidden = f !== FLOW[current]);
+  el('eyebrow').textContent = 'Step ' + (at + 1) + ' of ' + steps.length + ' · ' + FLOW[current].t;
+  el('look').innerHTML = '<p>' + (LOOK[FLOW[current].id] || '') + '</p>';
   el('back').disabled = at <= 0;
-  el('next').hidden = at === steps.length - 1;
+  const next = steps[at + 1];
+  el('next').hidden = !next;
   el('next').disabled = !FLOW[current].done();
   el('next').className = 'btn' + (FLOW[current].done() ? ' primary' : '');
+  if (next) el('next').textContent = 'Next: ' + next.t + ' →';
+  el('nextWhy').textContent = next && !FLOW[current].done() ? 'Finish this step first.' : '';
   // An ended session takes no more messages, and ends once.
   el('send').disabled = el('sendAll').disabled = el('end').disabled = busyS || ended;
-  ['refresh', 'begin', 'switch', 'dpCreate', 'dpUse', 'back', 'next'].forEach(id => { if (busyS && el(id)) el(id).disabled = true; });
-  if (!busyS) { el('refresh').disabled = el('begin').disabled = el('switch').disabled = false; if (el('dpCreate')) el('dpCreate').disabled = false; if (el('dpUse')) el('dpUse').disabled = false; }
-  document.querySelectorAll('[data-step]').forEach(b => { if (busyS) b.disabled = true; });
+  ['refresh', 'begin', 'switch'].forEach(id => { if (busyS && el(id)) el(id).disabled = true; });
+  if (!busyS) { el('refresh').disabled = el('begin').disabled = el('switch').disabled = false; }
+  if (FROM_WORKSHOP && el('p0') && !el('p0').hidden) renderDp();
 }
 const go = dir => { const steps = shownSteps(), at = steps.indexOf(FLOW[current]); current = FLOW.indexOf(steps[Math.max(0, Math.min(steps.length - 1, at + dir))]); renderFlow(); };
-el('back').onclick = () => go(-1);
-el('next').onclick = () => go(1);
+// Back and Next ignore a second click within 400 ms: a double click moves one step, not two.
+const nav = WK.guard(dir => { go(dir); window.scrollTo({top: 0, behavior: 'smooth'}); });
+el('back').onclick = () => nav(-1);
+el('next').onclick = () => nav(1);
 // Kept for the steps' own calls: a step that finishes redraws the flow.
 const unlock = () => renderFlow();
 const done = () => renderFlow();
@@ -260,7 +270,7 @@ async function ensureSession() {
   if (s1) return;
   const r = await api('POST', '/api/sessions/start?harness=' + encodeURIComponent(CLAUDE));
   s1 = r.sessionId; el('s1id').textContent = s1;
-  el('store').textContent = 'Store: ' + r.store; el('store').className = 'pill ' + (/^Meko/.test(r.store) ? 'ok' : 'warn');
+  showStore(String(r.store).replace(/^Meko:\s*/, 'Meko · '), /^Meko/.test(r.store), r.store);
   el('chat1').innerHTML = '';
 }
 
@@ -351,11 +361,11 @@ el('switch').onclick = () => run('st4', 'Sending the prompt in Codex…', async 
 let busyS = false;
 async function run(statusId, message, work) {
   if (busyS) return;
-  busyS = true; renderFlow();
+  busyS = true; runningAt = current; renderFlow();
   el(statusId).textContent = message;
   try { el(statusId).textContent = await work(); } catch (e) { el(statusId).textContent = 'Error: ' + e.message; }
-  busyS = false;
-  renderFlow();   // the step may be done now: Next and the track follow
+  busyS = false; runningAt = -1;
+  renderFlow();   // the step may be done now: Next and the steps follow
 }
 
 // The workshop around this page: when it is shown again, or its datapack changed, look again at the datapack in use.
@@ -383,66 +393,59 @@ async function checkDatapack() {
     const needs = FROM_WORKSHOP && (!!p.needsDatapack || needsOwn);
     needsDatapack = needs;
     dpInUse = p.live && p.connected && !needs ? p.datapack : null;
+    dpInUseId = dpInUse ? p.datapackId || null : null;
     if (needs) current = 0;
     if (p.error && needs) el('st0').textContent = p.error;
     renderDp(); renderFlow();
   } catch (e) { /* no workshop endpoints: nothing to create here */ }
 }
-/** The datapack step's form: as the workshop's step 1 (the layout, then a new datapack or an existing one). */
+/**
+ * The datapack step, as every workshop page has it (the kit's picker), with the workshop's own choice above it: one
+ * datapack for all use cases, or one per use case.
+ */
+let dpNameS = null;
 function renderDp() {
   if (!FROM_WORKSHOP) return;
-  const lay = '<div class="seg" role="tablist" aria-label="Datapacks" style="margin-bottom:6px">' +
+  const lay = '<div class="seg" role="tablist" aria-label="Datapacks" style="margin-top:14px">' +
     '<button role="tab" aria-selected="' + (layout !== 'per') + '" data-lay="shared">One datapack for all use cases</button>' +
     '<button role="tab" aria-selected="' + (layout === 'per') + '" data-lay="per">One datapack per use case</button></div>' +
-    '<div class="hint" style="margin:-2px 0 8px">' + (layout === 'per'
+    '<div class="hint">' + (layout === 'per'
       ? 'Each use case has its own datapack, created at its own step 1. This one: ' + (dpInUse ? '<b>' + esc(dpInUse) + '</b>.' : 'none yet.')
       : 'All the use cases share one datapack; each adds only its own context.') + '</div>';
-  let panel;
-  if (dpInUse) {
-    panel = '<label class="lbl" for="dpNew">Name</label><div class="row"><input class="text" id="dpNew" style="max-width:420px" value="' + esc(dpInUse) + '" disabled>' +
-      '<button class="btn" disabled>&#10003; In use</button></div><div class="hint">To use another datapack, choose <b>One datapack per use case</b>, or start over in a use case.</div>';
-  } else {
-    const sw = '<div class="seg" role="tablist" aria-label="Datapack" style="margin-bottom:8px">' +
-      '<button role="tab" aria-selected="' + (dpModeS === 'new') + '" data-dpm="new">New datapack</button>' +
-      '<button role="tab" aria-selected="' + (dpModeS === 'existing') + '" data-dpm="existing">Use an existing one</button></div>';
-    if (dpModeS === 'new') {
-      panel = sw + '<label class="lbl" for="dpNew">Name</label><div class="row"><input class="text" id="dpNew" style="max-width:420px" value="' + esc(el('dpNew') && !el('dpNew').disabled ? el('dpNew').value : suggest()) + '">' +
-        '<button class="btn primary" id="dpCreate">Create and use</button></div><div class="hint">Unique across Meko: lowercase letters, digits and hyphens.</div>';
-    } else {
-      if (dpListS == null) fetch('/api/workshop/datapacks').then(r => r.json()).then(l => { dpListS = l; renderDp(); }).catch(() => { dpListS = []; renderDp(); });
-      // Your own datapacks: one shared with you is not a fresh start for this use case.
-      const listed = (dpListS || []).filter(d => !d.sharedBy);
-      const rows = listed.map(d => '<label class="dp' + (d.workshop || d.sharedBy ? '' : ' other') + '"><input type="radio" name="dpPickS" value="' + esc(d.name) + '"' +
-        (dpPickedS === d.name ? ' checked' : '') + '><span class="dp-n">' + esc(d.name) + '</span><span class="dp-m"></span>' +
-        (d.sharedBy ? '<span class="pill ok">shared with you by ' + esc(d.sharedBy) + '</span>' : d.workshop ? '<span class="pill">workshop</span>'
-          : '<span class="pill warn" title="It already holds context, so the steps would not start clean">has other content</span>') + '</label>').join('');
-      panel = sw + (dpListS == null ? '<div class="hint">Loading your datapacks…</div>' : listed.length
-        ? '<div class="dp-list">' + rows + '</div><div class="row" style="margin-top:8px"><button class="btn primary" id="dpUse">Use selected</button></div>'
-        : '<div class="hint">No datapacks in your account yet: create a new one.</div>');
-    }
-  }
-  el('dpForm').innerHTML = lay + panel;
-  document.querySelectorAll('[data-lay]').forEach(b => b.onclick = () => {
+  if (dpNameS == null) dpNameS = suggest();
+  WK.datapackPicker(el('dpForm'), {
+    mode: dpModeS, inUse: dpInUse ? {id: dpInUseId || dpInUse, name: dpInUse} : null,
+    // Your own datapacks: one shared with you is not a fresh start for this use case.
+    list: dpListS && dpListS.filter(d => !d.sharedBy).map(d => ({id: d.id || d.name, name: d.name,
+      tag: d.workshop ? {label: 'workshop'} : {label: 'has other content', cls: 'warn', tip: 'It already holds context, so the steps would not start clean'}})),
+    choice: dpPickedS, name: dpNameS, before: lay, busy: busyS,
+    onMode: m => { if (busyS) return; dpModeS = m; if (m === 'existing') dpListS = null; renderDp(); },
+    onChoice: id => { dpPickedS = id; },
+    onName: n => { dpNameS = n; },
+    onRefresh: () => {
+      if (loadingS) return;
+      loadingS = true; dpListS = null;
+      fetch('/api/workshop/datapacks').then(r => r.json()).then(l => { dpListS = l; }).catch(() => { dpListS = []; })
+        .finally(() => { loadingS = false; renderDp(); });
+    },
+    onCreate: name => useDatapack(name, true),
+    onUse: d => d ? useDatapack(d.name, false, d.id) : (el('st0').textContent = 'Pick a datapack from the list first.'),
+  });
+  el('dpForm').querySelectorAll('[data-lay]').forEach(b => b.onclick = () => {
     if (busyS || b.dataset.lay === layout) return;
     // The layout is the workshop's: it switches it, and tells this page what it means for this use case.
     if (window.parent !== window) parent.postMessage({setLayout: b.dataset.lay}, location.origin);
   });
-  document.querySelectorAll('[data-dpm]').forEach(b => b.onclick = () => { if (busyS) return; dpModeS = b.dataset.dpm; if (dpModeS === 'existing') dpListS = null; renderDp(); });
-  document.querySelectorAll('input[name="dpPickS"]').forEach(r => r.onchange = () => { dpPickedS = r.value; });
-  if (el('dpCreate')) el('dpCreate').onclick = () => useDatapack(el('dpNew').value.trim(), true);
-  if (el('dpUse')) el('dpUse').onclick = () => {
-    const picked = document.querySelector('input[name="dpPickS"]:checked');
-    if (!picked) { el('st0').textContent = 'Pick a datapack from the list first.'; return; }
-    useDatapack(picked.value, false);
-  };
 }
+let loadingS = false, dpInUseId = null;
 
 /** Creates a datapack, or uses an existing one, and tells the workshop around this page (it is the workshop's too). */
-function useDatapack(name, create) {
+function useDatapack(name, create, id) {
   return run('st0', (create ? 'Creating ' : 'Switching to ') + name + '…', async () => {
     // A new one is filed in the workshop's Meko project: under SDLC when it is this use case's own, else under All use cases.
-    const r = await api('POST', '/api/workshop/datapack?name=' + encodeURIComponent(name) + '&create=' + create + (create ? '&group=' + (layout === 'per' ? 'sdlc' : 'all') : ''));
-    needsOwn = false; dpModeS = 'new'; dpPickedS = null; dpListS = null;
+    const r = await api('POST', '/api/workshop/datapack?name=' + encodeURIComponent(name) + '&create=' + create
+      + (create ? '&group=' + (layout === 'per' ? 'sdlc' : 'all') : id && id !== name ? '&id=' + encodeURIComponent(id) : ''));
+    needsOwn = false; dpModeS = null; dpPickedS = null; dpListS = null; dpNameS = null;
     // The workshop's status comes with the answer: the page around this one uses it rather than asking again.
     if (window.parent !== window) parent.postMessage({datapackChanged: true, status: r}, location.origin);
     await Promise.all([checkDatapack(), loadStatus()]);
@@ -458,12 +461,16 @@ checkDatapack();
 const loadStatus = () => fetch('/api/meko/status').then(r => r.json()).then(s => {
   const name = s.datapackName || s.datapack;
   if (name) el('dpName').textContent = name;
-  el('store').textContent = s.connected ? 'Store: Meko: ' + (name || '')
-    : s.configured === false && s.mcpUrl ? (FROM_WORKSHOP ? 'No datapack in use: create one in step 0, or this page uses the offline stand-in.'
-      : 'Store: the offline stand-in (start the demo with MEKO_API_KEY and MEKO_DATAPACK_NAME to use Meko).')
-    : 'Store: the offline stand-in';
-  el('store').className = 'pill ' + (s.connected ? 'ok' : 'warn');
-}).catch(() => { el('store').textContent = 'Store: unknown'; });
+  if (s.connected) showStore('Meko · ' + (name || ''), true, 'Meko, datapack ' + (name || ''));
+  else if (s.configured === false && s.mcpUrl && FROM_WORKSHOP) showStore('No datapack yet', false, 'No datapack in use: create one in step 1, or this page uses the offline stand-in.');
+  else showStore('Offline stand-in', false, 'The offline stand-in: start the demo with MEKO_API_KEY and MEKO_DATAPACK_NAME to use Meko.');
+}).catch(() => showStore('Unknown', false, 'Could not read the store'));
+/** The sidebar's store line: short, with its state as a dot; the detail as its tooltip. */
+function showStore(text, ok, detail) {
+  el('store').textContent = text;
+  el('store').className = 'store ' + (ok ? 'ok' : 'warn');
+  el('store').title = detail || text;
+}
 loadStatus();
 </script>
 </body>

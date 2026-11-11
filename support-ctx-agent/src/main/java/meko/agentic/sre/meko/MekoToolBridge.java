@@ -2,14 +2,13 @@ package meko.agentic.sre.meko;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,7 +33,8 @@ public class MekoToolBridge {
             "user_email", "promoted_to_kb_at", "promoted_by_name", "promoted_by_email",
             "document_id", "metadata", "metadata_filters");
 
-    private final SyncMcpToolCallbackProvider provider;
+    /** The connection: the shared Meko client, used for its verbatim calls and the tool list. */
+    private final MekoMcpClient meko;
     private final ObjectMapper objectMapper;
     private final String agentId;
 
@@ -49,8 +49,8 @@ public class MekoToolBridge {
     private final Map<String, String> conversationIds = new HashMap<>();
 
     /**
-     * How long a READ is waited for. Writes are bounded by the MCP client's request-timeout
-     * instead, which is set higher: a Meko write runs a server-side extraction and was observed
+     * How long a READ is waited for. Writes are bounded by meko.timeouts instead, which is set
+     * higher: a Meko write runs a server-side extraction and was observed
      * taking over 30s on its own. One client-wide timeout cannot serve both — high enough for
      * writes lets a hung read hold a whole run hostage for that long.
      */
@@ -58,19 +58,19 @@ public class MekoToolBridge {
 
     @org.springframework.beans.factory.annotation.Autowired
     public MekoToolBridge(
-            SyncMcpToolCallbackProvider provider,
+            MekoMcpClient meko,
             ObjectMapper objectMapper,
             @Value("${meko.agent-id:ai-sre-that-remembers}") String agentId,
             @Value("${meko.read-timeout:30s}") java.time.Duration readTimeout) {
-        this.provider = provider;
+        this.meko = meko;
         this.objectMapper = objectMapper;
         this.agentId = agentId;
         this.readTimeout = readTimeout;
     }
 
     /** With the default read timeout. */
-    public MekoToolBridge(SyncMcpToolCallbackProvider provider, ObjectMapper objectMapper, String agentId) {
-        this(provider, objectMapper, agentId, java.time.Duration.ofSeconds(30));
+    public MekoToolBridge(MekoMcpClient meko, ObjectMapper objectMapper, String agentId) {
+        this(meko, objectMapper, agentId, java.time.Duration.ofSeconds(30));
     }
 
     public String memorySearch(String query, String datapackId, int limit) {
@@ -399,7 +399,7 @@ public class MekoToolBridge {
     }
 
     public boolean available() {
-        return provider.getToolCallbacks().length > 0;
+        return !registeredTools().isEmpty();
     }
 
     /**
@@ -502,19 +502,12 @@ public class MekoToolBridge {
     }
 
     private String call(String toolName, Map<String, Object> args) {
-        var callback = Arrays.stream(provider.getToolCallbacks())
-                .filter(c -> matches(c.getToolDefinition().name(), toolName))
+        var registered = registeredTools().stream()
+                .filter(name -> matches(name, toolName))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "Meko MCP tool not available: " + toolName
                                 + ". Registered tools: " + registeredToolNames()));
-
-        String payload;
-        try {
-            payload = objectMapper.writeValueAsString(args);
-        } catch (RuntimeException e) {
-            throw new IllegalArgumentException("Could not encode Meko MCP arguments for " + toolName, e);
-        }
 
         // WRITES GO ONE AT A TIME; reads do not. A Meko write runs mem0's extraction — a model
         // call on the server — so each takes seconds, and sent together they queue behind one
@@ -527,9 +520,9 @@ public class MekoToolBridge {
         }
         long started = System.nanoTime();
         try {
-            return write ? callback.call(payload) : withinReadTimeout(() -> callback.call(payload), toolName);
+            return write ? send(registered, args) : withinReadTimeout(() -> send(registered, args), toolName);
         } catch (RuntimeException e) {
-            // SyncMcpToolCallback's own error names no tool; this line is how a timeout is traced.
+            // This line is how a timeout is traced to its tool.
             log.warn("Meko {} failed after {} ms: {}", toolName, elapsedMs(started), e.getMessage());
             throw e;
         } finally {
@@ -862,18 +855,33 @@ public class MekoToolBridge {
                 && (registeredName.equals(toolName) || registeredName.endsWith("_" + toolName));
     }
 
+    /**
+     * One call, verbatim: the tool's content as the server sent it. A call that got no answer, or
+     * that the server marked an error, throws, so a read degrades and a write reports failure.
+     */
+    private String send(String toolName, Map<String, Object> args) {
+        var call = meko.raw(toolName, args);
+        if (call.raw() == null) {
+            throw new IllegalStateException(toolName + " failed: " + call.error());
+        }
+        if (!call.ok()) {
+            throw new IllegalStateException(toolName + " was refused: " + call.error());
+        }
+        return call.raw();
+    }
+
     /** Public for the status endpoint: "which tools did we actually get?" is the first question. */
     public List<String> registeredTools() {
-        return Arrays.stream(provider.getToolCallbacks())
-                .map(c -> c.getToolDefinition().name())
-                .sorted()
-                .toList();
+        try {
+            return meko.tools().stream().map(MekoMcpClient.Tool::name).sorted().toList();
+        } catch (Exception e) {
+            log.warn("Could not list Meko's tools: {}", e.getMessage());
+            return List.of();
+        }
     }
 
     private String registeredToolNames() {
-        return Arrays.stream(provider.getToolCallbacks())
-                .map(c -> c.getToolDefinition().name())
-                .reduce((a, b) -> a + ", " + b)
-                .orElse("<none>");
+        var names = registeredTools();
+        return names.isEmpty() ? "<none>" : String.join(", ", names);
     }
 }

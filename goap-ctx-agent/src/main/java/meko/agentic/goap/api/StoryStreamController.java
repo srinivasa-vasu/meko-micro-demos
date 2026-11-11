@@ -33,18 +33,41 @@ public class StoryStreamController {
 
     private final StoryService stories;
     private final RunEvents events;
+    private final WorkGate gate;
+    private final RunJobs jobs;
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    public StoryStreamController(StoryService stories, RunEvents events) {
+    public StoryStreamController(StoryService stories, RunEvents events, WorkGate gate, RunJobs jobs) {
         this.stories = stories;
         this.events = events;
+        this.gate = gate;
+        this.jobs = jobs;
     }
 
     @GetMapping(value = "/{id}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@PathVariable String id, @RequestParam(defaultValue = "compare") String mode,
                              @RequestParam(defaultValue = "false") boolean db,
-                             @RequestParam(defaultValue = "false") boolean mekoOnly) {
+                             @RequestParam(defaultValue = "false") boolean mekoOnly,
+                             @RequestParam(required = false) String useCase,
+                             @RequestParam(required = false) Integer stage,
+                             @RequestParam(defaultValue = "run") String kind) {
         SseEmitter emitter = new SseEmitter(15 * 60 * 1000L);
+        // One run at a time: refused (as a failed run) while another is going, from this page or another.
+        WorkGate.Pass pass;
+        try {
+            pass = gate.enter("a run of " + id);
+        } catch (WorkGate.Busy e) {
+            send(emitter, "failed", Map.of("lane", "with", "data", e.getMessage()));
+            send(emitter, "done", Map.of());
+            emitter.complete();
+            return emitter;
+        }
+        // A job: the page follows it, and can follow it again (a reload, another browser) until its result is recorded.
+        RunJobs.Job job = jobs.start(id, useCase, stage, kind);
+        java.util.function.BiConsumer<String, Object> toPage = toPage(emitter);
+        jobs.follow(job, toPage);
+        emitter.onCompletion(() -> jobs.unfollow(job, toPage));
+        jobs.emit(job, "job", job.describe());
         List<Lane> lanes = new ArrayList<>();
         // A follow-up runs in every lane like a comparison, on what each lane last handled for the story.
         boolean followUp = mode.equals("followup");
@@ -55,28 +78,60 @@ public class StoryStreamController {
         if ((compare && db && !mekoOnly) || mode.equals("db")) lanes.add(new Lane("db", ContextStores.Lane.DATABASE, newCaseId.get()));
         if (compare || mode.equals("with") || mode.equals("mismatch")) lanes.add(new Lane("with", ContextStores.Lane.MEKO, newCaseId.get()));
 
-        send(emitter, "lanes", lanes);
+        jobs.emit(job, "lanes", lanes);
         lanes.forEach(lane -> events.subscribe(lane.caseId(),
-                (type, payload) -> send(emitter, type, Map.of("lane", lane.name(), "data", payload))));
+                (type, payload) -> jobs.emit(job, type, Map.of("lane", lane.name(), "data", payload))));
 
         List<CompletableFuture<Void>> runs = lanes.stream().map(lane -> CompletableFuture.runAsync(() -> {
             try {
                 Object run = followUp ? stories.followUp(id, lane.lane(), lane.caseId())
                         : mode.equals("mismatch") ? stories.patternMismatch(true, lane.caseId())
                         : stories.run(id, lane.lane(), lane.caseId());
-                send(emitter, "run", Map.of("lane", lane.name(), "data", run));
+                jobs.emit(job, "run", Map.of("lane", lane.name(), "data", run));
             } catch (RuntimeException e) {
-                send(emitter, "failed", Map.of("lane", lane.name(), "data", String.valueOf(e.getMessage())));
+                jobs.emit(job, "failed", Map.of("lane", lane.name(), "data", String.valueOf(e.getMessage())));
             } finally {
                 events.unsubscribe(lane.caseId());
             }
         }, executor)).toList();
 
         CompletableFuture.allOf(runs.toArray(CompletableFuture[]::new)).whenComplete((ok, error) -> {
-            send(emitter, "done", Map.of());
-            emitter.complete();
+            pass.close();   // the run ended here, whether or not the browser is still listening
+            jobs.finish(job);   // "done" to whoever follows it; the job and its result stay until the page records them
         });
         return emitter;
+    }
+
+    /** Follows a run again (after a reload, or from another browser): its events from the start, then the rest. */
+    @GetMapping(value = "/jobs/{jobId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter follow(@PathVariable String jobId) {
+        SseEmitter emitter = new SseEmitter(15 * 60 * 1000L);
+        RunJobs.Job job = jobs.get(jobId);
+        if (job == null) {
+            send(emitter, "failed", Map.of("lane", "with", "data", "That run is no longer kept: run the step again."));
+            send(emitter, "done", Map.of());
+            emitter.complete();
+            return emitter;
+        }
+        java.util.function.BiConsumer<String, Object> toPage = toPage(emitter);
+        jobs.follow(job, toPage);
+        emitter.onCompletion(() -> jobs.unfollow(job, toPage));
+        return emitter;
+    }
+
+    /** The page recorded the run's result in the progress datapack: nothing is left to pick up. */
+    @org.springframework.web.bind.annotation.PostMapping("/jobs/{jobId}/recorded")
+    public Map<String, Object> recorded(@PathVariable String jobId) {
+        jobs.recorded(jobId);
+        return Map.of("recorded", true);
+    }
+
+    /** Sends a job's events to one page, and ends the page's stream with the job. */
+    private java.util.function.BiConsumer<String, Object> toPage(SseEmitter emitter) {
+        return (type, payload) -> {
+            send(emitter, type, payload);
+            if ("done".equals(type)) emitter.complete();
+        };
     }
 
     private static void send(SseEmitter emitter, String type, Object payload) {

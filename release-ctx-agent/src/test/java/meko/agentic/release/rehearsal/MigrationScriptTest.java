@@ -11,9 +11,23 @@ class MigrationScriptTest {
     void splitsStatementsAndKeepsTheBackfillDirective() throws Exception {
         MigrationScript script = MigrationScript.parse("release-1-safe.sql", AmpDatabase.read("sql/releases/release-1-safe.sql"));
         assertThat(script.steps()).hasSize(10);
-        assertThat(script.steps().get(5)).isEqualTo(new MigrationScript.Backfill("orders", "public_ref", "uuidv7()", 20000));
+        assertThat(script.steps().get(5)).isEqualTo(new MigrationScript.Backfill("orders", "public_ref", "uuidv7()", 20000, 2));
         assertThat(script.steps().getLast()).isInstanceOfSatisfying(MigrationScript.Sql.class, sql -> assertThat(sql.concurrently()).isTrue());
         assertThat(script.steps()).noneMatch(s -> s.text().contains("--") && s instanceof MigrationScript.Sql);
+    }
+
+    @Test
+    void everyRewrittenStepNamesTheStatementItReplaces() throws Exception {
+        for (String release : new String[]{"release-1", "release-2"}) {
+            MigrationScript written = MigrationScript.parse(release + "-as-written.sql", AmpDatabase.read("sql/releases/" + release + "-as-written.sql"));
+            MigrationScript safe = MigrationScript.parse(release + "-safe.sql", AmpDatabase.read("sql/releases/" + release + "-safe.sql"));
+            // Every step replaces a statement as written, and every statement as written is replaced by some step.
+            assertThat(safe.steps()).allMatch(s -> s.replaces() >= 1 && s.replaces() <= written.steps().size());
+            for (int n = 1; n <= written.steps().size(); n++) {
+                int statement = n;
+                assertThat(safe.steps()).as(release + " statement " + n).anyMatch(s -> s.replaces() == statement);
+            }
+        }
     }
 
     @Test

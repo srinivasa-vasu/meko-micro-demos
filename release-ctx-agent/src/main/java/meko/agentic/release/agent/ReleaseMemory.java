@@ -1,7 +1,7 @@
 package meko.agentic.release.agent;
 
 import meko.agentic.release.amp.AmpDatabase;
-import meko.agentic.release.meko.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
@@ -294,7 +294,7 @@ public class ReleaseMemory {
         try {
             meko.callTool("conversation_add_message", meko.args(
                     "conversation_id", settings(),
-                    "agent_id", MekoMcpClient.CONVERSATION_OWNER,
+                    "agent_id", meko.conversationOwner(),
                     "input", "settings · shared datapack",
                     "output", meko.json(id == null ? Map.of("connected", false) : Map.of("connected", true, "id", id, "name", name)),
                     "metadata", meko.json(Map.of("writer", AGENT_ID, "event", "shared-datapack")),
@@ -307,7 +307,7 @@ public class ReleaseMemory {
     /** The shared datapack this team last connected, as {@code [id, name]}, or null. */
     public String[] recallShared() throws Exception {
         JsonNode read = meko.callTool("conversation_get", meko.args("conversation_id", settings(),
-                "agent_id", MekoMcpClient.CONVERSATION_OWNER, "include_messages", true, "datapack_id", meko.datapack()));
+                "agent_id", meko.conversationOwner(), "include_messages", true, "datapack_id", meko.datapack()));
         String[] last = null;
         for (JsonNode message : read.path("messages").values()) {
             JsonNode value;
@@ -348,7 +348,7 @@ public class ReleaseMemory {
 
     /** The platform data team's runbook, into a datapack's knowledge base; waits until a search finds its rules. */
     public void uploadRunbook(String datapackId, Consumer<String> log) throws Exception {
-        String conversation = meko.conversation(MekoMcpClient.CONVERSATION_OWNER + ":knowledge", "Shared knowledge uploads", Map.of());
+        String conversation = meko.conversation(meko.conversationOwner() + ":knowledge", "Shared knowledge uploads", Map.of());
         meko.uploadKnowledgeDocument(conversation, "platform-data:standards", RUNBOOK,
                 AmpDatabase.read("kb/" + RUNBOOK).getBytes(StandardCharsets.UTF_8), datapackId);
         log.accept("Uploaded the data repair runbook; indexing…");
@@ -426,7 +426,7 @@ public class ReleaseMemory {
             // instruction from anyone. What was done goes in the reasoning, which the audit reads back.
             meko.callTool("conversation_add_message", meko.args(
                     "conversation_id", record(prId),
-                    "agent_id", MekoMcpClient.CONVERSATION_OWNER,
+                    "agent_id", meko.conversationOwner(),
                     "input", prId + " · " + runId + " · " + event,
                     "reasoning", input,
                     "output", output,
@@ -479,7 +479,7 @@ public class ReleaseMemory {
     public Map<String, Object> audit(String prId, boolean withEvidence) throws Exception {
         String conversation = record(prId);
         JsonNode read = meko.callTool("conversation_get", meko.args("conversation_id", conversation,
-                "agent_id", MekoMcpClient.CONVERSATION_OWNER, "include_messages", true, "datapack_id", meko.datapack()));
+                "agent_id", meko.conversationOwner(), "include_messages", true, "datapack_id", meko.datapack()));
         List<Map<String, Object>> turns = new ArrayList<>();
         String evidence = null;
         for (JsonNode message : read.path("messages").values()) {
@@ -516,7 +516,7 @@ public class ReleaseMemory {
 
     /** Uploads the standard and the release policy to the datapack's knowledge base, and waits for them to be indexed. */
     public void uploadKnowledge(Consumer<String> log) throws Exception {
-        String conversation = meko.conversation(MekoMcpClient.CONVERSATION_OWNER + ":knowledge", "Shared knowledge uploads", Map.of());
+        String conversation = meko.conversation(meko.conversationOwner() + ":knowledge", "Shared knowledge uploads", Map.of());
         List<MekoMcpClient.Upload> uploads = new ArrayList<>();
         for (String name : KNOWLEDGE) {
             MekoMcpClient.Upload upload = meko.uploadKnowledgeDocument(conversation, "platform-data:standards",
@@ -576,7 +576,7 @@ public class ReleaseMemory {
             return 0;
         }
         meko.callTool("memory_promote", meko.args("memory_ids", ids, "agent_id", AGENT_ID,
-                "conversation_id", meko.conversation(MekoMcpClient.CONVERSATION_OWNER + ":lessons", "Promoted lessons", Map.of()),
+                "conversation_id", meko.conversation(meko.conversationOwner() + ":lessons", "Promoted lessons", Map.of()),
                 "datapack_id", meko.datapack()));
         ids.forEach(id -> log.accept("Promoted: " + lessons.remove(id)));
         return ids.size();

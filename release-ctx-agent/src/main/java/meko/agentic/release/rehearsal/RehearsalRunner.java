@@ -211,6 +211,13 @@ public class RehearsalRunner {
         return null;
     }
 
+    /** Runs one statement on its own (autocommit): a concurrent index build or drop cannot run in a transaction. */
+    public static void execute(Endpoint endpoint, String sql) throws Exception {
+        try (Connection connection = endpoint.connect("rehearsal:plan-check")) {
+            connection.createStatement().execute(sql);
+        }
+    }
+
     /** The orders table's columns, indexes and constraints, by definition. */
     public static Set<String> schema(Endpoint endpoint) throws Exception {
         Set<String> schema = new TreeSet<>();

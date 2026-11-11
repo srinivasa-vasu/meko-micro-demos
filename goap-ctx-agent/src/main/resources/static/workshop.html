@@ -4,108 +4,61 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Meko Workshop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/workshop-kit/workshop.css">
 <style>
-:root{--bg:#091016;--panel:#101a24;--panel2:#0c141c;--ink:#edf3f8;--muted:#8ea0b2;--line:#263443;--accent:#71ddb9;--warn:#f5c66a;--bad:#ff8b8b;--blue:#8fbcff;--violet:#c9b6ff;
-  --accent-bg:#14382c;--warn-bg:#3a2e14;--bad-bg:#3a1c1f;--blue-bg:#16263d;--violet-bg:#2a2350;--btn:#1a2632;--chip:#17222d;--text2:#c5d1dc;--on-accent:#06130f;--hover:#121d28;--active:#132028;
-  --cust-bg:#1a1f2b;--agent-bg:#13202c;--spec-bg:#1c1a12;--warn-tint:#1b1912;--bad-tint:#1b1416;--blue-tint:#111a26;--boundary-bg:#13202c;--boundary-line:#3a5068;color-scheme:dark}
-:root[data-theme="light"]{--bg:#f4f6f9;--panel:#ffffff;--panel2:#f3f6f9;--ink:#14202b;--muted:#5a6878;--line:#d6dee7;--accent:#0b8462;--warn:#946300;--bad:#c23a3a;--blue:#2a5fc4;--violet:#5b45c9;
-  --accent-bg:#dcf2ea;--warn-bg:#f7ecd0;--bad-bg:#f9e0e0;--blue-bg:#e1eafa;--violet-bg:#ebe6fb;--btn:#f3f6f9;--chip:#f0f4f8;--text2:#2e3d4b;--on-accent:#ffffff;--hover:#edf2f6;--active:#e3f1ec;
-  --cust-bg:#eef2f8;--agent-bg:#eaf4f0;--spec-bg:#f8f5ea;--warn-tint:#fdf8ec;--bad-tint:#fdf3f3;--blue-tint:#f1f6fd;--boundary-bg:#f0f5fa;--boundary-line:#a9bed3;color-scheme:light}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-.wrap{max-width:1500px;margin:auto;padding:14px clamp(12px,2vw,32px) 48px}
+/* This page's own names for the kit's colours: they follow its theme (light, dark, or the system's). */
+:root{--panel:var(--surface);--panel2:var(--surface-2);--chip:var(--sunken);--text2:var(--ink-2);--blue:var(--info);--btn:var(--surface);--on-accent:var(--accent-ink);
+  --accent-bg:var(--accent-soft);--warn-bg:var(--warn-soft);--bad-bg:var(--bad-soft);--blue-bg:var(--info-soft);--violet-bg:color-mix(in srgb,var(--violet) 14%,transparent);
+  --hover:var(--surface-2);--active:var(--accent-soft);--cust-bg:var(--sunken);--agent-bg:var(--accent-soft);--spec-bg:var(--warn-soft);
+  --warn-tint:color-mix(in srgb,var(--warn) 7%,transparent);--bad-tint:color-mix(in srgb,var(--bad) 7%,transparent);--blue-tint:color-mix(in srgb,var(--info) 7%,transparent);
+  --boundary-bg:var(--surface-2);--boundary-line:var(--line)}
 svg.i{width:16px;height:16px;flex:none;vertical-align:-3px}
 svg.i.lg{width:20px;height:20px}
-a{color:var(--blue)}
-:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
-/* The title takes the room left; the status and theme controls stay top right, and wrap below only on narrow screens. */
-header>div:first-child{flex:1 1 480px;min-width:0}header>.row{flex:none}
-.brand{color:var(--accent);font-weight:800;font-size:13px;display:flex;gap:6px;align-items:center}
-h1{font-size:22px;margin:2px 0;letter-spacing:-.01em}
-.sub{color:var(--muted);font-size:13px;max-width:780px}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.pill{display:inline-flex;gap:6px;align-items:center;padding:5px 10px;border-radius:99px;background:var(--chip);color:var(--muted);font-size:11.5px;white-space:nowrap}
-.pill.ok{background:var(--accent-bg);color:var(--accent)}.pill.warn{background:var(--warn-bg);color:var(--warn)}
-.btn{display:inline-flex;gap:7px;align-items:center;border:1px solid var(--line);background:var(--btn);color:var(--ink);padding:7px 13px;border-radius:9px;cursor:pointer;font:inherit}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font-weight:800}
-.iconbtn{display:inline-grid;place-items:center;width:32px;height:32px;padding:0}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px}
-.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px;background:var(--panel2)}
-.seg button{border:0;background:transparent;color:var(--muted);padding:6px 12px;border-radius:7px;cursor:pointer;font:inherit;font-weight:600}
-.seg button[aria-selected="true"]{background:var(--accent-bg);color:var(--accent)}
+.dp-panel{margin-top:10px}
 /* An option with a second line: what it is, then who you are in it. */
 .seg button .role{display:block;font-size:11.5px;font-weight:500;opacity:.8;margin-top:1px}
-.dp-panel{margin-top:10px}
 .lbl{display:block;font-size:12.5px;font-weight:700;color:var(--text2);margin-bottom:4px}
-.hint{font-size:12px;color:var(--muted);margin-top:5px}
 .dp-list{display:flex;flex-direction:column;gap:4px;max-height:240px;overflow:auto;max-width:720px}
 .dp{display:flex;gap:10px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);cursor:pointer}
 .dp:has(input:checked){border-color:var(--accent)}
 .dp.other .dp-n{color:var(--muted)}
 .dp-n{font-weight:700}.dp-m{font-size:12px;color:var(--muted);margin-right:auto}
-input.text,select.text{min-width:300px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:7px 10px;font:inherit}
-h3{font-size:14px;margin:0 0 10px;display:flex;gap:8px;align-items:center}
-h3 .count{color:var(--muted);font-weight:400}
+input.text{min-width:300px;width:auto}
+h3 .count{color:var(--muted);font-weight:400;font-family:var(--body)}
 .note{font-size:12.5px;color:var(--muted)}
+code{font-size:12px}
 
-/* Use case tabs */
-.tabs{display:flex;gap:4px;margin-top:14px;overflow-x:auto;border-bottom:1px solid var(--line)}
-/* The vertical (BFSI) once, standing beside its use cases, as in the demo. */
-.tab-group{align-self:center;flex:0 0 auto;font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--muted);writing-mode:vertical-rl;transform:rotate(180deg);padding:4px 2px;border-right:2px solid var(--line)}
-.tab{flex:1 0 auto;min-width:210px;display:flex;gap:10px;align-items:flex-start;border:0;border-bottom:3px solid transparent;background:transparent;border-radius:9px 9px 0 0;padding:9px 12px 10px;cursor:pointer;text-align:left;color:var(--muted);font:inherit}
-.tab:hover{background:var(--hover);color:var(--ink)}
-.tab.active{border-bottom-color:var(--accent);background:var(--active);color:var(--ink)}
-.tab .ico{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:var(--chip);color:var(--muted)}
-.tab.active .ico{background:var(--accent-bg);color:var(--accent)}
-.tab .k{font-size:11px;color:var(--muted)}
-.tab .t{font-weight:800;font-size:13.5px;white-space:nowrap}
-.dots{display:flex;gap:3px;margin-top:4px}.dots i{width:7px;height:7px;border-radius:50%;background:var(--line)}.dots i.on{background:var(--accent)}
+/* The step, in the main column */
+.guide h2{font-size:21px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.guide ol{margin:12px 0 14px;padding-left:20px;color:var(--text2);max-width:100ch}.guide li{margin:5px 0}
+.guide .acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 
-/* The use case */
-.uc{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px}
-.uc h2{font-size:21px;margin:0 0 4px;letter-spacing:-.01em}
-.uc .domain{font-size:12px;color:var(--accent);font-weight:700}
-.uc .problem{color:var(--text2);font-size:14.5px;max-width:70ch}
+/* The use case and what the datapack holds, in the insight column */
+.ucd .domain{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--accent)}
+.ucd .problem{color:var(--text2);font-size:13.5px;margin-top:6px}
 .boundary{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:13px;color:var(--text2);background:var(--boundary-bg);border:1px dashed var(--boundary-line);border-radius:9px;padding:7px 10px}
-.challenge{margin-top:10px;font-style:italic;color:var(--muted)}
-.reads{border-left:1px solid var(--line);padding-left:18px}
-.reads .r{display:flex;gap:10px;align-items:flex-start;margin:8px 0;font-size:13px;color:var(--text2)}
+.challenge{margin-top:10px;font-style:italic;color:var(--muted);font-size:13px}
+.reads .r{display:flex;gap:10px;align-items:flex-start;margin:10px 0 0;font-size:13px;color:var(--text2)}
 .reads .r .ico{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--chip);color:var(--muted);flex:none}
 .reads .r.on .ico{background:var(--accent-bg);color:var(--accent)}
 .reads .r.off{color:var(--muted)}
-
-/* Guided steps: a connected track */
-.track{display:flex;gap:0;overflow-x:auto;padding-bottom:2px}
-.step{position:relative;flex:1 0 120px;display:flex;flex-direction:column;align-items:center;gap:5px;border:0;background:transparent;cursor:pointer;color:var(--muted);font:inherit;padding:2px 4px;text-align:center}
-.step::before{content:"";position:absolute;top:18px;left:-50%;right:50%;height:2px;background:var(--line)}
-.step:first-child::before{display:none}
-.step.linked::before{background:var(--accent)}
-.step .dot{position:relative;z-index:1;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--panel2);border:2px solid var(--line);color:var(--muted)}
-.step.done .dot{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
-.step.current .dot{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
-.step.skip{opacity:.4}.step.skip .dot{border-style:dashed}
-.step .t{font-size:12px;font-weight:700;color:var(--ink);line-height:1.3}
-.step .s{font-size:11px}
-.guide h2{margin:16px 0 6px;font-size:18px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.guide ol{margin:6px 0 12px;padding-left:20px;color:var(--text2);max-width:110ch}.guide li{margin:4px 0}
-code{font:12px ui-monospace,monospace;background:var(--chip);padding:1px 5px;border-radius:5px}
-.status{color:var(--muted);font-size:12.5px;min-height:18px;margin-top:10px}
-.nav{display:flex;justify-content:space-between;gap:8px;margin-top:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:12px}
+.env .pill{white-space:normal}
 
 /* Output: the stage track, then one stage's run */
 .stages{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .stage{display:flex;flex-direction:column;gap:6px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--panel2);min-width:0;cursor:pointer;text-align:left;color:var(--ink);font:inherit}
-.stage.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.stage.sel{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 .stage.skip{opacity:.4;border-style:dashed;cursor:default}
 .stage .h{display:flex;justify-content:space-between;align-items:baseline;gap:6px}
 .stage .n{font-size:11.5px;color:var(--muted)}
 .stage .t{font-weight:800;font-size:13.5px}
-.layers{display:flex;gap:5px}
-.layers span{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:var(--chip);color:var(--line)}
-.layers span.on{background:var(--accent-bg);color:var(--accent)}
-.verdict{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:700;border-radius:99px;padding:3px 9px;width:fit-content}
+.lyrs{display:flex;gap:5px}
+.lyrs span{display:grid;place-items:center;width:26px;height:26px;border-radius:7px;background:var(--chip);color:var(--line)}
+.lyrs span.on{background:var(--accent-bg);color:var(--accent)}
+.verdict{gap:6px;align-items:center}
 .verdict.ok{background:var(--accent-bg);color:var(--accent)}.verdict.warn{background:var(--warn-bg);color:var(--warn)}.verdict.bad{background:var(--bad-bg);color:var(--bad)}
 .metric{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--muted)}
 .metric b{font-size:17px;color:var(--ink)}
@@ -115,19 +68,20 @@ code{font:12px ui-monospace,monospace;background:var(--chip);padding:1px 5px;bor
 .outcome.warn{border-left-color:var(--warn)}.outcome.bad{border-left-color:var(--bad)}
 .pillars{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
 .pillar{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--panel2);min-width:0;max-height:320px;overflow:auto}
-.pillar h3{margin-bottom:6px}
+.pillar h3{margin:0 0 6px;font-size:14px;display:flex;gap:8px;align-items:center}
 .pillar h3 .ico{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--accent-bg);color:var(--accent)}
 .pillar.off h3 .ico{background:var(--chip);color:var(--muted)}
 .part{margin-top:6px}.part + .part{margin-top:10px;padding-top:8px;border-top:1px solid var(--line)}
 .part-t{display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:700;color:var(--text2)}
-.item{font-size:12.5px;padding:7px 9px;border-radius:8px;background:var(--panel);margin:5px 0;color:var(--text2)}
-.item.trace .q{font-weight:700;color:var(--ink)}
-.item.trace .a{margin-top:3px;color:var(--accent)}
-.item.trace .m{margin-top:3px;font-size:12px;color:var(--muted)}.item.trace .m b{color:var(--text2);font-weight:700}
-.item .src{font-size:11.5px;font-weight:700;color:var(--accent);margin-bottom:2px}
-.item.passed .src{color:var(--warn)}
+.ctx{font-size:12.5px;padding:7px 9px;border-radius:8px;background:var(--panel);margin:5px 0;color:var(--text2)}
+.ctx.trace .q{font-weight:700;color:var(--ink)}
+.ctx.trace .a{margin-top:3px;color:var(--accent)}
+.ctx.trace .m{margin-top:3px;font-size:12px;color:var(--muted)}.ctx.trace .m b{color:var(--text2);font-weight:700}
+.ctx .src{font-size:11.5px;font-weight:700;color:var(--accent);margin-bottom:2px}
+.ctx.passed .src{color:var(--warn)}
 .detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;margin-top:12px}
-.box{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);min-width:0}
+.out .box{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2);min-width:0}
+.out h3{font-size:14px;margin:0 0 10px;display:flex;gap:8px;align-items:center}
 .chat{display:flex;flex-direction:column;gap:6px;max-height:460px;overflow:auto;padding-right:4px}
 .bubble{max-width:85%;border-radius:12px;padding:7px 10px;font-size:13px;overflow-wrap:anywhere;min-width:0}
 .bubble .who{font-size:11px;font-weight:700;color:var(--muted);margin-bottom:1px}
@@ -146,44 +100,66 @@ code{font:12px ui-monospace,monospace;background:var(--chip);padding:1px 5px;bor
 .did .p{font-weight:700}.did .m{margin-left:auto;color:var(--muted);font-size:11px;white-space:nowrap}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-bottom:6px}
 .legend span{display:inline-flex;gap:5px;align-items:center}
+/* The legend's icons in the rows' own badges, so each reads as the step it labels. */
+.legend .k{display:grid;place-items:center;width:20px;height:20px;border-radius:6px;background:var(--chip);color:var(--muted)}
+.legend .k.WORK{background:transparent}.legend .k.ASK{background:var(--warn-bg);color:var(--warn)}
+.legend .k.REWORK{background:var(--bad-bg);color:var(--bad)}.legend .k.CONTEXT{background:var(--blue-bg);color:var(--blue)}
 .sum{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-table{width:100%;border-collapse:collapse;font-size:12.5px}
-th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--muted);font-size:11.5px;font-weight:600}
+.out table{font-size:12.5px}
 td.tool{white-space:nowrap}
-.tool span{display:inline-flex;gap:5px;align-items:center;font:11.5px ui-monospace,monospace;border-radius:6px;padding:2px 6px}
+.tool span{display:inline-flex;gap:5px;align-items:center;font:11.5px var(--mono);border-radius:6px;padding:2px 6px}
 .tool .read{background:var(--blue-bg);color:var(--blue)}.tool .write{background:var(--violet-bg);color:var(--violet)}
 td.fail{color:var(--bad);font-weight:700}.note.fail{color:var(--bad)}
 .empty{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:13px;margin-top:14px}
-@media(max-width:1000px){.uc{grid-template-columns:minmax(0,1fr)}.reads{border-left:0;padding-left:0}.detail{grid-template-columns:minmax(0,1fr)}.stages,.pillars{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(prefers-reduced-motion:no-preference){.stage,.step .dot,.btn{transition:border-color .15s,background .15s,box-shadow .15s}}
+#starthere iframe{width:100%;height:2100px;border:0;display:block}
+@media(max-width:1100px){.detail{grid-template-columns:minmax(0,1fr)}.stages,.pillars{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(prefers-reduced-motion:no-preference){.stage,.btn{transition:border-color .15s,background .15s,box-shadow .15s}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div>
-      <div class="brand" id="brandMark">Meko workshop</div>
-      <h1>Focus on the domain, never pay the data infrastructure tax. Same agents. Same code. Only the context changes.</h1>
-      <div class="sub">Pick a use case, then follow the steps. At each stage you run the same agent with Meko and see what it now knows,
-        what it still has to ask, and every call it makes to Meko.</div>
+<header class="topnav">
+  <span class="mark" aria-hidden="true" id="brandMark"></span>
+  <div class="brandtxt">Meko workshop<small>Same agents. Only the context changes.</small></div>
+  <nav class="uctabs" id="tabs" role="tablist" aria-label="Use cases"></nav>
+</header>
+<!-- Start here: "New session. Same context.", its own page, shown in place of a use case. -->
+<section id="starthere" hidden><iframe id="startFrame" title="New session. Same context."></iframe></section>
+<div class="app" id="app">
+  <aside class="side">
+    <div class="brand">
+      <span class="k" id="ucDomain"></span>
+      <h1 id="ucTitle"></h1>
     </div>
-    <div class="row"><span class="pill" id="storePill">Meko: checking…</span><span class="pill" id="modelPill">Models: …</span>
-      <button class="btn iconbtn" id="themeBtn" aria-label="Switch theme" title="Switch theme"></button></div>
-  </header>
+    <div class="stepshead"><span>Steps</span>
+      <button class="linkbtn" id="startOver" title="A datapack keeps everything written to it, across restarts: starting over means a new one">↺ Start over</button></div>
+    <nav class="steps" id="stepper" aria-label="Workshop steps"></nav>
+    <div class="env" id="env"></div>
+    <div class="side-foot">
+      <button class="btn iconbtn" id="themeBtn" title="Switch light / dark" aria-label="Switch light or dark theme">◐</button>
+      <span class="small muted">Same agents. Same code. Only the context changes.</span>
+    </div>
+  </aside>
 
-  <nav class="tabs" id="tabs" aria-label="Use cases"></nav>
-  <section class="panel" id="usecase"></section>
-  <!-- Start here: "New session. Same context.", its own page, shown in place of a use case. -->
-  <section id="starthere" hidden><iframe id="startFrame" title="New session. Same context." style="width:100%;height:2100px;border:0;display:block"></iframe></section>
+  <main class="main">
+    <div class="top">
+      <span class="eyebrow" id="eyebrow"></span>
+      <button class="pill warn" id="running" hidden title="Go to the step that is running"></button>
+    </div>
+    <section class="card guide" id="guide"></section>
+    <div class="nav">
+      <button class="btn ghost" id="prev">← Back</button>
+      <span class="row"><span class="why" id="nextWhy"></span><button class="btn" id="next">Next →</button></span>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <section class="card out" id="output"></section>
+  </main>
 
-  <section class="panel guide">
-    <nav class="track" id="stepper" aria-label="Workshop steps"></nav>
-    <div id="guide"></div>
-  </section>
-
-  <section class="panel" id="output"></section>
+  <aside class="insight">
+    <div class="box ucd" id="usecase"></div>
+    <div class="box reads" id="reads"></div>
+  </aside>
 </div>
+<script src="/workshop-kit/workshop.js"></script>
 <script>
 const el = id => document.getElementById(id);
 const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'}[c]));
@@ -222,23 +198,14 @@ const PATHS = {
 const icon = (name, cls) => '<svg class="i' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + PATHS[name] + '</svg>';
 
 // ---------------------------------------------------------------- theme (this browser only)
-/** The theme as stored: plain ("light", as the demo page stores it) or JSON ("\"light\"", as this page used to). */
-const storedTheme = () => { try { const v = localStorage.getItem('theme'); return v && v.replace(/"/g, ''); } catch (e) { return null; } };
-function applyTheme(t) {
-  document.documentElement.dataset.theme = t;
-  // The New Session page is its own document: it follows this page's theme.
-  const frame = document.getElementById('startFrame');
+// Stored plain ("light", as the demo page stores it); this page once stored it as JSON ("\"light\""): read either.
+try { const v = localStorage.getItem('theme'); if (v && v.includes('"')) localStorage.setItem('theme', v.replace(/"/g, '')); } catch (e) { /* not kept */ }
+/** The theme in effect; the New Session page is its own document, and follows this page's. */
+const currentTheme = WK.theme(el('themeBtn'), 'theme', t => {
+  const frame = el('startFrame');
   if (frame && frame.contentWindow && frame.src) frame.contentWindow.postMessage({theme: t}, location.origin);
-  el('themeBtn').innerHTML = icon(t === 'light' ? 'moon' : 'sun');
-  el('themeBtn').title = 'Switch to the ' + (t === 'light' ? 'dark' : 'light') + ' theme';
-}
-applyTheme(storedTheme() || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
-el('themeBtn').onclick = () => {
-  const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
-  applyTheme(t);
-  try { localStorage.setItem('theme', t); } catch (e) { /* not kept */ }
-};
-el('brandMark').insertAdjacentHTML('afterbegin', icon('database'));
+});
+el('brandMark').innerHTML = icon('database', 'lg');
 
 // ---------------------------------------------------------------- state
 let status = null;                 // /api/workshop/status
@@ -264,11 +231,43 @@ let soloLearn = null;   // the solo runs of the learning use case, set aside whi
 let lesson = null;      // the newest lesson in the datapack in use, as /api/workshop/lesson reports it (pair, support)
 const pairRuns = () => keep.get('workshop.pairruns.' + pair.role) || {};
 
-function loadRuns(id) {
+/**
+ * Where progress is kept: with a Meko key, in the participant's progress datapack (read back from the workshop
+ * datapack's record there, so any browser, a restart or cleared storage shows the same runs); without one, the offline
+ * stand-in, in this browser. The pair exercise stays in the browser: its runs span two people's datapacks.
+ */
+const remote = () => !!(status && status.store.keyed && status.store.live && status.store.connected);
+/** Progress read back from Meko, by workshop datapack: kept here, updated as runs are recorded. */
+const progressCache = {};
+/** Workshop datapacks whose progress is being read: asked once at a time. */
+const reading = new Set();
+/** The run the server still has for this page: running, or finished with its result not recorded yet. */
+let pendingJob = null;
+async function progressOf(id) {
+  if (progressCache[id]) return progressCache[id];
+  try {
+    const r = await (await fetch('/api/workshop/progress?context=' + encodeURIComponent(id))).json();
+    if (r.available === false) return {runs: {}, audits: {}};
+    pendingJob = r.job || null;
+    return progressCache[id] = {runs: r.runs || {}, audits: r.audits || {}};
+  } catch (e) {
+    say('Could not read the progress back from Meko: ' + e.message);
+    return {runs: {}, audits: {}};
+  }
+}
+
+async function loadRuns(id) {
   context = id || 'unsaved-' + Date.now();   // no datapack to file runs under: nothing is kept
   [runs, audits].forEach(o => Object.keys(o).forEach(k => delete o[k]));
-  Object.assign(runs, keep.get('workshop.runs9.' + context) || {});
-  Object.assign(audits, keep.get('workshop.audits9.' + context) || {});
+  if (remote() && id) {
+    const p = await progressOf(id);
+    if (context !== id) return;   // another datapack was chosen meanwhile
+    Object.entries(p.runs).forEach(([u, st]) => runs[u] = Object.assign({}, st));
+    Object.entries(p.audits).forEach(([u, st]) => audits[u] = Object.assign({}, st));
+  } else {
+    Object.assign(runs, keep.get('workshop.runs9.' + context) || {});
+    Object.assign(audits, keep.get('workshop.audits9.' + context) || {});
+  }
   soloLearn = runs['organization-learned'] || null;
   if (pair.mode === 'pair') runs['organization-learned'] = pairRuns();
 }
@@ -278,7 +277,8 @@ function save() {
     keep.set('workshop.pairruns.' + pair.role, runs['organization-learned'] || {});
     if (soloLearn) mine['organization-learned'] = soloLearn; else delete mine['organization-learned'];
   }
-  keep.set('workshop.runs9.' + context, mine); keep.set('workshop.audits9.' + context, audits);
+  // With Meko, the runs are in the progress datapack; the browser keeps them only for the stand-in (and pair mode).
+  if (!remote()) { keep.set('workshop.runs9.' + context, mine); keep.set('workshop.audits9.' + context, audits); }
   keep.set('workshop.tab', selected); keep.set('workshop.pair', pair);
   keep.set('workshop.layout', layout); keep.set('workshop.dpmap', dpMap); keep.set('workshop.dpstem', dpStem);
 }
@@ -290,7 +290,15 @@ function save() {
 function runsOf(id) {
   if (id === LEARNS && pair.mode === 'pair') return id === selected ? (runs[id] || {}) : pairRuns();
   const m = perCase() && dpMap[id];
-  if (m && m.id !== status.store.datapackId) return (keep.get('workshop.runs9.' + m.id) || {})[id] || {};
+  if (m && m.id !== status.store.datapackId) {
+    if (!remote()) return (keep.get('workshop.runs9.' + m.id) || {})[id] || {};
+    // Another use case's own datapack: its progress, read once from Meko, then the tabs again.
+    if (!progressCache[m.id]) {
+      if (!reading.has(m.id)) { reading.add(m.id); progressOf(m.id).then(() => { reading.delete(m.id); renderTabs(); }); }
+      return {};
+    }
+    return progressCache[m.id].runs[id] || {};
+  }
   return runs[id] || {};
 }
 
@@ -319,7 +327,7 @@ async function refreshLesson() {
   return lesson;
 }
 
-const STAGES = ['No context', 'Shared knowledge', 'Another desk\'s reviews', 'Collective memory & audit'];
+const STAGES = ['Without context', 'Shared knowledge', 'Another desk\'s reviews', 'Collective memory & audit'];
 const STAGE_NOTES = ['Empty datapack: only what the agents write during the run', 'Documents uploaded', 'Last quarter\'s reviews, in memory', 'Lessons promoted; records audited'];
 /** How the state of the earlier reviews reads on the page ("seeded" is the server's word for it). */
 /** A document is in the datapack once it is searchable: uploaded, or its one-line version promoted (not while indexing). */
@@ -328,7 +336,7 @@ const reviewsState = v => v === 'seeded' ? 'added' : v === 'missing' || !v ? 'no
 const STEPS = [
   // Done once a datapack is connected; on the offline stand-in (no key) there is nothing to create.
   {t: 'Create your datapack', icon: 'database', done: () => status && !choosing && ((status.store.live && status.store.connected && mineInUse()) || !status.store.keyed)},
-  {t: 'Run with no context', icon: 'play', stage: 0},
+  {t: 'Run without context', icon: 'play', stage: 0},
   // Per use case: what this use case reads, not everything the workshop's use cases read together.
   {t: 'Add the documents', icon: 'upload', done: () => status && myDocs().length > 0 && myDocs().every(k => docIn(status.documents[k]))},
   {t: 'Run with shared knowledge', icon: 'play', stage: 1},
@@ -374,7 +382,9 @@ const stageNote = (s, id = selected) => id === LEARNS && LEARN_STAGES[s] ? LEARN
 /** The documents the selected use case reads. */
 const myDocs = () => (status.useCases.find(x => x.id === selected) || {documents: []}).documents;
 const TAB_ICONS = {'dont-make-me-explain': 'card', 'loan-underwriting': 'bank', 'what-changed': 'id', 'organization-learned': 'bulb'};
-const stepDone = i => STEPS[i].stage != null ? !!(runs[selected] && runs[selected][STEPS[i].stage]) : STEPS[i].done();
+/** Whether a step is done; while a new datapack is being chosen (Start over), none after step 1 is: they were the old one's. */
+const stepDone = i => choosing && STEPS[i].t !== 'Create your datapack' ? false
+  : STEPS[i].stage != null ? !!(runs[selected] && runs[selected][STEPS[i].stage]) : STEPS[i].done();
 
 /**
  * Which steps a use case needs: the documents only if it reads them, the history only if it reads it. The learning use
@@ -416,31 +426,35 @@ function resume() {
 }
 
 // ---------------------------------------------------------------- use case tabs and description
+/** The Start here tab's key: New Session, Same Context. */
+const START = 'start-here';
 function renderTabs() {
   // The vertical before the first use case of each (BFSI), then each tab names only its area (PAYMENTS, KYC).
   const vertical = id => String(catalog[id].domain).split(' / ')[0];
   const area = id => String(catalog[id].domain).split(' / ').slice(1).join(' / ') || catalog[id].domain;
   // New Session, Same Context first: the simplest case of context lost between sessions, before the three BFSI use cases.
   // Its vertical (SDLC) beside it, as the BFSI use cases have theirs.
-  el('tabs').innerHTML = '<span class="tab-group">SDLC</span><button class="tab' + (startHere ? ' active' : '') + '" data-start><span class="ico">' + icon('play', 'lg') + '</span>' +
-    '<span><span class="k">AI ASSISTANTS</span><div class="t">New Session, Same Context</div><div class="dots"></div></span></button>' +
-    status.useCases.map((u, n) => {
-    const c = catalog[u.id];
-    const group = n === 0 || vertical(status.useCases[n - 1].id) !== vertical(u.id) ? '<span class="tab-group">' + esc(vertical(u.id)) + '</span>' : '';
-    const dots = [0, 1, 2, 3].filter(s => stageNeeded(s, u.id)).map(s => '<i class="' + (runsOf(u.id)[s] ? 'on' : '') + '" title="' + esc(stageName(s, u.id)) + '"></i>').join('');
-    return group + '<button class="tab' + (u.id === selected && !startHere ? ' active' : '') + '" data-tab="' + esc(u.id) + '"><span class="ico">' + icon(TAB_ICONS[u.id] || 'dot', 'lg') + '</span>' +
-      '<span><span class="k">' + esc(area(u.id)) + '</span><div class="t">' + esc(c.title) + '</div><div class="dots" aria-label="Stages run">' + dots + '</div></span></button>';
-  }).join('');
-  document.querySelector('[data-start]').onclick = async () => {
-    if (busy) return;
-    startHere = true; lastMessage = ''; keep.set('workshop.start', true);
-    await useCaseDatapack(SESSIONS);   // per use case: New Session's own datapack
-    render(); tellSessions();
-  };
-  // Another use case: it resumes at its own first open step, and the last message (about the other one) is cleared.
-  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = async () => {
-    if (busy) return;
-    selected = b.dataset.tab; lastMessage = ''; suggested = null; startHere = false; keep.set('workshop.start', false);
+  const groups = [{label: 'SDLC', tabs: [{key: START, icon: icon('play', 'lg'), kicker: 'AI assistants', title: 'New Session, Same Context', selected: startHere}]}];
+  status.useCases.forEach(u => {
+    const stages = [0, 1, 2, 3].filter(s => stageNeeded(s, u.id));
+    const tab = {key: u.id, icon: icon(TAB_ICONS[u.id] || 'dot', 'lg'), kicker: area(u.id), title: catalog[u.id].title,
+      selected: u.id === selected && !startHere, busy: busy && running && running.useCase === u.id,
+      meta: WK.dots(stages.map(s => !!runsOf(u.id)[s]), stages.filter(s => runsOf(u.id)[s]).length + ' of ' + stages.length + ' stages run')};
+    const last = groups[groups.length - 1];
+    if (last.label === vertical(u.id)) last.tabs.push(tab); else groups.push({label: vertical(u.id), tabs: [tab]});
+  });
+  WK.tabBar(el('tabs'), groups, async key => {
+    // Switching use cases can switch datapacks: not while something runs (the steps stay browsable meanwhile).
+    if (busy) { say('Wait for the run to finish before switching use cases: it may use another datapack.'); return; }
+    lastMessage = '';
+    if (key === START) {
+      startHere = true; keep.set('workshop.start', true);
+      await useCaseDatapack(SESSIONS);   // per use case: New Session's own datapack
+      render(); tellSessions();
+      return;
+    }
+    // Another use case: it resumes at its own first open step, and the last message (about the other one) is cleared.
+    selected = key; suggested = null; startHere = false; keep.set('workshop.start', false);
     await useCaseDatapack();   // per use case: the tab's own datapack
     openUseCase();
     save(); render();
@@ -478,16 +492,17 @@ function renderUseCase() {
     reads[1][2] = u.documents.length ? 'needs' : 'none';
     reads[1][3] = u.documents.length ? 'The documents ' + u.documents.join(' and ') + ' (stage 1).' : 'Not read by this use case.';
   }
-  el('usecase').innerHTML = '<div class="uc"><div>' +
-    '<div class="domain">' + esc(c.domain) + '</div><h2>' + esc(c.title) + '</h2>' +
+  el('ucDomain').textContent = c.domain;
+  el('ucTitle').textContent = c.title;
+  document.title = c.title + ' · Meko workshop';
+  el('usecase').innerHTML = '<h3>The use case</h3><div class="domain">' + esc(c.domain) + '</div>' +
     '<div class="problem">' + esc(c.problem) + '</div>' +
     '<div class="boundary">' + icon('boundary') + '<span><b>Boundary.</b> ' + esc(c.boundary) + '</span></div>' +
-    '<div class="challenge">' + esc(c.hook) + '</div></div>' +
-    '<div class="reads"><h3>Your datapack, for this use case</h3><div class="note" style="margin:-4px 0 6px">' +
+    '<div class="challenge">' + esc(c.hook) + '</div>';
+  el('reads').innerHTML = '<h3>Your datapack, for this use case</h3><div class="note">' +
       (noDatapack ? 'No datapack yet: create one in step 1. This use case will need:' : 'Green is what is in it now.') + '</div>' +
     reads.map(r => '<div class="r' + (r[2] === 'in' ? ' on' : r[2] === 'none' ? ' off' : '') + '"><span class="ico">' + icon(r[0]) + '</span><span><b>' + esc(r[1]) + '</b> ' +
-      '<span class="pill ' + BADGE[r[2]][0] + '">' + BADGE[r[2]][1] + '</span><br>' + esc(r[3]) + '</span></div>').join('') +
-    '</div></div>';
+      '<span class="pill ' + BADGE[r[2]][0] + '">' + BADGE[r[2]][1] + '</span><br>' + esc(r[3]) + '</span></div>').join('');
 }
 
 // ---------------------------------------------------------------- the guided steps
@@ -506,16 +521,36 @@ function stepTitle(i) {
 }
 
 function renderStepper() {
-  const mine = mySteps();
-  el('stepper').innerHTML = mine.map((i, n) => {
-    const s = STEPS[i], done = stepDone(i);
-    const linked = n > 0 && stepDone(mine[n - 1]);
-    return '<button class="step' + (done ? ' done' : '') + (linked ? ' linked' : '') + (i === step ? ' current' : '') + '" data-i="' + i + '" aria-current="' + (i === step ? 'step' : 'false') + '">' +
-      '<span class="dot">' + icon(done && i !== step ? 'check' : s.icon) + '</span><span class="t">' + esc(stepTitle(i)) + '</span>' +
-      '<span class="s">' + (done ? 'done' : 'step ' + (n + 1)) + '</span></button>';
-  }).join('');
-  // Another step: the last message (about the step left) is cleared.
-  document.querySelectorAll('.step').forEach(b => b.onclick = () => { if (busy) return; step = Number(b.dataset.i); shown = STEPS[step].stage ?? shown; lastMessage = ''; save(); render(); });
+  const runningHere = busy && running && running.useCase === selected ? running.step : -1;
+  WK.stepList(el('stepper'), mySteps().map(i => {
+    const done = stepDone(i), wait = done ? null : earlierOpen(i);
+    return {key: i, title: stepTitle(i), done, current: i === step, locked: !!wait, running: i === runningHere,
+      sub: i === runningHere ? 'Running…' : done ? 'Done' : wait || (STEPS[i].stage != null ? stageNote(STEPS[i].stage) : 'To do'), tip: wait || stepTitle(i)};
+  }), k => {
+    // Another step, also while something runs (look around; the running pill comes back to it). A step whose earlier
+    // steps are open is shown in the list, not entered: it says which step comes first.
+    const i = Number(k), wait = stepDone(i) ? null : earlierOpen(i);
+    if (wait) { say(wait); return; }
+    step = i; shown = STEPS[step].stage ?? shown; lastMessage = ''; save(); render();
+  });
+}
+
+/** Back, Next and where this step stands: Next lights up once the step is done. */
+function renderNav() {
+  const mine = mySteps(), at = mine.indexOf(step), next = mine[at + 1];
+  el('eyebrow').textContent = 'Step ' + (at + 1) + ' of ' + mine.length + ' · ' + stepTitle(step);
+  el('prev').disabled = at <= 0;
+  const canNext = next != null && stepDone(step);
+  el('next').disabled = !canNext;
+  el('next').className = 'btn' + (canNext ? ' primary' : '');
+  el('next').textContent = next == null ? 'Last step' : 'Next: ' + stepTitle(next) + ' →';
+  el('nextWhy').textContent = next == null || canNext ? '' : 'Finish this step first.';
+  el('startOver').hidden = !status.store.keyed;
+  el('startOver').disabled = busy;
+  // What is running, from anywhere else: one click goes back to it.
+  const away = busy && running && !(running.useCase === selected && running.step === step && !startHere);
+  el('running').hidden = !away;
+  if (away) el('running').textContent = '● ' + running.text + ' · go to step ' + (mySteps().indexOf(running.step) + 1);
 }
 
 function guide() {
@@ -531,8 +566,9 @@ function guide() {
   const check = '<button class="btn" data-act="check"' + (busy ? ' disabled' : '') + '>' + icon('refresh') + 'Check my datapack</button>';
   let body = [
     ['Create a fresh datapack for the workshop', datapackLines(), datapackForm()],
-    ['Run ' + title + ' with no context',
-      ['Your datapack is empty: no documents, no earlier memory. The agents still write to Meko during the run, and the next agent can recall it.',
+    ['Run ' + title + ' without context',
+      ['Without context: your datapack is empty, with no documents and no earlier memory. Meko is still connected, so the agents write to it during the run, and the next agent can recall what the first one wrote.',
+       'The same story also runs with no Meko at all, alongside: the card compares your run with it.',
        'What did the agent know, and what could it still not decide? Do this for each use case: pick its tab at the top, then press Run.']
        .concat(live ? ['Then, under the run, press <b>Check with Meko</b>: Meko rates how well your datapack answers the questions the agents asked, and lists what to add.'] : []), run],
     ['Add the documents: policies and standards',
@@ -561,14 +597,8 @@ function guide() {
   if (selected === LEARNS && LEARN_GUIDE[step]) body.splice(0, 2, LEARN_STEPS[step], LEARN_GUIDE[step]);
   if (pairOn()) body = pairGuide(run, check, body);
   const skip = !needed(step);
-  return pairToggle() + '<h2>' + icon(STEPS[step].icon, 'lg') + 'Step ' + stepNo(step) + ': ' + body[0] + (skip ? ' <span class="pill">not needed for this use case</span>' : '') + '</h2>' +
-    (skip ? '<ol><li>' + esc(whyNotNeeded(step)) + '</li></ol>' : '<ol>' + body[1].map(l => '<li>' + l + '</li>').join('') + '</ol><div class="row">' + body[2] + '</div>') +
-    '<div class="status" id="status" role="status" aria-live="polite"></div>' +
-    // Back and Next together, where the eye is after acting; Next lights up once this step is done.
-    '<div class="nav"><span class="row"><button class="btn" data-nav="-1"' + (step === mySteps()[0] ? ' disabled' : '') + '>' + icon('left') + 'Back</button>' +
-    (step === mySteps().slice(-1)[0] ? '' : '<button class="btn' + (stepDone(step) ? ' primary' : '') + '" data-nav="1"' + (stepDone(step) && !busy ? '' : ' disabled title="Finish this step first"') + '>Next step' + icon('right') + '</button>') + '</span>' +
-    '<span class="row">' +
-    (status.store.keyed ? '<button class="btn" data-act="restart" title="A datapack keeps everything written to it, across restarts: starting over means a new one">' + icon('refresh') + 'Start over with a new datapack</button>' : '') + '</span></div>';
+  return pairToggle() + '<h2>' + icon(STEPS[step].icon, 'lg') + body[0] + (skip ? ' <span class="pill">not needed for this use case</span>' : '') + '</h2>' +
+    (skip ? '<ol><li>' + esc(whyNotNeeded(step)) + '</li></ol>' : '<ol>' + body[1].map(l => '<li>' + l + '</li>').join('') + '</ol><div class="acts">' + body[2] + '</div>');
 }
 
 /** Solo or pair, for the learning use case: solo is the default; pair needs a Meko key (two accounts share a datapack). */
@@ -658,7 +688,8 @@ function datapackLines() {
   const s = status.store;
   if (!s.keyed) return ['No Meko API key: set <code>MEKO_API_KEY</code> and restart with <code>SPRING_PROFILES_ACTIVE=workshop</code>. Until then this session uses the offline stand-in: every step works, but nothing is kept after a restart.'];
   const lines = ['Your datapack is where memory, shared knowledge and collective memory live. Start from a new, empty one, so the first stage really has no context.'];
-  if (s.live && s.connected) lines.push('In use: <b>' + esc(s.datapack) + '</b>.');
+  // Choosing a new one (Start over): the one left behind is named above the choice, not as the one in use.
+  if (s.live && s.connected && !choosing) lines.push('In use: <b>' + esc(s.datapack) + '</b>.');
   else if (s.error) lines.push('<b>' + esc(s.error) + '</b>');
   return lines;
 }
@@ -695,7 +726,7 @@ function setLayout(v) {
   layout = v;
   // Stay on step 1: per use case, this use case chooses its own datapack here (new, or an existing one, the one in use
   // among them); back to one for all, the datapack in use serves every use case.
-  suggested = null; lastMessage = ''; choosing = false; dpMode = 'new'; dpPicked = null;
+  suggested = null; lastMessage = ''; choosing = false; dpMode = null; dpPicked = null;
   step = 0; shown = null;
   save(); render();
 }
@@ -710,7 +741,7 @@ async function useCaseDatapack(key = selected) {
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || r.statusText);
     status = body;
-    loadRuns(status.store.contextId);
+    await loadRuns(status.store.contextId);
     if (pairOn() && pair.role === 'apac') await refreshLesson();
     say('');
   } catch (e) {
@@ -723,7 +754,7 @@ async function useCaseDatapack(key = selected) {
 }
 
 /** The account's datapacks for "Use existing", loaded when that option is chosen (null until then). */
-let datapacks = null, loadingDatapacks = false, dpMode = 'new', dpPicked = null;
+let datapacks = null, loadingDatapacks = false, dpMode = null, dpPicked = null;
 async function loadDatapacks() {
   if (loadingDatapacks) return;
   loadingDatapacks = true;
@@ -737,52 +768,78 @@ const ago = iso => {
   return isNaN(days) ? '' : days <= 0 ? 'created today' : days === 1 ? 'created yesterday' : 'created ' + days + ' days ago';
 };
 
+/** Where the datapack step goes: the shared picker draws into it once the step is on the page (see {@link #mountDatapack}). */
+let dpListOnly = false;
 function datapackForm(listOnly) {
   if (!status.store.keyed) return '<button class="btn" data-act="check"' + (busy ? ' disabled' : '') + '>' + icon('refresh') + 'Check again</button>';
-  const mode = listOnly ? 'existing' : dpMode;
-  const sw = '<div class="seg" role="tablist" aria-label="Datapack">' +
-    '<button role="tab" aria-selected="' + (dpMode === 'new') + '" data-dpmode="new">New datapack</button>' +
-    '<button role="tab" aria-selected="' + (dpMode === 'existing') + '" data-dpmode="existing">Use an existing one</button></div>';
-  let panel;
-  // A datapack in use is shown as such, read-only; Start over makes the name editable again for a new one.
-  const inUse = status.store.live && status.store.connected && !choosing && mineInUse();
-  if (mode === 'new' && inUse) {
-    panel = '<div class="dp-panel"><label class="lbl" for="dpName">Name</label>' +
-      '<div class="row"><input class="text" id="dpName" value="' + esc(status.store.datapack || '') + '" disabled>' +
-      '<button class="btn" disabled>' + icon('check') + 'In use</button></div>' +
-      '<div class="hint">To use another datapack, press <b>Start over with a new datapack</b>.</div></div>';
-  } else if (mode === 'new') {
-    panel = '<div class="dp-panel"><label class="lbl" for="dpName">Name</label>' +
-      '<div class="row"><input class="text" id="dpName" value="' + esc(suggestedName()) + '"' + (busy ? ' disabled' : '') + '>' +
-      '<button class="btn primary" data-datapack="create"' + (busy ? ' disabled' : '') + '>' + icon('database') + 'Create and use</button></div>' +
-      '<div class="hint">Unique across Meko: lowercase letters, digits and hyphens.</div></div>';
-  } else {
-    if (datapacks == null) loadDatapacks();
-    const current = status.store.datapack;
-    // Your own datapacks; one shared with you only where it is the point (switching to the EU desk's, in pair mode).
-    const listed = (datapacks || []).filter(d => listOnly || !d.sharedBy);
-    const rows = listed.map(d => '<label class="dp' + (d.workshop ? '' : ' other') + '">' +
-      '<input type="radio" name="dpPick" value="' + esc(d.name) + '"' + ((dpPicked || current) === d.name ? ' checked' : '') + '>' +
-      '<span class="dp-n">' + esc(d.name) + '</span><span class="dp-m">' + esc(ago(d.created)) + '</span>' +
-      (d.name === current ? '<span class="pill ok">in use</span>' : '') +
-      (d.sharedBy ? '<span class="pill ok">shared with you by ' + esc(d.sharedBy) + '</span>'
-        : d.workshop ? '<span class="pill">workshop</span>' : '<span class="pill warn" title="It already holds context, so the stages would not start clean">has other content</span>') + '</label>').join('');
-    panel = '<div class="dp-panel">' + (datapacks == null ? '<div class="hint">Loading your datapacks…</div>'
-      : listed.length ? '<div class="dp-list">' + rows + '</div>' +
-        '<div class="row" style="margin-top:8px"><button class="btn primary" data-datapack="use"' + (busy ? ' disabled' : '') + '>Use selected</button>' +
-        (listOnly ? '<button class="btn" data-dpmode="existing">' + icon('refresh') + 'Refresh</button>' : '') +
-        '<span class="hint">Datapacks not created for the workshop already hold context: the first stages will not be empty.</span></div>'
-      : '<div class="hint">No datapacks in your account yet: create a new one.</div>') + '</div>';
-  }
+  dpListOnly = !!listOnly;
+  return '<div id="dpPick" style="width:100%"></div>';
+}
+
+/**
+ * The datapack step, as every workshop page has it (the kit's picker): a new datapack or an existing one, the list
+ * loading by itself, the one in use said as such. Above it, this workshop's own choice: one datapack for all use cases,
+ * or one per use case. In the pair exercise's switch, the list alone, with the datapacks shared with you.
+ */
+function mountDatapack() {
+  if (!el('dpPick')) return;
   // One datapack for all use cases, or one per use case.
-  const lay = '<div class="seg" role="tablist" aria-label="Datapacks" style="margin-bottom:8px">' +
+  const lay = dpListOnly ? '' : '<div class="seg" role="tablist" aria-label="Datapacks" style="margin-top:14px">' +
     '<button role="tab" aria-selected="' + !perCase() + '" data-layout="shared">One datapack for all use cases</button>' +
     '<button role="tab" aria-selected="' + perCase() + '" data-layout="per">One datapack per use case</button></div>' +
-    '<div class="hint" style="margin:-2px 0 8px">' + (perCase()
+    '<div class="hint">' + (perCase()
       ? 'Each use case has its own datapack, created at its own step 1: it starts empty whatever the others added, and starts over on its own. ' +
         (dpMap[selected] ? 'This use case: <b>' + esc(dpMap[selected].name) + '</b>.' : 'This use case has none yet.')
-      : 'All three use cases share one datapack; each adds only its own context.') + '</div>';
-  return '<div style="width:100%">' + (listOnly ? '' : lay + sw) + panel + '</div>';
+      : 'All the use cases share one datapack; each adds only its own context.') + '</div>';
+  const inUse = status.store.live && status.store.connected && !choosing && mineInUse();
+  // Left behind by Start over: offered for deletion, since what it holds (its agents' conversations above all) counts
+  // against the account's limits.
+  const left = leftBehind && !dpListOnly ? '<div class="callout warn flex"><span>You left <b>' + esc(leftBehind.name) + '</b> behind. Delete it to free what it holds: its conversations count against your account\'s limit.</span>' +
+    '<button class="btn sm" id="dpDeleteLeft"' + (busy ? ' disabled' : '') + '>Delete ' + esc(leftBehind.name) + '</button></div>' : '';
+  WK.datapackPicker(el('dpPick'), {
+    mode: dpMode, only: dpListOnly ? 'existing' : null,
+    inUse: inUse ? {id: status.store.datapackId || status.store.datapack, name: status.store.datapack} : null,
+    // Your own datapacks; one shared with you only where it is the point (switching to the EU desk's, in pair mode).
+    list: datapacks && datapacks.filter(d => dpListOnly || !d.sharedBy).map(d => ({id: d.id || d.name, name: d.name, meta: ago(d.created),
+      // A workshop datapack of yours, not the one in use: it can be deleted from here.
+      deletable: !!d.id && d.workshop && !d.sharedBy && !(inUse && d.id === status.store.datapackId),
+      tag: d.sharedBy ? {label: 'shared with you by ' + d.sharedBy, cls: 'ok'} : d.workshop ? {label: 'workshop'}
+        : {label: 'has other content', cls: 'warn', tip: 'It already holds context, so the stages would not start clean'}})),
+    choice: dpPicked, name: suggestedName(), before: left + lay, busy,
+    onDelete: dropDatapack,
+    onMode: m => { if (busy) return; dpMode = m; if (m === 'existing') datapacks = null; render(); },
+    onChoice: id => { dpPicked = id; },
+    // What the participant types is the name: kept across re-renders (a busy state, an error), never replaced.
+    onName: n => { suggested = n; },
+    onRefresh: () => { if (datapacks != null && !loadingDatapacks) datapacks = null; loadDatapacks(); },
+    onCreate: name => chooseDatapack(name, true, null),
+    onUse: d => d ? chooseDatapack(d.name, false, d.id) : say('Pick a datapack from the list first.'),
+  });
+  if (el('dpDeleteLeft')) el('dpDeleteLeft').onclick = () => dropDatapack(leftBehind);
+}
+
+/** The datapack Start over left behind, offered for deletion until it is deleted or used again. */
+let leftBehind = null;
+
+/** Deletes a workshop datapack the participant is done with, after asking: everything in it goes. */
+function dropDatapack(d) {
+  if (!d || busy) return;
+  const shared = !perCase();   // one datapack for all: every use case ran in it
+  if (!confirm('Delete ' + d.name + '?\n\nIts memory, knowledge and conversations are deleted with it' + (shared ? ', for every use case that ran in it' : '') + '. This cannot be undone.')) return;
+  busyWith('Deleting ' + d.name + '…', async () => {
+    const r = await fetch('/api/workshop/datapack/delete?id=' + encodeURIComponent(d.id), {method: 'POST'});
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || r.statusText);
+    status = body;
+    // Nothing of it is kept here: its progress, a use case that had it as its own, the offer to delete it.
+    delete progressCache[d.id];
+    Object.keys(dpMap).forEach(k => { if (dpMap[k].id === d.id) delete dpMap[k]; });
+    if (leftBehind && leftBehind.id === d.id) leftBehind = null;
+    datapacks = null; dpPicked = null;
+    if (context === d.id) await loadRuns(status.store.contextId);
+    save();
+    return 'Deleted ' + d.name + ', and everything in it.';
+  });
 }
 
 // ---------------------------------------------------------------- output
@@ -816,7 +873,8 @@ function renderOutput() {
       '<div class="detail">' +
       '<div class="box"><h3>' + icon('user') + 'Conversation</h3><div class="chat">' + conversationHtml(r) + '</div></div>' +
       '<div class="box"><h3>' + icon('play') + 'What the agents did</h3>' +
-        '<div class="legend"><span>' + icon('check') + 'did the work</span><span>' + icon('ask') + 'asked someone</span><span>' + icon('redo') + 'redid work</span><span>' + icon('database') + 'used context</span></div>' +
+        '<div class="legend">' + [['WORK', 'check', 'did the work'], ['ASK', 'ask', 'asked someone'], ['REWORK', 'redo', 'redid work'],
+          ['CONTEXT', 'database', 'used or saved context']].map(([k, i, t]) => '<span><span class="k ' + k + '">' + icon(i) + '</span>' + t + '</span>').join('') + '</div>' +
         (r.steps || []).map(stepHtml).join('') + '</div>' +
       '<div class="box" style="grid-column:1 / -1">' + callsHtml(r.calls || []) + '</div>' +
       (status.store.live && status.store.connected ? '<div class="box" style="grid-column:1 / -1">' + learningHtml(r) + '</div>' : '') +
@@ -838,19 +896,28 @@ function stageCard(s, mine) {
   if (!stageNeeded(s)) return '<div class="stage skip">' + head + '<div class="none">Not needed for this use case.</div></div>';
   if (!r) return '<button class="stage' + (s === shown ? ' sel' : '') + '" data-stage="' + s + '">' + head + '<div class="none">Not run yet.</div></button>';
   // The learning use case compares like with like: the same case with the lesson against it without; case 1 is another case.
-  const prev = selected === LEARNS ? (s === 3 ? mine[0] : null)
-    : [s - 1, s - 2, s - 3].filter(p => p >= 0 && stageNeeded(p)).map(p => mine[p]).find(Boolean);
+  const prevStage = selected === LEARNS ? (s === 3 && mine[0] ? 0 : null)
+    : [s - 1, s - 2, s - 3].find(p => p >= 0 && stageNeeded(p) && mine[p]);
+  const prev = prevStage == null ? null : mine[prevStage];
   const comparable = prev && !prev.audit && !r.audit;
-  const layers = '<div class="layers">' + LAYERS.map((l, i) => '<span class="' + ((r.layers || [])[i] ? 'on' : '') + '" title="' + esc(l[1]) + ((r.layers || [])[i] ? '' : ': no') + '">' + icon(l[0]) + '</span>').join('') + '</div>';
+  // The first stage has no stage before it: the same story with no store at all is its reference.
+  const base = !comparable && r.baseline ? r.baseline : null;
+  const layers = '<div class="lyrs">' + LAYERS.map((l, i) => '<span class="' + ((r.layers || [])[i] ? 'on' : '') + '" title="' + esc(l[1]) + ((r.layers || [])[i] ? '' : ': no') + '">' + icon(l[0]) + '</span>').join('') + '</div>';
   const v = verdict(r);
   const measures = r.headline || c.headline;
+  // What the arrows compare with, said once under the numbers and in words on each arrow.
+  const against = comparable ? stageName(prevStage) : base ? 'no Meko at all' : null;
   const nums = measures.map(h => {
-    const val = r.numbers[h[0]], p = comparable ? prev.numbers[h[0]] : null;
-    const d = p == null || val === p ? '' : '<span class="delta ' + ((h[2] === 'lower') === (val < p) ? 'win' : 'lose') + '">' + (val < p ? '↓' : '↑') + Math.abs(val - p) + '</span>';
+    const val = r.numbers[h[0]], p = comparable ? prev.numbers[h[0]] : base ? base[h[0]] : null;
+    const words = p == null ? '' : Math.abs(val - p) + ' ' + (val < p ? 'fewer' : 'more') + ' than ' + against + ' (' + p + ' → ' + val + ')';
+    const d = p == null || val === p ? '' : '<span class="delta ' + ((h[2] === 'lower') === (val < p) ? 'win' : 'lose') + '" title="' + esc(words) + '">'
+      + (val < p ? '↓' : '↑') + Math.abs(val - p) + '</span>';
     return '<div class="metric"><span>' + esc(h[1]) + '</span><span><b>' + esc(val) + '</b>' + d + '</span></div>';
   }).join('');
+  const ref = !against ? '' : '<div class="note">↓↑ compared with <b>' + esc(against) + '</b>' + (base
+    ? ' (the same story, no store): ' + measures.map(h => esc(h[1]).toLowerCase() + ' ' + esc(base[h[0]])).join(' · ') : '') + '.</div>';
   return '<button class="stage' + (s === shown ? ' sel' : '') + '" data-stage="' + s + '">' + head + layers +
-    '<span class="verdict ' + v[0] + '">' + icon(v[1]) + esc(v[2]) + '</span>' + nums + '</button>';
+    '<span class="verdict ' + v[0] + '">' + icon(v[1]) + esc(v[2]) + '</span>' + nums + ref + '</button>';
 }
 
 /**
@@ -872,7 +939,7 @@ function pillars(r) {
   const promotedNew = promoted.filter(w => !seen(w.text));
   mem.push(...wroteMem.map(w => ({source: 'memory', writtenBy: w.agent, text: w.text, fresh: true, wrote: true})));
   coll.push(...promotedNew.map(w => ({source: 'knowledge', writtenBy: w.agent, text: w.text, fresh: true, wrote: true})));
-  const item = (f, label) => '<div class="item"><div class="src">' + label + '</div>' + esc(f.text) + '</div>';
+  const item = (f, label) => '<div class="ctx"><div class="src">' + label + '</div>' + esc(f.text) + '</div>';
   const card = (ico, n, body, empty, count) => '<div class="pillar' + (body ? '' : ' off') + '"><h3><span class="ico">' + icon(ico) + '</span>' + n +
     (count ? ' <span class="count">' + count + '</span>' : '') + '</h3>' + (body || '<div class="note">' + empty + '</div>') + '</div>';
   const part = (title, list, render, empty) => '<div class="part"><div class="part-t">' + title + (list.length ? ' <span class="count">' + list.length + '</span>' : '') + '</div>' +
@@ -886,7 +953,7 @@ function pillars(r) {
     card('memory', 'Memory', mem.map(f => item(f, f.wrote ? 'written by ' + esc(f.writtenBy) + ' during this run, for later' : esc(f.source) + ', written ' + (f.fresh ? 'during this run ' : '') + 'by ' + esc(f.writtenBy))).join(''),
       'Nothing recalled: the agent had only what it was handed.', mem.length) +
     card('book', 'Shared knowledge', knowledge, 'Nothing found in shared knowledge yet: no documents, no collective memory.', docs.length + coll.length) +
-    card('target', 'Right context', passed.map(p => '<div class="item passed"><div class="src">Passed over: ' + esc(p.reason) + '</div>' + esc(p.text) + '</div>').join(''), 'Nothing retrieved that had to be set aside.', passed.length) +
+    card('target', 'Right context', passed.map(p => '<div class="ctx passed"><div class="src">Passed over: ' + esc(p.reason) + '</div>' + esc(p.text) + '</div>').join(''), 'Nothing retrieved that had to be set aside.', passed.length) +
     card('route', 'Decision traces', traces.map(t => traceHtml(t)).join(''), 'No decisions traced.', traces.length) +
     '</div>';
 }
@@ -911,7 +978,7 @@ function traceHtml(t) {
     ? Object.keys(BASIS_NAME).filter(k => groups[k]).map(k => BASIS_NAME[k] + ': ' + groups[k].join(', ')).join('; ')
     : 'nothing retrieved: only what the agent was handed';
   const how = String(t.decidedBy || '').replace(/^rule \((.*)\)$/, 'rule: $1');
-  return '<div class="item trace"><div class="q">' + esc(t.question) + '</div>' +
+  return '<div class="ctx trace"><div class="q">' + esc(t.question) + '</div>' +
     '<div class="a">' + esc(answerText(t.answer)) + '</div>' +
     '<div class="m"><b>Based on</b> ' + esc(on) + '</div>' +
     // How much a model was given, only when a model decided: a rule reads no tokens (the figure is an estimate, length / 4).
@@ -1039,12 +1106,37 @@ function auditHtml(c, a) {
 }
 
 // ---------------------------------------------------------------- runs: the Meko lane only
-function stream(id, mode) {
+/** The job of the run last started or followed: its result is recorded against it. */
+let lastJob = null;
+
+/** Records a run (or an audit) of a use case's stage in the progress datapack; the stand-in and pair mode keep it here. */
+async function recordRun(useCase, stage, kind, r, job) {
+  if (!remote() || pairOn(useCase)) { save(); return; }
+  const at = progressCache[context] || (progressCache[context] = {runs: {}, audits: {}});
+  ((kind === 'audit' ? at.audits : at.runs)[useCase] = (kind === 'audit' ? at.audits : at.runs)[useCase] || {})[stage] = r;
+  try {
+    const res = await fetch('/api/workshop/progress', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({context, contextName: status.store.datapack, useCase, stage, kind, run: r, job})});
+    if (!res.ok) throw new Error((await res.json()).error || res.statusText);
+  } catch (e) {
+    say('The run is on this page, but could not be recorded in Meko: ' + e.message);
+  }
+}
+
+/** The same story's run without Meko, when the stage ran one alongside (the first stage): its numbers are the reference. */
+let lastBaseline = null;
+
+function stream(id, mode, meta = {}) {
   return new Promise((resolve, reject) => {
     let run = null, failed = null;
-    const source = new EventSource('/api/stories/' + id + '/stream?mode=' + mode + '&mekoOnly=true');
-    source.addEventListener('run', e => { run = JSON.parse(e.data).data; });
-    source.addEventListener('failed', e => { failed = JSON.parse(e.data).data; });
+    lastBaseline = null;
+    // With a baseline, the story also runs with no store at all: it reads and writes nothing in the datapack.
+    const {baseline, ...rest} = meta;
+    const q = Object.entries(rest).filter(([, v]) => v != null).map(([k, v]) => '&' + k + '=' + encodeURIComponent(v)).join('');
+    const source = new EventSource('/api/stories/' + id + '/stream?mode=' + mode + '&mekoOnly=' + !baseline + q);
+    source.addEventListener('job', e => { lastJob = JSON.parse(e.data).id; });
+    source.addEventListener('run', e => { const d = JSON.parse(e.data); if (d.lane === 'without') lastBaseline = d.data; else run = d.data; });
+    source.addEventListener('failed', e => { const d = JSON.parse(e.data); if (d.lane !== 'without') failed = d.data; });
     source.addEventListener('done', () => { source.close(); failed ? reject(new Error(failed)) : resolve(run); });
     source.onerror = () => { source.close(); reject(new Error('the run stream closed')); };
   });
@@ -1112,25 +1204,25 @@ function keepRun(list, headline) {
 }
 
 async function runSelected() {
-  const id = selected, stage = STEPS[step].stage, c = catalog[id];
+  const id = selected, at = step, stage = STEPS[at].stage, c = catalog[id];
   // The datapack may have changed outside this page (an upload in the Meko app): check it before running a stage.
   status = await (await fetch('/api/workshop/status')).json();
   if (pairOn() && pair.role === 'apac' && stage === 3) await refreshLesson();
-  const blocked = earlierOpen(step) || stageBlocked(stage);
+  const blocked = earlierOpen(at) || stageBlocked(stage);
   if (blocked) throw new Error(blocked);
   if (stage === 3) {
     const f = finale();
     if (f.rerun) await runStage(id, 3);
     if (f.audit) {
-      const a = keepRun([await stream(id, 'followup')], c.followUp.headline);
-      if (f.rerun) (audits[id] = audits[id] || {})[3] = a;
-      else (runs[id] = runs[id] || {})[3] = Object.assign(a, {audit: true, headline: c.followUp.headline});
+      const a = keepRun([await stream(id, 'followup', {useCase: id, stage: 3, kind: 'audit'})], c.followUp.headline);
+      placeAudit(id, a);
+      await recordRun(id, 3, f.rerun ? 'audit' : 'run', f.rerun ? a : runs[id][3], lastJob);
     }
-    shown = 3;
+    if (step === at) shown = 3;
     return 'Done: ' + c.title + ', ' + stageName(3) + (f.audit ? ' and ' + c.followUp.label.toLowerCase() : '') + '.';
   }
   await runStage(id, stage);
-  shown = stage;
+  if (step === at) shown = stage;
   return 'Done: ' + c.title + ', ' + stageName(stage) + '.';
 }
 
@@ -1143,19 +1235,73 @@ async function runStage(id, stage) {
     // Pair: case 1 by the EU desk (a new epoch), the APAC desk's baseline (shares nothing), then its case again in
     // the epoch of the lesson its partner promoted, as the shared datapack holds it.
     const at = stage === 2 ? '?index=0&otherTeam=true' : stage === 0 ? '?index=1&share=false' : '?index=1&epoch=' + encodeURIComponent(lesson.epoch);
-    r = keepRun([(await post('/api/stories/' + LEARNS + '/case' + at)).run], c.headline);
+    const res = await post('/api/stories/' + LEARNS + '/case' + at + '&useCase=' + LEARNS + '&stage=' + stage);
+    lastJob = res.job || null;
+    r = keepRun([res.run], c.headline);
   } else if (id === LEARNS) {
     // Case 2 without the lesson (a new epoch), case 1 by the other team (a new epoch, kept), case 2 again in that epoch.
     const at = {0: '?index=1&share=false', 2: '?index=0&otherTeam=true', 3: '?index=1&epoch=' + encodeURIComponent(((runs[id] || {})[2] || {}).epoch || '')}[stage];
-    const res = await post('/api/stories/' + LEARNS + '/case' + at);
+    const res = await post('/api/stories/' + LEARNS + '/case' + at + '&useCase=' + LEARNS + '&stage=' + stage);
+    lastJob = res.job || null;
     r = keepRun([res.run], c.headline);
     if (stage === 2) r.epoch = res.epoch;
   } else {
-    r = keepRun([await stream(id, 'compare')], c.headline);
+    // The first stage also runs the story with no store at all: its numbers are what the empty datapack is measured against.
+    r = keepRun([await stream(id, 'compare', {useCase: id, stage, kind: 'run', baseline: stage === 0})], c.headline);
+    if (stage === 0 && lastBaseline) r.baseline = keepRun([lastBaseline], c.headline).numbers;
   }
   // Which datapack the run used: the pair exercise compares runs across two.
   r.datapack = status.store.datapack; r.datapackId = status.store.datapackId;
   (runs[id] = runs[id] || {})[stage] = r;
+  await recordRun(id, stage, 'run', r, lastJob);
+}
+
+/** An audit's place: beside the run it follows when the finale reruns, else the stage's run itself. */
+function placeAudit(id, a) {
+  const c = catalog[id];
+  if (promotes(id)) (audits[id] = audits[id] || {})[3] = a;
+  else (runs[id] = runs[id] || {})[3] = Object.assign(a, {audit: true, headline: c.followUp.headline});
+}
+
+/**
+ * Picks up the run the server still has: one still running (a reload, another browser) is followed from its start; one
+ * that finished with no page listening is replayed. Either way its result is kept as the step that started it would
+ * have kept it, and recorded.
+ */
+async function pickUp(job) {
+  if (!job || !job.useCase || !catalog[job.useCase] || job.stage == null || busy) return;
+  const id = job.useCase, stage = Number(job.stage), c = catalog[id], kind = job.kind;
+  const stepAt = STEPS.findIndex(x => x.stage === stage);
+  busy = true; running = {useCase: id, step: stepAt, text: 'Picking up ' + c.title + ', ' + stageName(stage, id)};
+  render(); say(running.text + '…');
+  try {
+    const got = await new Promise((resolve, reject) => {
+      let result = null, failed = null;
+      const source = new EventSource('/api/stories/jobs/' + encodeURIComponent(job.id) + '/stream');
+      source.addEventListener('run', e => { const d = JSON.parse(e.data); if (d.lane === 'without') result = Object.assign(result || {}, {baseline: d.data}); else result = Object.assign(result || {}, {run: d.data}); });
+      source.addEventListener('case', e => { result = JSON.parse(e.data); });
+      source.addEventListener('failed', e => { failed = JSON.parse(e.data).data; });
+      source.addEventListener('done', () => { source.close(); failed && !result ? reject(new Error(failed)) : resolve(result); });
+      source.onerror = () => { source.close(); reject(new Error('the run stream closed')); };
+    });
+    if (!got) throw new Error('the run ended with no result');
+    if (kind === 'audit') {
+      const a = keepRun([got.run], c.followUp.headline);
+      placeAudit(id, a);
+      await recordRun(id, 3, promotes(id) ? 'audit' : 'run', promotes(id) ? a : runs[id][3], job.id);
+    } else {
+      const r = keepRun([got.run], c.headline);
+      if (got.baseline) r.baseline = keepRun([got.baseline], c.headline).numbers;
+      if (id === LEARNS && stage === 2 && got.epoch) r.epoch = got.epoch;
+      r.datapack = status.store.datapack; r.datapackId = status.store.datapackId;
+      (runs[id] = runs[id] || {})[stage] = r;
+      await recordRun(id, stage, 'run', r, job.id);
+    }
+    say('Picked up: ' + c.title + ', ' + stageName(stage, id) + '.');
+  } catch (e) {
+    say('Could not pick up the last run: ' + e.message);
+  }
+  busy = false; running = null; pendingJob = null; save(); render();
 }
 
 /** Moves to the next (or previous) step the selected use case needs. */
@@ -1174,13 +1320,16 @@ function datapackNote() {
   const parts = [docs, hist].filter(Boolean);
   return catalog[selected].title + ': ' + (parts.length ? parts.join('; ') : 'nothing to add to the datapack') + '.';
 }
-function say(m) { lastMessage = m || ''; if (el('status')) el('status').textContent = lastMessage; }
+/** The status line: toned by what it says (the kit's callout), so a missing piece or an error stands out. */
+function say(m) { lastMessage = m || ''; if (el('status')) WK.status(el('status'), lastMessage); }
 
+/** What is running, and from which step: the steps stay browsable meanwhile, and the running pill goes back to it. */
+let running = null;
 async function busyWith(message, work) {
   if (busy) return;
-  busy = true; render(); say(message);
+  busy = true; running = {useCase: selected, step, text: message.replace(/…$/, '')}; render(); say(message);
   try { say(await work()); } catch (e) { say('Error: ' + e.message); }
-  busy = false; save(); render();
+  busy = false; running = null; save(); render();
 }
 
 async function act(what) {
@@ -1193,18 +1342,27 @@ async function act(what) {
   if (what === 'restart') {
     // A datapack is durable: nothing in it is cleared by a restart. A fresh start is a fresh datapack.
     suggested = null; choosing = true;
+    // The datapack left behind: offered for deletion on step 1.
+    const mine = perCase() ? dpMap[selected] : (status.store.live && status.store.connected ? {id: status.store.datapackId, name: status.store.datapack} : null);
+    leftBehind = mine && mine.id && /^meko-workshop/.test(mine.name || '') ? {id: mine.id, name: mine.name} : null;
     if (perCase()) delete dpMap[selected];   // only this use case starts over
     if (pairOn()) resetPair();
+    // What ran belongs to the datapack left behind (it stays recorded with it): off the page until a new one is chosen.
+    // One datapack per use case: only this use case's runs; one for all: every use case's.
+    if (perCase()) { delete runs[selected]; delete audits[selected]; }
+    else [runs, audits].forEach(o => Object.keys(o).forEach(k => delete o[k]));
+    learning[selected + ':0'] = learning[selected + ':1'] = learning[selected + ':2'] = learning[selected + ':3'] = undefined;
     step = STEPS.findIndex(x => x.t === 'Create your datapack'); shown = null; save(); render();
     say(perCase() ? 'Name a new datapack for ' + catalog[selected].title + ' and press Create and use: the other use cases keep theirs.'
       : 'Name a new datapack and press Create and use: everything after this is written to it.'); return;
   }
+  const at = step;
   await busyWith(what === 'check' ? 'Checking your datapack…' : what === 'documents' ? 'Adding the one-line versions…' : what === 'upload' ? 'Uploading the documents…' : 'Adding last quarter\'s reviews…', async () => {
     status = what === 'check' ? await (await fetch('/api/workshop/status')).json() : await post('/api/workshop/' + what + '?useCase=' + encodeURIComponent(selected));
-    if (status.store.contextId !== context) { loadRuns(status.store.contextId); resume(); }
+    if (status.store.contextId !== context) { await loadRuns(status.store.contextId); resume(); }
     // A step that adds to the datapack moves on once it is complete (on Check too, after an upload in the Meko app).
     if (pairOn() && pair.role === 'apac') await refreshLesson();
-    if (STEPS[step].done && STEPS[step].stage == null && step > 0 && STEPS[step].done()) go(1);
+    if (step === at && STEPS[step].done && STEPS[step].stage == null && step > 0 && STEPS[step].done()) go(1);
     // An upload says what became of each document (a failure says why, such as a storage quota).
     if (what === 'upload' && status.uploaded) return Object.entries(status.uploaded).map(([k, v]) => k + ': ' + v).join(' · ') + '.';
     return datapackNote();
@@ -1212,59 +1370,62 @@ async function act(what) {
 }
 
 function bind() {
+  mountDatapack();
   document.querySelectorAll('[data-run]').forEach(b => b.onclick = () => busyWith('Running ' + catalog[selected].title + ' with Meko…', runSelected));
   document.querySelectorAll('[data-act]').forEach(b => b.onclick = () => act(b.dataset.act));
   document.querySelectorAll('[data-pair]').forEach(b => b.onclick = () => b.dataset.pair === 'solo' ? setPair('solo') : setPair('pair', b.dataset.pair));
-  document.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { if (busy) return; go(Number(b.dataset.nav)); render(); });
   document.querySelectorAll('[data-layout]').forEach(b => b.onclick = () => setLayout(b.dataset.layout));
-  document.querySelectorAll('[data-dpmode]').forEach(b => b.onclick = () => {
-    if (busy) return;
-    dpMode = b.dataset.dpmode;
-    if (dpMode === 'existing') datapacks = null;   // always the account's current list
-    render();
-  });
-  document.querySelectorAll('input[name="dpPick"]').forEach(r => r.onchange = () => { dpPicked = r.value; });
-  // What the participant types is the name: kept across re-renders (a busy state, an error), never replaced.
-  if (el('dpName') && !el('dpName').disabled) el('dpName').oninput = e => { suggested = e.target.value; };
-  document.querySelectorAll('[data-datapack]').forEach(b => b.onclick = () => {
-    const create = b.dataset.datapack === 'create';
-    const picked = document.querySelector('input[name="dpPick"]:checked');
-    const name = create ? el('dpName').value.trim() : (picked ? picked.value : '');
-    if (!name) { say('Pick a datapack from the list first.'); return; }
-    busyWith((create ? 'Creating ' : 'Switching to ') + name + '…', async () => {
-      // A new one is filed in the workshop's Meko project: under BFSI when it is this use case's own, else under All use cases.
-      const r = await fetch('/api/workshop/datapack?name=' + encodeURIComponent(name) + '&create=' + create + (create ? '&group=' + (perCase() ? 'bfsi' : 'all') : ''), {method: 'POST'});
-      const body = await r.json();
-      if (!r.ok) throw new Error(body.error || r.statusText);
-      status = body;
-      if (perCase()) dpMap[selected] = {name: status.store.datapack, id: status.store.datapackId};   // this use case's own
-      // A new datapack in pair mode is a new start for this role (switching to the partner's shared one is not).
-      if (create && pairOn()) resetPair();
-      suggested = null;   // the next new datapack gets a new name
-      choosing = false;   // the name is now the datapack in use
-      datapacks = null;   // the list now includes it
-      dpMode = 'new'; dpPicked = null;
-      // Another datapack: its own runs (none, for a new one).
-      loadRuns(status.store.contextId);
-      shown = null;
-      if (pairOn() && pair.role === 'apac') await refreshLesson();
-      if (status.store.live && status.store.connected) resume();   // the first step this datapack still needs
-      const filed = body.filed ? ' Filed in the ' + body.filed + ' project folder.' : body.fileError ? ' ' + body.fileError : '';
-      return (create ? 'Created and using ' : 'Using ') + name + '.' + filed + ' ' + datapackNote();
-    });
+}
+
+/** Creates a datapack, or uses an existing one; then on to the first step it still needs. */
+function chooseDatapack(name, create, id) {
+  if (!name) { say(create ? 'Name the datapack first.' : 'Pick a datapack from the list first.'); return; }
+  const at = step;
+  busyWith((create ? 'Creating ' : 'Switching to ') + name + '…', async () => {
+    // A new one is filed in the workshop's Meko project: under BFSI when it is this use case's own, else under All use cases.
+    const r = await fetch('/api/workshop/datapack?name=' + encodeURIComponent(name) + '&create=' + create
+      + (create ? '&group=' + (perCase() ? 'bfsi' : 'all') : id && id !== name ? '&id=' + encodeURIComponent(id) : ''), {method: 'POST'});
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || r.statusText);
+    status = body;
+    if (perCase()) dpMap[selected] = {name: status.store.datapack, id: status.store.datapackId};   // this use case's own
+    // A new datapack in pair mode is a new start for this role (switching to the partner's shared one is not).
+    if (create && pairOn()) resetPair();
+    suggested = null;   // the next new datapack gets a new name
+    choosing = false;   // the name is now the datapack in use
+    if (leftBehind && leftBehind.id === status.store.datapackId) leftBehind = null;   // chosen again: not left behind
+    datapacks = null;   // the list now includes it
+    dpMode = null; dpPicked = null;
+    // Another datapack: its own runs, read back from its record (none, for a new one).
+    await loadRuns(status.store.contextId);
+    shown = null;
+    if (pairOn() && pair.role === 'apac') await refreshLesson();
+    // A selection is a setup step: on to the first step this datapack still needs, if the participant is still on the
+    // step that chose it.
+    if (status.store.live && status.store.connected && step === at) resume();
+    const filed = body.filed ? ' Filed in the ' + body.filed + ' project folder.' : body.fileError ? ' ' + body.fileError : '';
+    return (create ? 'Created and using ' : 'Using ') + name + '.' + filed + ' ' + datapackNote();
   });
 }
 
 function renderStatus() {
   const s = status.store;
-  el('storePill').innerHTML = icon('database') + esc(s.live ? (s.connected ? 'Meko live: ' + (s.datapack || '') : 'Meko not connected') : s.keyed ? 'Meko: no datapack yet' : 'Offline stand-in');
-  el('storePill').className = 'pill ' + (s.live && s.connected ? 'ok' : 'warn');
-  el('storePill').title = s.error || s.note || '';
+  const meko = s.live ? (s.connected ? 'live' : 'not connected') : s.keyed ? 'no datapack yet' : 'offline stand-in';
   // The workshop runs without model calls by design: only worth a word when models are on.
-  // (style.display, not the hidden attribute: the pill's own display rule would override that.)
-  el('modelPill').style.display = /^on/.test(s.models) ? '' : 'none';
-  el('modelPill').textContent = 'Models on';
+  el('env').innerHTML =
+    '<div class="row2"><span>Datapack</span><b title="' + esc(s.datapack || '') + '">' + esc(s.live && s.connected ? s.datapack || '' : '—') + '</b></div>' +
+    '<div class="row2"><span>Meko</span><span><span class="pill ' + (s.live && s.connected ? 'ok' : 'warn') + '" title="' + esc(s.error || s.note || '') + '">' + esc(meko) + '</span></span></div>' +
+    '<div class="row2"><span>Datapacks</span><b>' + (perCase() ? 'one per use case' : 'one for all') + '</b></div>' +
+    (/^on/.test(s.models) ? '<div class="row2"><span>Models</span><b>on</b></div>' : '');
 }
+const nav = WK.guard(dir => { go(dir); render(); window.scrollTo({top: 0, behavior: 'smooth'}); });
+el('prev').onclick = () => nav(-1);
+el('next').onclick = () => nav(1);
+el('startOver').onclick = () => act('restart');
+el('running').onclick = () => {
+  if (!running) return;
+  step = running.step; shown = STEPS[step].stage ?? shown; lastMessage = ''; save(); render();
+};
 
 /** New Session, Same Context, under its own key in the per-use-case layout. */
 const SESSIONS = 'new-session';
@@ -1273,7 +1434,7 @@ const SESSIONS = 'new-session';
 function tellSessions() {
   const frame = el('startFrame');
   if (frame.contentWindow && frame.src) frame.contentWindow.postMessage({refresh: true, layout, needsOwn: perCase() && !dpMap[SESSIONS],
-    theme: document.documentElement.dataset.theme}, location.origin);
+    theme: currentTheme()}, location.origin);
 }
 el('startFrame').addEventListener('load', tellSessions);
 
@@ -1293,10 +1454,11 @@ window.addEventListener('message', e => {
       status = st;
       if (perCase()) dpMap[SESSIONS] = {name: status.store.datapack, id: status.store.datapackId};
       choosing = false; suggested = null;
-      loadRuns(status.store.contextId);
-      if (!busy) openUseCase();
-      // Not told to refresh: the New Session page just did, and now has a datapack of its own.
-      save(); render();
+      loadRuns(status.store.contextId).then(() => {
+        if (!busy) openUseCase();
+        // Not told to refresh: the New Session page just did, and now has a datapack of its own.
+        save(); render();
+      });
     });
   }
 });
@@ -1304,11 +1466,10 @@ window.addEventListener('message', e => {
 function render() {
   if (!status) return;
   // Start here: its own page in place of the use case, its steps and its output.
-  ['usecase', 'output'].forEach(id => el(id).hidden = startHere);
-  document.querySelector('.panel.guide').hidden = startHere;
+  el('app').hidden = startHere;
   el('starthere').hidden = !startHere;
   if (startHere && !el('startFrame').src) el('startFrame').src = '/sessions.html?embedded&from=workshop&t=' + Date.now();   // always this start's page
-  renderStatus(); renderTabs(); renderUseCase(); renderStepper();
+  renderStatus(); renderTabs(); renderUseCase(); renderStepper(); renderNav();
   el('guide').innerHTML = guide();
   renderOutput(); bind(); say(lastMessage);
 }
@@ -1318,12 +1479,14 @@ function render() {
     (await (await fetch('/api/stories')).json()).forEach(s => catalog[s.id] = s);
     status = await (await fetch('/api/workshop/status')).json();
     if (!status.useCases.some(u => u.id === selected)) selected = status.useCases[0].id;
-    loadRuns(status.store.contextId);
+    await loadRuns(status.store.contextId);
     await useCaseDatapack(startHere ? SESSIONS : selected);   // per use case: the shown tab's own datapack
     if (pair.mode === 'pair' && pair.role === 'apac') await refreshLesson();
     openUseCase();
     lastMessage = '';
     render();
+    // A run the server still has (a reload in the middle of it, or one that finished with no page listening).
+    if (pendingJob && !pendingJob.recorded) pickUp(pendingJob);
   } catch (e) { el('guide').textContent = 'Unable to load the workshop: ' + e.message; }
 })();
 </script>

@@ -1,5 +1,7 @@
 # Incident commander — Embabel planning, Meko memory, and a bill you can audit
 
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/srinivasa-vasu/meko-micro-demos?quickstart=1) In the codespace, with `MEKO_API_KEY` and a model key (`OPENROUTER_API_KEY`, `GROQ_API_KEY` or `GOOGLE_API_KEY`) as Codespaces secrets: `cd support-ctx-agent && mvn spring-boot:run`, then open the forwarded port 8081.
+
 An AI SRE agent that investigates production incidents. Spring Boot is the application,
 [Embabel](https://github.com/embabel/embabel-agent) plans, and [Meko](https://mekodata.ai)
 remembers.
@@ -207,6 +209,7 @@ context engine, and what building one yourself involves. Open it directly; it ne
 export MEKO_API_KEY=mko_tkn_...
 export MEKO_DATAPACK_ID=...            # or MEKO_DATAPACK_NAME (default: change-risk)
 export OPENROUTER_API_KEY=...
+mvn -q install -DskipTests -f ../pom.xml -pl meko-client   # once: the shared Meko client
 mvn spring-boot:run
 open http://localhost:8081/
 ```
@@ -290,7 +293,7 @@ so verify the shipped rates against your own account.
 | `MEKO_AGENT_ID` | `sre-agent` | Agent identity for memory written by runs |
 | `MEKO_DEPLOY_BOT_AGENT_ID` | `platform-deploy-bot` | Identity the seed writes its deploy record under, to show cross-agent recall |
 | `MEKO_READ_TIMEOUT` | `30s` | How long a Meko read is waited for before the run continues without it (reported as partial recall) |
-| `MEKO_WRITE_TIMEOUT` | `90s` | MCP request timeout, which bounds writes. Meko writes run a server-side extraction and can exceed 30s. |
+| `MEKO_WRITE_TIMEOUT` | `90s` | The time limit for Meko writes (`meko.timeouts`). Meko writes run a server-side extraction and can exceed 30s. |
 | `SWEEP_LINES_PER_SERVICE` | `60` | Log lines per service in the full sweep |
 | `SWEEP_SCOPED_LINES_PER_SERVICE` | `8` | Log lines per service in a scoped sweep |
 | `PRICE_SLM_IN` … `PRICE_FRONTIER_OUT` | per profile | USD per million tokens, per role |

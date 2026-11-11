@@ -7,251 +7,41 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600..800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/workshop-kit/workshop.css">
 <style>
-/* ------------------------------------------------------------------ theme: follows the system, the toggle overrides */
-:root {
-  --bg: #f4f6f8; --surface: #ffffff; --surface-2: #f7f9fb; --sunken: #eef2f5; --ink: #13202b; --ink-2: #2f3e4c; --muted: #5d6c7b; --line: #dfe5eb;
-  --accent: #0b7d5d; --accent-ink: #ffffff; --accent-soft: #e1f3ec; --warn: #9a6200; --warn-soft: #fbf0d9; --bad: #bf3b31; --bad-soft: #fbe6e3;
-  --info: #2b5fbf; --info-soft: #e4ecfa; --violet: #5a46c4; --shadow: 0 1px 2px rgba(19, 32, 43, .05), 0 6px 20px rgba(19, 32, 43, .05);
-  --display: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0a1016; --surface: #111a23; --surface-2: #0e161e; --sunken: #0c131a; --ink: #e8eef4; --ink-2: #c3cfda; --muted: #8b9bab; --line: #213040;
-    --accent: #6ee0b8; --accent-ink: #052016; --accent-soft: rgba(110, 224, 184, .13); --warn: #f2c46b; --warn-soft: rgba(242, 196, 107, .13);
-    --bad: #ff8f8f; --bad-soft: rgba(255, 143, 143, .13); --info: #8fb8ff; --info-soft: rgba(143, 184, 255, .13); --violet: #c4b2ff;
-    --shadow: 0 0 0 1px rgba(255, 255, 255, .02), 0 8px 28px rgba(0, 0, 0, .35); color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0a1016; --surface: #111a23; --surface-2: #0e161e; --sunken: #0c131a; --ink: #e8eef4; --ink-2: #c3cfda; --muted: #8b9bab; --line: #213040;
-  --accent: #6ee0b8; --accent-ink: #052016; --accent-soft: rgba(110, 224, 184, .13); --warn: #f2c46b; --warn-soft: rgba(242, 196, 107, .13);
-  --bad: #ff8f8f; --bad-soft: rgba(255, 143, 143, .13); --info: #8fb8ff; --info-soft: rgba(143, 184, 255, .13); --violet: #c4b2ff;
-  --shadow: 0 0 0 1px rgba(255, 255, 255, .02), 0 8px 28px rgba(0, 0, 0, .35); color-scheme: dark;
-}
-
-/* ------------------------------------------------------------------ base */
-* { box-sizing: border-box; }
-[hidden] { display: none !important; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14.5px/1.55 var(--body); -webkit-font-smoothing: antialiased; }
-h1, h2, h3 { font-family: var(--display); letter-spacing: -.015em; margin: 0; }
-h2 { font-size: 24px; line-height: 1.2; }
-h3 { font-size: 16px; margin: 18px 0 8px; }
-p { margin: 0; }
-a { color: var(--info); }
-code { font: 12.5px var(--mono); background: var(--sunken); border: 1px solid var(--line); padding: 1px 5px; border-radius: 6px; }
-:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 6px; }
-.muted { color: var(--muted); }
-.small { font-size: 12.5px; }
-
-/* ------------------------------------------------------------------ layout */
-.app { display: grid; grid-template-columns: 280px minmax(0, 1fr) 340px; min-height: calc(100vh - 78px); }
-.side { position: sticky; top: 0; height: 100vh; overflow: auto; border-right: 1px solid var(--line); background: var(--surface); padding: 22px 18px; display: flex; flex-direction: column; gap: 18px; }
-.main { padding: 22px clamp(16px, 2.5vw, 40px) 60px; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
-.insight { position: sticky; top: 0; height: 100vh; overflow: auto; padding: 22px 20px; border-left: 1px solid var(--line); background: var(--surface-2); display: flex; flex-direction: column; gap: 16px; }
-@media (max-width: 1360px) {
-  .app { grid-template-columns: 260px minmax(0, 1fr); }
-  .side { grid-row: span 2; align-self: start; }
-  .insight { position: static; height: auto; grid-column: 2; border-left: 0; border-top: 1px solid var(--line); padding: 20px clamp(16px, 2.5vw, 40px) 40px; display: grid; grid-template-columns: 1fr 1fr; }
-}
-@media (max-width: 960px) {
-  .app { grid-template-columns: minmax(0, 1fr); }
-  .side { grid-row: auto; }
-  .uctab { min-width: 170px; }
-  .side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 14px 16px; gap: 12px; }
-  .insight { grid-column: 1; grid-template-columns: 1fr; }
-  .steps { flex-direction: row !important; overflow-x: auto; padding-bottom: 4px; }
-  .steps .stp { flex: 0 0 auto; }
-  .steps .stp .sub, .env { display: none !important; }
-}
-
-/* ------------------------------------------------------------------ sidebar */
-.brand .k { font-size: 11px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
-.brand h1 { font-size: 21px; line-height: 1.15; margin-top: 4px; }
-.brand p { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
-/* ------------------------------------------------------------------ top bar: one tab per use case */
-.topnav { display: flex; align-items: stretch; gap: 18px; padding: 0 clamp(12px, 2vw, 24px); background: var(--surface); border-bottom: 1px solid var(--line); min-height: 78px; }
-.topnav .mark { align-self: center; flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
-  background: var(--accent); color: var(--accent-ink); font: 800 13px var(--display); letter-spacing: -.02em; }
-.topnav .brandtxt { align-self: center; flex: none; font: 700 13px var(--display); line-height: 1.25; }
-.topnav .brandtxt small { display: block; font: 500 11.5px var(--body); color: var(--muted); }
-.uctabs { display: flex; gap: 4px; overflow-x: auto; flex: 1; align-items: stretch; scrollbar-width: thin; }
-.uctab { position: relative; flex: 1 1 0; min-width: 180px; max-width: 300px; display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px;
-  align-items: center; padding: 10px 14px; border: 0; background: transparent; color: var(--ink); cursor: pointer; font: inherit; text-align: left; border-radius: 12px 12px 0 0; }
-.uctab:hover { background: var(--surface-2); }
-.uctab::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: transparent; }
-.uctab[aria-selected="true"] { background: var(--accent-soft); }
-.uctab[aria-selected="true"]::after { background: var(--accent); }
-.uctab .ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: var(--sunken); color: var(--muted); }
-.uctab .ic svg { width: 20px; height: 20px; }
-.uctab[aria-selected="true"] .ic { background: var(--accent); color: var(--accent-ink); }
-.uctab.busy .ic { box-shadow: 0 0 0 3px var(--warn-soft); }
-.uctab .kick { display: block; font-size: 10.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.uctab .tt { display: block; font: 700 14.5px/1.2 var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.uctab .meta { display: flex; gap: 8px; align-items: center; margin-top: 3px; }
-.uctab .meta code { font-size: 10.5px; padding: 0 5px; }
-/* A domain's tabs sit together, its name on a vertical bar beside them. */
-.ucgroup { display: flex; align-items: stretch; gap: 4px; flex: 1 1 0; min-width: 0; max-width: max-content; }
-.ucgroup + .ucgroup { margin-left: 10px; }
-.ucgroup .gl { flex: none; align-self: center; writing-mode: vertical-rl; transform: rotate(180deg); padding: 6px 4px; border-right: 2px solid var(--line);
-  font-size: 10px; font-weight: 800; letter-spacing: .14em; color: var(--muted); }
-.ucgroup.on .gl { color: var(--accent); border-right-color: var(--accent); }
-.dots { display: flex; gap: 3px; }
-.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
-.dots i.on { background: var(--accent); }
-/* Up to six tabs across a laptop screen: the brand text, then the kickers, give way first. */
-@media (max-width: 1500px) { .topnav .brandtxt { display: none; } }
-@media (max-width: 1250px) { .uctab .kick { display: none; } .uctab { grid-template-columns: 32px minmax(0, 1fr); gap: 10px; padding: 8px 10px; } .uctab .ic { width: 32px; height: 32px; } }
-.stepshead { display: flex; justify-content: space-between; align-items: center; margin-bottom: -8px; padding: 0 4px;
-  font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.linkbtn { border: 0; background: transparent; color: var(--muted); font: 600 12px var(--body); letter-spacing: 0; text-transform: none;
-  padding: 4px 6px; border-radius: 7px; cursor: pointer; }
-.linkbtn:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
-.linkbtn:disabled { opacity: .4; cursor: not-allowed; }
-.steps { display: flex; flex-direction: column; gap: 4px; }
-.stp { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: center; width: 100%; text-align: left; border: 1px solid transparent; background: transparent; color: var(--ink); border-radius: 12px; padding: 8px 10px; cursor: pointer; font: inherit; }
-.stp:hover:not(.locked) { background: var(--surface-2); }
-.stp.current { background: var(--accent-soft); border-color: var(--accent); }
-.stp .dot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 13px; border: 2px solid var(--line); color: var(--muted); background: var(--surface); }
-.stp.done .dot { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.stp.current .dot { border-color: var(--accent); color: var(--accent); }
-.stp.done.current .dot { color: var(--accent-ink); }
-.stp.locked { cursor: not-allowed; color: var(--muted); }
-.stp.locked .dot { border-style: dashed; }
-.stp.running .dot { border-color: var(--warn); color: var(--warn); background: var(--warn-soft); }
-@media (prefers-reduced-motion: no-preference) { .stp.running .dot { animation: pulse 1.4s ease-in-out infinite; } }
-@keyframes pulse { 50% { box-shadow: 0 0 0 6px var(--warn-soft); } }
-.stp .t { font-weight: 700; font-size: 13.5px; line-height: 1.25; }
-.stp .sub { font-size: 12px; color: var(--muted); line-height: 1.3; }
-.stp .sub.skip { color: var(--warn); }
-.env { display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); }
-.env .row2 { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 8px; font-size: 12.5px; }
-.env .row2 span:first-child { color: var(--muted); }
-.env .row2 b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-foot { display: flex; gap: 8px; align-items: center; }
-.meter { height: 6px; border-radius: 99px; background: var(--sunken); overflow: hidden; margin-top: 4px; }
-.meter i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
-
-/* ------------------------------------------------------------------ controls */
-.btn { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 14px; border-radius: 10px; cursor: pointer; font: 600 13.5px var(--body); }
-.btn:hover:not(:disabled) { border-color: var(--muted); }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.btn.ghost { background: transparent; }
-.btn.sm { padding: 5px 10px; font-size: 12.5px; }
-.iconbtn { width: 34px; height: 34px; padding: 0; justify-content: center; border-radius: 50%; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 12px; padding: 3px; gap: 3px; background: var(--surface-2); }
-.seg button { border: 0; background: transparent; color: var(--muted); padding: 7px 14px; border-radius: 9px; cursor: pointer; font: 600 13.5px var(--body); }
-.seg button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
-label.lbl { display: block; font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin: 12px 0 5px; }
-input.text { width: 100%; max-width: 420px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); border-radius: 10px; padding: 8px 11px; font: inherit; }
-input.text:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
-.hint { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
-.pill { display: inline-flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 99px; background: var(--sunken); color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; border: 0; font-family: var(--body); }
-.pill.ok { background: var(--accent-soft); color: var(--accent); } .pill.warn { background: var(--warn-soft); color: var(--warn); } .pill.bad { background: var(--bad-soft); color: var(--bad); }
-button.pill { cursor: pointer; }
-.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-
-/* ------------------------------------------------------------------ main column */
-.top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-.eyebrow { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; box-shadow: var(--shadow); }
-.card .lead { color: var(--ink-2); margin-top: 8px; max-width: 88ch; }
-.check { list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-direction: column; gap: 12px; counter-reset: c; }
-.check > li { counter-increment: c; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 14px; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; background: var(--surface-2); }
-.check > li::before { content: counter(c); display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--line); font-weight: 800; color: var(--muted); background: var(--surface); }
-.check > li.ok { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
-.check > li.ok::before { content: "✓"; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.check > li.wait { opacity: .55; }
-.check .h { font-weight: 700; font-size: 15px; }
-.check .d { color: var(--muted); font-size: 13.5px; margin-top: 2px; }
-.check .act-row { margin-top: 12px; }
-.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
-.option { border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: var(--surface-2); min-width: 0; }
-.option h3 { margin-top: 0; }
-@media (max-width: 1100px) { .options { grid-template-columns: minmax(0, 1fr); } }
-.list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow: auto; margin-top: 8px; }
-.item { display: flex; gap: 10px; align-items: center; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; }
-.item:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.item input { accent-color: var(--accent); }
-.item .m { margin-left: auto; font-size: 12px; color: var(--muted); }
-.callout { display: block; border-radius: 12px; padding: 10px 14px; font-size: 13.5px; margin-top: 14px; background: var(--info-soft); color: var(--ink-2); }
-.callout.flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.callout.warn { background: var(--warn-soft); } .callout.bad { background: var(--bad-soft); } .callout.ok { background: var(--accent-soft); }
-.split { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(260px, 1fr); gap: 28px; align-items: start; }
-@media (max-width: 1100px) { .split { grid-template-columns: minmax(0, 1fr); } }
-.timeline { list-style: none; margin: 4px 0 0; padding: 0 0 0 18px; border-left: 2px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
-.timeline li { position: relative; font-size: 13px; color: var(--muted); }
-.timeline li::before { content: ""; position: absolute; left: -25px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
-.timeline li.bad::before { border-color: var(--bad); background: var(--bad-soft); }
-.timeline li b { display: block; color: var(--ink); font-size: 13.5px; }
-details.fold > summary { list-style: none; display: flex; align-items: center; gap: 10px; cursor: pointer; }
-details.fold > summary::-webkit-details-marker { display: none; }
-details.fold > summary .pill { margin-left: auto; }
-details.fold .chev { color: var(--muted); transition: transform .15s; }
-details.fold[open] .chev { transform: rotate(90deg); }
-.plan .arrow { color: var(--muted); font-size: 12px; align-self: center; }
-.audit-inline { margin-top: 18px; }
-.nav { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.nav .why { font-size: 13px; color: var(--muted); }
-.status { font-size: 13px; color: var(--muted); min-height: 18px; }
-.busy { font-size: 12.5px; color: var(--warn); margin-top: 10px; }
 details.net summary { cursor: pointer; font-size: 12.5px; color: var(--muted); margin-top: 12px; }
-
-/* ------------------------------------------------------------------ insight column */
-.box { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
-.box h3 { margin-top: 0; font-size: 14.5px; }
-.box .look { color: var(--ink-2); font-size: 13.5px; }
-.box .look p + p { margin-top: 8px; }
-.layers { display: flex; flex-direction: column; gap: 8px; }
-.layer { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 13px; }
-.layer .ic { width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; background: var(--sunken); color: var(--muted); font-weight: 800; font-size: 12px; }
-.layer.on .ic { background: var(--accent-soft); color: var(--accent); }
-.layer b { display: block; font-size: 13px; }
-.layer span { color: var(--muted); }
-
-/* ------------------------------------------------------------------ activity, results, audit */
-.log { max-height: 280px; overflow: auto; font: 12px/1.6 var(--mono); color: var(--ink-2); background: var(--sunken); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; white-space: pre-wrap; margin-top: 12px; }
-.runs { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; margin-top: 12px; }
-.run { flex: 0 0 230px; display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: var(--surface-2); cursor: pointer; text-align: left; color: var(--ink); font: inherit; }
-.run.sel { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.run .n { font-size: 12px; color: var(--muted); }
-.metric { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; font-size: 12.5px; color: var(--muted); }
-.metric b { color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.verdict { display: inline-flex; font-size: 12px; font-weight: 700; border-radius: 99px; padding: 3px 10px; width: fit-content; background: var(--sunken); color: var(--muted); }
 .verdict.APPROVED, .verdict.APPROVED_WITH_CHANGES { background: var(--accent-soft); color: var(--accent); }
 .verdict.CHANGES_REQUESTED, .verdict.REPAIR_HELD { background: var(--warn-soft); color: var(--warn); } .verdict.NOT_DECIDED, .verdict.NOT_RECOVERED { background: var(--bad-soft); color: var(--bad); }
 .verdict.RECOVERED { background: var(--accent-soft); color: var(--accent); }
-.decision { border-left: 4px solid var(--accent); background: var(--surface-2); border-radius: 10px; padding: 12px 16px; margin-top: 16px; }
 .decision.CHANGES_REQUESTED, .decision.REPAIR_HELD { border-left-color: var(--warn); } .decision.NOT_DECIDED, .decision.NOT_RECOVERED, .decision.failed { border-left-color: var(--bad); }
-.decision ul { margin: 6px 0; padding-left: 20px; }
-.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
-@media (max-width: 1100px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
-.sub-box { border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--surface-2); min-width: 0; }
-.sub-box h3 { margin-top: 0; }
-ul.plain { list-style: none; padding: 0; margin: 4px 0 10px; } ul.plain li { padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; } ul.plain li:last-child { border: 0; }
-.who { font-size: 12px; color: var(--violet); }
-.aside { color: var(--muted); text-decoration: line-through; }
-.plan { display: flex; gap: 6px; flex-wrap: wrap; }
-.plan span { font: 12px var(--mono); padding: 4px 9px; border-radius: 8px; background: var(--sunken); color: var(--ink-2); border: 1px solid var(--line); }
-.plan span.done { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
-.plan span.skip { background: transparent; color: var(--muted); border-style: dashed; }
-.tablewrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 600; font-size: 12px; }
 td.sql { font: 12px var(--mono); color: var(--ink-2); max-width: 520px; }
-td.num, th.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 table.counts { width: auto; min-width: min(100%, 560px); }
 table.counts th, table.counts td { padding-left: 18px; }
 table.counts th:first-child, table.counts td:first-child { padding-left: 8px; }
-.tag { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 7px; margin: 1px 3px 1px 0; }
-.tag.bad { background: var(--bad-soft); color: var(--bad); } .tag.warn { background: var(--warn-soft); color: var(--warn); } .tag.ok { background: var(--accent-soft); color: var(--accent); }
 .secret { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
 .secret code { font-size: 14px; padding: 4px 8px; }
+/* Run by run: what each run knew, and what each statement of the pull request met in each run */
+.xr-wrap { overflow-x: auto; margin-top: 14px; }
+table.xr { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+table.xr th, table.xr td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 12.5px; }
+table.xr th { position: sticky; top: 0; background: var(--surface); font-size: 12px; }
+table.xr th .verdict { margin-top: 4px; }
+table.xr td.k { font-weight: 700; color: var(--ink-2); width: 150px; min-width: 130px; }
+table.xr td.k small { display: block; font-weight: 500; color: var(--muted); margin-top: 2px; }
+table.xr td.stmt { min-width: 240px; max-width: 320px; }
+table.xr td.rec { min-width: 260px; background: color-mix(in srgb, var(--accent) 5%, transparent); }
+table.xr tr.sec td { background: var(--surface-2); font: 700 11px var(--body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.cx { display: flex; flex-wrap: wrap; gap: 4px; }
+.cx span { font-size: 11.5px; padding: 2px 7px; border-radius: 6px; background: var(--sunken); color: var(--ink-2); border: 1px solid transparent; }
+.cx span.new { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); font-weight: 700; }
+.cx span.new::before { content: "+ "; }
+.cx span.off { color: var(--muted); background: transparent; border: 1px dashed var(--line); }
+.cx span.bad { background: var(--bad-soft); color: var(--bad); } .cx span.warn { background: var(--warn-soft); color: var(--warn); } .cx span.ok { background: var(--accent-soft); color: var(--accent); }
+pre.sqlx { margin: 0; font: 11.5px/1.45 var(--mono); white-space: pre-wrap; color: var(--ink-2); }
+pre.sqlx.new { color: var(--accent); }
+pre.sqlx.drop { color: var(--bad); text-decoration: line-through; }
+.src { display: block; font-size: 11px; color: var(--violet); margin-top: 4px; }
+.run .why { font-size: 12px; color: var(--ink-2); line-height: 1.35; border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -305,11 +95,12 @@ table.counts th:first-child, table.counts td:first-child { padding-left: 8px; }
   </aside>
 </div>
 
+<script src="/workshop-kit/workshop.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 /** An endpoint's size, as the server creates it. */
 const cores = () => (state.status?.amp?.endpointCores ?? 0.5) + ' vCPU';
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const esc = WK.esc;
 const ms = n => n == null ? '' : n >= 1000 ? (n / 1000).toFixed(1) + ' s' : n + ' ms';
 const bytes = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : (n / 1024).toFixed(0) + ' KB';
 const store = {
@@ -324,12 +115,7 @@ async function api(path, body) {
 }
 
 /* ------------------------------------------------------------------ theme */
-try { const t = localStorage.getItem('release-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* system */ }
-$('theme').onclick = () => {
-  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
-  document.documentElement.dataset.theme = dark ? 'light' : 'dark';
-  try { localStorage.setItem('release-theme', document.documentElement.dataset.theme); } catch (e) { /* not kept */ }
-};
+WK.theme($('theme'), 'release-theme');
 
 /* ------------------------------------------------------------------ state */
 const state = {
@@ -517,13 +303,7 @@ function go(i) {
   window.scrollTo({top: 0, behavior: 'smooth'});
 }
 /** Back and Next ignore a second click within 400 ms: a double click moves one step, not two. */
-let lastNav = 0;
-function nav(delta) {
-  const now = Date.now();
-  if (now - lastNav < 400) return;
-  lastNav = now;
-  go(state.step + delta);
-}
+const nav = WK.guard(delta => go(state.step + delta));
 $('prev').onclick = () => nav(-1);
 $('next').onclick = () => nav(1);
 
@@ -532,34 +312,23 @@ function renderSide(m) {
   const runningCase = busy() ? caseOfJob(state.job?.type || state.status?.job?.type) : null;
   const tab = ([key, u]) => {
     const done = (key === 'recovery' ? modelRecovery() : modelRelease()).done;
-    return `<button class="uctab ${key === runningCase ? 'busy' : ''}" role="tab" data-uc="${key}" aria-selected="${key === state.useCase}" title="${esc(u.title)}: ${esc(u.short)}">
-      <span class="ic" aria-hidden="true">${u.icon}</span>
-      <span><span class="kick">${esc(u.domain)}</span><span class="tt">${esc(u.title)}</span>
-        <span class="meta"><code>${esc(u.record)}</code><span class="dots" aria-label="${done.filter(Boolean).length} of ${u.steps.length} steps done">${u.steps.map((st, i) => `<i class="${done[i] ? 'on' : ''}"></i>`).join('')}</span></span></span></button>`;
+    return {key, icon: u.icon, kicker: u.domain, title: u.title, tip: u.title + ': ' + u.short, selected: key === state.useCase, busy: key === runningCase,
+      meta: `<code>${esc(u.record)}</code>` + WK.dots(done, done.filter(Boolean).length + ' of ' + u.steps.length + ' steps done')};
   };
   // Tabs grouped by domain, in the order each domain first appears in USE_CASES.
   const groups = [...new Set(Object.values(USE_CASES).map(u => u.group))];
-  $('rail').innerHTML = groups.map(g => {
-    const members = Object.entries(USE_CASES).filter(([, u]) => u.group === g);
-    return `<div class="ucgroup ${members.some(([key]) => key === state.useCase) ? 'on' : ''}" role="presentation"><span class="gl">${esc(g)}</span>${members.map(tab).join('')}</div>`;
-  }).join('');
-  document.querySelectorAll('.uctab').forEach(b => b.onclick = () => switchUseCase(b.dataset.uc));
+  WK.tabBar($('rail'), groups.map(g => ({label: g, tabs: Object.entries(USE_CASES).filter(([, u]) => u.group === g).map(tab)})), switchUseCase);
   $('ucTitle').textContent = uc.title;
   $('stepsLabel').textContent = 'Steps · ' + uc.record;
   document.title = uc.title;
   const jobType = state.job?.type || state.status?.job?.type;
   // A running job pulses on its own use case's track only (setup steps belong to every use case).
   const runningStep = busy() && (caseOfJob(jobType) ?? state.useCase) === state.useCase ? jobStep(jobType) : -1;
-  $('steps').innerHTML = STEPS.map((st, i) => {
-    const cls = [m.done[i] ? 'done' : '', i === state.step ? 'current' : '', m.open[i] ? '' : 'locked', i === runningStep ? 'running' : ''].join(' ');
-    const sub = m.checking && i >= 2 && i <= 4 ? 'Checking the record…' : m.earlier[i] ? 'Ran earlier in this datapack. ' + (m.open[i] ? '' : m.locked[i])
-      : !m.open[i] ? m.locked[i] : m.skipped[i] ? 'skipped: the datapack already had this context' : st.s;
-    return `<button class="stp ${cls}" data-i="${i}" ${m.open[i] ? '' : 'aria-disabled="true"'} title="${esc(m.open[i] ? st.s : m.locked[i])}">
-      <span class="dot">${m.done[i] ? '✓' : m.open[i] ? i + 1 : '🔒'}</span>
-      <span><span class="t">${esc(st.t)}</span><br><span class="sub ${m.skipped[i] ? 'skip' : ''}">${esc(sub)}</span></span></button>`;
-  }).join('');
-  document.querySelectorAll('.stp').forEach(b => b.onclick = () => {
-    const i = +b.dataset.i;
+  WK.stepList($('steps'), STEPS.map((st, i) => ({key: i, title: st.t, done: m.done[i], current: i === state.step, locked: !m.open[i], running: i === runningStep,
+    skip: m.skipped[i], tip: m.open[i] ? st.s : m.locked[i],
+    sub: m.checking && i >= 2 && i <= 4 ? 'Checking the record…' : m.earlier[i] ? 'Ran earlier in this datapack. ' + (m.open[i] ? '' : m.locked[i])
+      : !m.open[i] ? m.locked[i] : m.skipped[i] ? 'skipped: the datapack already had this context' : st.s})), k => {
+    const i = +k;
     if (m.open[i]) go(i); else say(m.locked[i]);
   });
   const budget = m.amp.budget;
@@ -610,35 +379,26 @@ function renderStep(m) {
   else switch (state.step) {
     case 0: {
       const list = state.datapacks;
-      const mode = state.dpMode || (m.datapack ? 'existing' : 'new');
       const stamp = new Date().toISOString().slice(0, 16).replace('T', '-').replace(':', '');
       c.innerHTML = `<h2>Choose the datapack</h2>
         <p class="lead">A datapack holds what the agents read and write (memory, knowledge, records) and, with AMP, the clusters:
           the database you rehearse on lives next to everything the agent knows. Start from a new, empty one to see the agent with no context.</p>
-        ${m.datapack ? `<div class="callout ok">In use: <b>${esc(meko.datapackName)}</b>. Choose another below, or go on.</div>`
-          : meko.datapackName ? `<div class="callout warn">The app was started with the datapack <b>${esc(meko.datapackName)}</b>
-              (<code>MEKO_DATAPACK_NAME</code>), and this account has no datapack by that name. Create it below, or choose an existing one.</div>` : ''}
-        <div style="margin-top:16px" class="seg" role="tablist">
-          <button role="tab" aria-selected="${mode === 'new'}" data-m="new">Create a new datapack</button>
-          <button role="tab" aria-selected="${mode === 'existing'}" data-m="existing">Use an existing one</button></div>
-        ${mode === 'new'
-          ? `<label class="lbl" for="dpName">Name</label><input class="text" id="dpName" value="${esc(!m.datapack && meko.datapackName ? meko.datapackName : 'release-rehearsal-' + stamp)}">
-             <div class="row" style="margin-top:12px"><button class="btn primary act" id="dpCreate">Create and use</button></div>`
-          : list ? `<div class="row" style="margin-top:14px;justify-content:space-between;max-width:760px"><span class="small muted">${list.length} datapack(s) you can use</span><button class="btn sm ghost" id="dpList">Refresh</button></div>
-             <div class="list" style="max-width:760px">${list.map(d => `<label class="item"><input type="radio" name="dp" value="${esc(d.id)}" data-name="${esc(d.name)}" ${(state.dpChoice || (m.datapack ? meko.datapackId : '')) === d.id ? 'checked' : ''}>
-               <b>${esc(d.name)}</b><span class="m">${esc(d.grant || '')} · ${esc((d.created || '').slice(0, 10))}</span></label>`).join('')}</div>
-             <div class="row" style="margin-top:12px"><button class="btn primary act" id="dpUse">Use this datapack</button></div>`
-          : '<p class="hint" style="margin-top:14px">Loading your datapacks…</p>'}`;
-      c.querySelectorAll('.seg button').forEach(b => b.onclick = () => { state.dpMode = b.dataset.m; render(); });
-      c.querySelectorAll('input[name=dp]').forEach(i => i.onchange = () => { state.dpChoice = i.value; });
-      if (mode === 'existing') load('datapacks', '/datapacks');
-      if ($('dpList')) $('dpList').onclick = () => { state.datapacks = null; render(); };
-      if ($('dpCreate')) $('dpCreate').onclick = () => act(() => api('/datapacks', {name: $('dpName').value, create: true}), 'Datapack created and in use.');
-      if ($('dpUse')) $('dpUse').onclick = () => {
-        const r = c.querySelector('input[name=dp]:checked');
-        if (!r) return say('Choose a datapack.');
-        act(() => api('/datapacks', {name: r.dataset.name, id: r.value, create: false}), 'Datapack in use.');
-      };
+        <div id="dpPick"></div>`;
+      // The shared datapack step: the same on every workshop page.
+      WK.datapackPicker($('dpPick'), {
+        mode: state.dpMode, inUse: m.datapack ? {id: meko.datapackId, name: meko.datapackName} : null,
+        list: list && list.map(d => ({id: d.id, name: d.name, meta: (d.grant || '') + ' · ' + (d.created || '').slice(0, 10)})),
+        choice: state.dpChoice, name: state.dpName ?? (!m.datapack && meko.datapackName ? meko.datapackName : 'release-rehearsal-' + stamp),
+        before: !m.datapack && meko.datapackName ? `<div class="callout warn">The app was started with the datapack <b>${esc(meko.datapackName)}</b>
+          (<code>MEKO_DATAPACK_NAME</code>), and this account has no datapack by that name. Create it below, or choose an existing one.</div>` : '',
+        busy: busy(),
+        onMode: md => { state.dpMode = md; render(); },
+        onChoice: id => { state.dpChoice = id; },
+        onName: n => { state.dpName = n; },
+        onRefresh: () => { state.datapacks = null; load('datapacks', '/datapacks'); },
+        onCreate: name => act(() => api('/datapacks', {name, create: true}), 'Datapack created and in use.'),
+        onUse: d => d ? act(() => api('/datapacks', {name: d.name, id: d.id, create: false}), 'Datapack in use.') : say('Choose a datapack.'),
+      });
       break;
     }
     case 1: {
@@ -955,7 +715,8 @@ function render() {
 }
 
 /* ------------------------------------------------------------------ actions */
-function say(text) { $('status').textContent = text || ''; }
+/** The status line: toned by what it says (the kit's callout), so a missing piece or an error stands out. */
+function say(text) { WK.status($('status'), text); }
 
 /** Loads a list a step shows, once: the step shows "Loading…" until it arrives. */
 const loading = {};
@@ -1133,6 +894,149 @@ function allRuns() {
 /** The latest run of a step, if it has one. */
 const latestRunOf = step => allRuns().filter(r => stepOfRun(r) === step).pop();
 
+/* ------------------------------------------------------------------ run by run */
+/** A migration file's release: release-1-as-written.sql and release-1-safe.sql are both release-1. */
+const releaseOf = name => String(name).replace(/-(as-written|safe|rollback)\.sql$/, '');
+const oneLine = t => String(t ?? '').replace(/\s+/g, ' ').trim();
+const cut = (t, n) => (t = oneLine(t)).length > n ? t.slice(0, n - 1) + '…' : t;
+
+/** What one run recorded: its context, its review (the plan), its steps, its plan check and its decision. */
+function factsOf(r) {
+  const by = k => (r.entries || []).filter(e => e.kind === k);
+  return {ctx: by('context')[0]?.data, plan: by('review')[0]?.data, steps: by('statement').map(e => e.data),
+    plans: by('plans')[0] ? (by('plans')[0].data || []) : null, decision: by('decision')[0]?.data,
+    actions: by('action').map(a => a.text), r};
+}
+
+/** The indexes a statement drops. */
+const dropsOf = text => [...String(text).matchAll(/DROP\s+INDEX\s+(?:CONCURRENTLY\s+)?(?:IF\s+EXISTS\s+)?([\w.]+)/gi)].map(m => m[1]);
+
+/** Items for one cell; those the previous run did not have are marked new. */
+function chips(items, before, cls = () => '') {
+  if (!items.length) return '<div class="cx"><span class="off">none</span></div>';
+  return '<div class="cx">' + items.map(i => `<span class="${before && !before.includes(i.key) ? 'new' : ''} ${cls(i)}" title="${esc(i.tip || '')}">${esc(i.label)}</span>`).join('') + '</div>';
+}
+
+/** What each run knew: every difference in context, and what the planner did because of it. */
+function contextRows(F) {
+  const keys = f => ({
+    rules: Object.keys(f.ctx?.rules || {}).sort().map(id => ({key: id, label: id, tip: f.ctx.rules[id].text})),
+    limits: f.ctx ? [
+      f.ctx.lockTimeout && {key: 'lt', label: `lock_timeout ${f.ctx.lockTimeout}, ${f.ctx.maxAttempts || 1} attempts (MIG-01)`},
+      f.ctx.stallMillis && {key: 'stall', label: `stall limit ${f.ctx.stallMillis / 1000} s (REL-03)`},
+      f.ctx.regressionFactor && {key: 'factor', label: `plan regression > ${f.ctx.regressionFactor}× buffers (REL-03)`}].filter(Boolean) : [],
+    incidents: (f.ctx?.incidents || []).map(i => ({key: i.id, label: i.id + (i.workload ? ' · ' + i.workload : ''), tip: i.text + ' — ' + i.writtenBy + ' · ' + i.datapack})),
+    queries: (f.ctx?.queries || []).map(q => ({key: q.name, label: q.name, tip: q.sql + ' — ' + q.writtenBy + ' · ' + q.datapack})),
+    aside: (f.ctx?.setAside || []).map(a => ({key: a.text.slice(0, 40), label: cut(a.reason, 40), tip: a.text + ' — ' + a.writtenBy})),
+    plan: f.ctx ? [
+      {key: 'workload', label: (f.ctx.incidents || []).some(i => i.workload === 'reporting-long-transaction') ? 'with the reporting job\'s transaction' : 'checkout only'},
+      {key: 'plans', label: f.actions.includes('checkCriticalQueries') ? 'checkCriticalQueries' : 'plan check skipped'},
+      {key: 'rollback', label: f.actions.includes('rehearseRollback') ? 'rehearseRollback' : 'rollback not rehearsed'},
+      {key: 'rewrite', label: f.plan?.rewritten ? 'rehearsed as rewritten' : 'rehearsed as written'}] : []});
+  const all = F.map(keys);
+  const prev = i => { for (let j = i - 1; j >= 0; j--) if (F[j].ctx) return all[j]; return null; };
+  const row = (k, title, sub, cls) => `<tr><td class="k">${title}<small>${sub}</small></td>${F.map((f, i) => `<td>${f.ctx
+    ? chips(all[i][k], prev(i)?.[k]?.map(x => x.key), cls) : '<span class="small muted">From the record of an earlier session.</span>'}</td>`).join('')}<td class="rec"></td></tr>`;
+  const offish = i => /skipped|not rehearsed|as written|checkout only/.test(i.label) ? 'off' : '';
+  return `<tr class="sec"><td colspan="${F.length + 2}">What each run knew · from the datapacks it read</td></tr>`
+    + row('rules', 'Standard and policy', 'shared knowledge')
+    + row('limits', 'Limits it applied', 'read from the rules')
+    + row('incidents', 'Incidents on orders', 'other teams\' memory')
+    + row('queries', 'Critical queries', 'other teams\' memory')
+    + row('aside', 'Set aside', 'found, but not about this')
+    + row('plan', 'So the planner…', 'chose by what it knew', offish);
+}
+
+/** What each statement of the pull request met in each run, and the change the context recommends. */
+function statementRows(F) {
+  const ref = F.find(f => f.plan?.asWritten);
+  if (!ref) return '';
+  const latest = [...F].reverse().find(f => f.plan?.rewritten);
+  const stallOf = f => f.ctx?.stallMillis || 3000;
+  const rows = [];
+  for (const script of ref.plan.asWritten) {
+    const rel = releaseOf(script.name);
+    // The whole file: the session settings MIG-01 asks for.
+    const whole = F.some(f => (f.plan?.findings || []).some(x => releaseOf(x.script) === rel && x.statement === 0));
+    const items = (whole ? [{n: 0, text: '(every statement in the file)'}] : []).concat(script.steps.map((st, i) => ({n: i + 1, text: st.text})));
+    rows.push(`<tr class="sec"><td colspan="${F.length + 2}">${esc(rel.replace('release-', 'Release '))} · statement by statement</td></tr>`);
+    for (const it of items) {
+      const cells = F.map(f => {
+        if (!f.plan) return '<td><span class="small muted">From the record of an earlier session.</span></td>';
+        const out = [];
+        (f.plan.findings || []).filter(x => releaseOf(x.script) === rel && x.statement === it.n)
+          .forEach(x => out.push({key: x.ruleId + it.n, label: x.ruleId + ': ' + cut(x.problem, 60), tip: x.problem, cls: 'warn'}));
+        // The steps that ran for this statement: itself as written, or what replaced it.
+        const mine = f.plan.rewritten
+          ? (f.plan.scripts.find(sc => releaseOf(sc.name) === rel)?.steps || []).map((st, i) => ({st, num: i + 1})).filter(x => x.st.replaces === it.n).map(x => x.num)
+          : (it.n ? [it.n] : []);
+        const ran = f.steps.filter(s => releaseOf(s.script) === rel && mine.includes(s.number));
+        ran.forEach(s => {
+          if (!s.ok) out.push({key: 'f' + s.number, label: 'failed', tip: s.error, cls: 'bad'});
+          if (s.rewrote) out.push({key: 'rw', label: 'rewrote the table · ' + bytes(s.walBytes) + ' WAL', cls: 'bad'});
+          if (s.worstCheckoutMillis > stallOf(f)) out.push({key: 'st', label: 'checkout stalled ' + ms(s.worstCheckoutMillis), cls: 'bad'});
+          if (s.migrationWaitedOnLock) out.push({key: 'lk', label: 'waited for its lock' + (s.attempts > 1 ? ' · ' + s.attempts + ' attempts' : ''), cls: 'warn'});
+        });
+        // The plan check: a critical query that lost an index this statement drops.
+        const drops = dropsOf(it.text);
+        (f.plans || []).filter(c => c.regressed && drops.includes(c.before.index)).forEach(c => {
+          out.push({key: 'pq', label: c.before.name + ': ' + c.before.buffers + ' → ' + c.after.buffers.toLocaleString() + ' buffers', cls: 'bad'});
+          if (c.kept) out.push({key: 'kp', label: 'index kept: ' + c.kept.buffers + ' buffers', cls: c.keptFixes ? 'ok' : 'bad'});
+        });
+        if (drops.length && f.actions.includes('noCriticalQueries'))
+          out.push({key: 'np', label: 'no critical query known to check', cls: 'warn'});
+        const measured = ran.length && !out.length;
+        return `<td>${out.length ? '<div class="cx">' + out.map(o => `<span class="${o.cls}" title="${esc(o.tip || '')}">${esc(o.label)}</span>`).join('') + '</div>'
+          : `<span class="small muted">${measured ? 'measured: no issue' + (f.plan.rewritten ? ' (as rewritten)' : '')
+            : Object.keys(f.ctx?.rules || {}).length ? 'no finding' : 'not reviewed: no standard'}</span>`}</td>`;
+      }).join('');
+      rows.push(`<tr><td class="k stmt">${it.n ? '#' + it.n : 'File'}<small><code style="white-space:pre-wrap">${esc(cut(it.text, 140))}</code></small></td>${cells}<td class="rec">${recommendation(latest, rel, it)}</td></tr>`);
+    }
+  }
+  return rows.join('');
+}
+
+/** The change the context recommends for one statement, and where it came from (a rule's datapack, a team's memory). */
+function recommendation(f, rel, it) {
+  if (!f) return '<span class="small muted">Needs the standard: no run has had it yet.</span>';
+  const rules = (f.plan.findings || []).filter(x => releaseOf(x.script) === rel && x.statement === it.n).map(x => x.ruleId);
+  const from = ids => { const u = [...new Set(ids)], dp = [...new Set(u.map(id => f.ctx?.rules?.[id]?.datapack).filter(Boolean))];
+    return u.join(', ') + (dp.length ? ', from the standard in ' + dp.join(', ') + '\'s knowledge base' : ''); };
+  if (it.n === 0) return rules.length && f.ctx?.lockTimeout
+    ? `<pre class="sqlx new">SET lock_timeout = '${esc(f.ctx.lockTimeout)}';  -- retried up to ${f.ctx.maxAttempts || 1} times on 55P03</pre><span class="src">${esc(from(rules))}</span>` : '';
+  const steps = (f.plan.scripts.find(sc => releaseOf(sc.name) === rel)?.steps || []).filter(st => st.replaces === it.n);
+  const drops = dropsOf(it.text);
+  // A drop a critical query needs, proven by putting the index back on the branch: the recommendation is not to drop it.
+  const needed = (f.plans || []).filter(c => c.regressed && c.keptFixes && drops.includes(c.before.index));
+  if (needed.length) {
+    const q = needed[0], owner = (f.ctx?.queries || []).find(x => x.name === q.before.name);
+    return `<pre class="sqlx drop">${esc(steps.map(st => st.text).join(';\n'))}</pre><b class="small">Keep ${esc(q.before.index)}: remove this statement.</b>
+      <span class="src">${esc(q.before.name)} needs it · ${esc(owner ? owner.writtenBy + ' · ' + owner.datapack : 'critical query')}</span>`;
+  }
+  if (!rules.length) return '<span class="small muted">No change.</span>';
+  return `<pre class="sqlx new">${esc(steps.map(st => st.text).join(';\n'))}</pre><span class="src">${esc(from(rules))}</span>`;
+}
+
+/** The outcome of each run: its verdict, and what kept it from approval or what it asks to change. */
+function outcomeRow(F) {
+  return `<tr class="sec"><td colspan="${F.length + 2}">Outcome</td></tr><tr><td class="k">Decision<small>what blocked it · what to change</small></td>${F.map(f => {
+    const d = f.decision;
+    if (!d) return `<td><span class="verdict ${esc(f.r.verdict || '')}">${esc((f.r.verdict || '').replaceAll('_', ' '))}</span></td>`;
+    return `<td><span class="verdict ${d.verdict}">${d.verdict.replaceAll('_', ' ')}</span>
+      ${(d.blocking || []).length ? '<div class="cx" style="margin-top:6px">' + d.blocking.map(b => `<span class="bad" title="${esc(b)}">${esc(cut(b, 70))}</span>`).join('') + '</div>' : ''}
+      ${(d.changes || []).length ? '<div class="cx" style="margin-top:6px">' + d.changes.map(c => `<span class="ok" title="${esc(c)}">${esc(cut(c, 70))}</span>`).join('') + '</div>' : ''}</td>`;
+  }).join('')}<td class="rec"></td></tr>`;
+}
+
+function acrossRuns(runs) {
+  const F = runs.map(factsOf);
+  if (!F.some(f => f.ctx)) return '';
+  return `<h3>Run by run: what the context changed</h3>
+    <p class="small muted">The same agent and the same pull request each time; only what the datapack held changed. <b>+</b> marks what a run knew that the run before it did not.</p>
+    <div class="xr-wrap"><table class="xr"><tr><th></th>${F.map((f, i) => `<th>Run ${i + 1}<br><span class="small muted">${esc(f.r.label)}</span></th>`).join('')}<th>Recommended change<br><span class="small muted">from the context</span></th></tr>
+    ${contextRows(F)}${statementRows(F)}${outcomeRow(F)}</table></div>`;
+}
+
 function renderRuns() {
   const runs = allRuns();
   if (state.step < 2) { $('results').hidden = true; return; }
@@ -1150,6 +1054,7 @@ function renderRuns() {
       <span class="n">Run ${i + 1} · ${esc(r.label)}</span>
       <span class="verdict ${d ? d.verdict : r.verdict || ''}">${d ? d.verdict.replaceAll('_', ' ') : r.summary ? esc(r.verdict.replaceAll('_', ' ')) : esc(r.status === 'failed' ? 'failed' : 'running…')}</span>
       ${r.summary ? '<span class="small muted">From the record of an earlier session</span>' : ''}
+      ${d && d.verdict && 'blocking' in d ? `<span class="why">${esc(cut((d.blocking || [])[0] || ((d.changes || []).length ? d.changes.length + ' change(s): ' + d.changes[d.changes.length - 1] : 'No change needed.'), 110))}</span>` : ''}
       ${dmg ? `<span class="metric">Rows the job changed <b>${dmg.damaged}</b></span><span class="metric">Left alone <b>${dmg.genuine + dmg.createdAfter}</b></span>` : ''}
       ${reh ? `<span class="metric">Checkout's worst insert <b>${ms(reh.checkout.worstMillis)}</b></span>
         <span class="metric">Table rewrites <b>${reh.scripts.flatMap(s => s.steps).filter(s => s.rewrote).length}</b></span>` : ''}
@@ -1157,7 +1062,7 @@ function renderRuns() {
   }).join('');
   document.querySelectorAll('.run').forEach(b => b.onclick = () => { state.selected = b.dataset.id; renderRuns(); });
   const run = runs.find(r => r.id === state.selected) || runs[runs.length - 1];
-  $('result').innerHTML = run ? renderResult(run) : '';
+  $('result').innerHTML = (state.useCase === 'release' ? acrossRuns(runs) : '') + (run ? `<h3>Run ${runs.indexOf(run) + 1} in detail</h3>` + renderResult(run) : '');
 }
 
 /**
@@ -1261,15 +1166,16 @@ function renderResult(run) {
         ${!ctx.incidents.length && !ctx.queries.length ? '<li class="muted">No incident and no critical query on orders.</li>' : ''}</ul>
       ${ctx.setAside.length ? `<b class="small">Set aside</b><ul class="plain">${ctx.setAside.map(a => `<li><span class="aside">${esc(a.text.slice(0, 110))}…</span> <span class="muted">${esc(a.reason)}</span> <span class="who">— ${esc(a.writtenBy)} · ${esc(a.datapack)}</span></li>`).join('')}</ul>` : ''}` : '<span class="muted">…</span>'}</div>`;
   html += `<div class="sub-box"><h3>Review against the standard</h3><p class="small muted">${esc(review?.text || '…')}</p>
-      ${review?.data?.findings?.length ? `<ul class="plain">${review.data.findings.map(f => `<li><span class="tag warn">${esc(f.ruleId)}</span> ${esc(f.script)} #${f.statement}: ${esc(f.problem)}</li>`).join('')}</ul>` : ''}</div>`;
+      <p class="small" style="margin-top:6px">Each finding, the statement it is about and what it was rewritten to: <b>Run by run</b>, above.</p></div>`;
   html += '</div>';
   if (steps.length) html += `<h3>On the rehearsal branch</h3><div class="tablewrap"><table><tr><th>Step</th><th>Statement</th><th class="num">Took</th><th>Evidence</th><th class="num">Checkout's worst insert</th><th class="num">WAL</th></tr>
     ${steps.map(s => `<tr><td>${s.rollback ? 'rollback ' : ''}${esc(s.script.replace('.sql', ''))} #${s.number}</td><td class="sql">${esc(s.text)}</td><td class="num">${ms(s.millis)}</td>
       <td>${s.ok ? '' : '<span class="tag bad">failed</span>'}${s.rewrote ? '<span class="tag bad">rewrote the table</span>' : ''}${s.migrationWaitedOnLock ? '<span class="tag warn">waited for its lock</span>' : ''}${s.checkoutWaitedOnLock ? '<span class="tag warn">checkout queued</span>' : ''}${s.attempts > 1 ? `<span class="tag warn">${s.attempts} attempts</span>` : ''}${s.error && !s.ok ? `<div class="small muted">${esc(s.error)}</div>` : ''}</td>
       <td class="num">${s.worstCheckoutMillis > stall ? `<span class="tag bad">${ms(s.worstCheckoutMillis)}</span>` : ms(s.worstCheckoutMillis)}</td><td class="num">${bytes(s.walBytes)}</td></tr>`).join('')}</table></div>`;
-  if (planCheck) html += `<h3>Critical queries</h3><p class="small muted">${esc(planCheck.text)}</p>${(planCheck.data || []).length ? `<div class="tablewrap"><table><tr><th>Query</th><th>Before</th><th>After</th><th class="num">Buffers</th></tr>
+  if (planCheck) html += `<h3>Critical queries</h3><p class="small muted">${esc(planCheck.text)}</p>${(planCheck.data || []).length ? `<div class="tablewrap"><table><tr><th>Query</th><th>Before</th><th>After</th><th class="num">Buffers</th><th>With the dropped index put back</th></tr>
     ${planCheck.data.map(c => `<tr><td>${esc(c.before.name)}</td><td>${esc(c.before.node)} ${c.before.index ? 'on <code>' + esc(c.before.index) + '</code>' : ''}</td><td>${esc(c.after.node)} ${c.after.index ? 'on <code>' + esc(c.after.index) + '</code>' : ''}</td>
-      <td class="num">${c.before.buffers} → ${c.regressed ? `<span class="tag bad">${c.after.buffers}</span>` : c.after.buffers}</td></tr>`).join('')}</table></div>` : ''}`;
+      <td class="num">${c.before.buffers} → ${c.regressed ? `<span class="tag bad">${c.after.buffers}</span>` : c.after.buffers}</td>
+      <td>${c.kept ? `<span class="tag ${c.keptFixes ? 'ok' : 'bad'}">${c.kept.buffers} buffers</span> ${esc(c.kept.node)}${c.keptFixes ? ': keeping it fixes the query' : ': not enough'}` : '<span class="muted">—</span>'}</td></tr>`).join('')}</table></div>` : ''}`;
   if (rollback) html += `<h3>Rollback</h3><p class="small muted">${esc(rollback.text)}</p>`;
   return html;
 }

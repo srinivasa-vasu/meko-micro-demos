@@ -1,11 +1,8 @@
 package meko.agentic.sre.meko;
 
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.definition.DefaultToolDefinition;
-import org.springframework.ai.tool.definition.ToolDefinition;
+import meko.agentic.client.MekoMcpClient;
+import meko.agentic.client.MekoProperties;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
@@ -36,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ToolArgumentContractTest {
 
     /** Captures the JSON each tool is called with, and answers with something parseable. */
-    private static final class RecordingCallback implements ToolCallback {
+    private static final class RecordingCallback {
         private final String name;
         private final String response;
         private final List<String> payloads = new ArrayList<>();
@@ -44,18 +41,6 @@ class ToolArgumentContractTest {
         RecordingCallback(String name, String response) {
             this.name = name;
             this.response = response;
-        }
-
-        @Override
-        public ToolDefinition getToolDefinition() {
-            return DefaultToolDefinition.builder()
-                    .name(name).description(name).inputSchema("{}").build();
-        }
-
-        @Override
-        public String call(String toolInput) {
-            payloads.add(toolInput);
-            return response;
         }
     }
 
@@ -82,7 +67,7 @@ class ToolArgumentContractTest {
     }
 
     private MekoToolBridge bridgeWith(String... toolNames) {
-        var callbacks = new ArrayList<ToolCallback>();
+        var callbacks = new ArrayList<RecordingCallback>();
         for (var name : toolNames) {
             var response = switch (name) {
                 case "conversation_create" -> CONVERSATION;
@@ -90,14 +75,27 @@ class ToolArgumentContractTest {
                 case "knowledgebase_search" -> chunks(13);
                 default -> EMPTY_RESULTS;
             };
-            // Namespaced the way Spring AI registers MCP tools, to exercise suffix matching.
+            // Namespaced, as an older client registered tools, to exercise suffix matching.
             var cb = new RecordingCallback("mekodata_" + name, response);
             calls.put(name, cb);
             callbacks.add(cb);
         }
-        var provider = Mockito.mock(SyncMcpToolCallbackProvider.class);
-        Mockito.when(provider.getToolCallbacks()).thenReturn(callbacks.toArray(new ToolCallback[0]));
-        return new MekoToolBridge(provider, new ObjectMapper(), "sre-agent");
+        var mapper = new ObjectMapper();
+        // The shared client, answering from the recordings: what each tool was sent, as JSON.
+        var meko = new MekoMcpClient(new MekoProperties()) {
+            @Override
+            public List<Tool> tools() {
+                return callbacks.stream().map(cb -> new Tool(cb.name, cb.name, "{}")).toList();
+            }
+
+            @Override
+            public RawCall raw(String tool, Map<String, Object> arguments) {
+                var cb = callbacks.stream().filter(c -> c.name.equals(tool)).findFirst().orElseThrow();
+                cb.payloads.add(mapper.writeValueAsString(arguments));
+                return new RawCall(tool, arguments, true, null, cb.response, 0);
+            }
+        };
+        return new MekoToolBridge(meko, mapper, "sre-agent");
     }
 
     private Map<String, Object> lastArgsFor(String tool) {

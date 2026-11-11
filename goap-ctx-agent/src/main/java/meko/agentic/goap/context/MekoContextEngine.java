@@ -1,5 +1,6 @@
 package meko.agentic.goap.context;
 
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
@@ -39,7 +40,7 @@ public class MekoContextEngine implements ContextEngine {
                     "conversation_id", conversationId,
                     "input", complaint,
                     "output", "Intake opened case " + caseId,
-                    "agent_id", MekoMcpClient.CONVERSATION_OWNER,
+                    "agent_id", meko.conversationOwner(),
                     "reasoning", "Case opened by " + agentId + "; context retrieval follows.",
                     "plan", List.of("Retrieve historical memory", "Retrieve institutional knowledge", "Hand the case to the investigator"),
                     "metadata", meko.json(Map.of("caseId", caseId, "agent", agentId)),

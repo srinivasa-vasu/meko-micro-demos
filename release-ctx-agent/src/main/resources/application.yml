@@ -19,6 +19,8 @@ meko:
   datapack-name: ${MEKO_DATAPACK_NAME:}
   mcp-url: ${MEKO_MCP_URL:https://mcp.mekodata.ai/mcp}
   client-name: ${spring.application.name}
+  # The agent id that owns this application's record conversations.
+  conversation-owner: release-records
 
 release:
   # The organization's shared datapack to read besides the release team's own (other teams' incidents and critical

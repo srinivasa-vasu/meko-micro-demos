@@ -1,0 +1,52 @@
+{
+  // Every demo in this repository, ready to run in GitHub Codespaces (or any dev container host).
+  "name": "Meko micro demos",
+  "image": "mcr.microsoft.com/devcontainers/java:1-21-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "none",
+      "installMaven": "true"
+    }
+  },
+  // The demos share meko-client and workshop-kit: install them once, so each demo runs with mvn spring-boot:run.
+  "postCreateCommand": "mvn -q -B install -DskipTests -pl meko-client,workshop-kit",
+  "forwardPorts": [8080, 8081, 8082, 8090],
+  "portsAttributes": {
+    "8080": {"label": "goap-ctx-agent", "onAutoForward": "notify"},
+    "8081": {"label": "support-ctx-agent", "onAutoForward": "notify"},
+    "8082": {"label": "release-ctx-agent", "onAutoForward": "notify"},
+    "8090": {"label": "meko-console", "onAutoForward": "notify"}
+  },
+  // Offered when the codespace is created; each becomes an environment variable. All optional: goap-ctx-agent runs
+  // offline without any of them. Model keys: one is enough, for the provider (profile) you run with.
+  "secrets": {
+    "MEKO_API_KEY": {
+      "description": "Your Meko API key: live Meko for every demo, and AMP for release-ctx-agent.",
+      "documentationUrl": "https://cloud.mekodata.ai/signup"
+    },
+    "AMP_PASSWORD": {
+      "description": "release-ctx-agent: the password for the AMP cluster it creates or uses (else the page asks)."
+    },
+    "GROQ_API_KEY": {
+      "description": "Model key for Groq: goap-ctx-agent's model mode (its default provider), and support-ctx-agent's groq profile.",
+      "documentationUrl": "https://console.groq.com/keys"
+    },
+    "OPENROUTER_API_KEY": {
+      "description": "Model key for OpenRouter: support-ctx-agent's default provider, and goap-ctx-agent's openrouter profile.",
+      "documentationUrl": "https://openrouter.ai/keys"
+    },
+    "GOOGLE_API_KEY": {
+      "description": "Model key for Gemini: support-ctx-agent's gemini profile.",
+      "documentationUrl": "https://aistudio.google.com/apikey"
+    }
+  },
+  "hostRequirements": {"cpus": 2, "memory": "8gb"},
+  "customizations": {
+    "vscode": {
+      "extensions": ["vscjava.vscode-java-pack", "vmware.vscode-spring-boot"]
+    },
+    "codespaces": {
+      "openFiles": ["README.md"]
+    }
+  }
+}

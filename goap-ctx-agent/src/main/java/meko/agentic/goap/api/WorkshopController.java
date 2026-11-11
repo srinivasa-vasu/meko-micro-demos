@@ -1,6 +1,6 @@
 package meko.agentic.goap.api;
 
-import meko.agentic.goap.context.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import meko.agentic.goap.story.KnowledgeDocuments;
 import meko.agentic.goap.story.StoryCatalog;
 import meko.agentic.goap.story.StorySeeder;
@@ -33,10 +33,19 @@ public class WorkshopController {
     private final meko.agentic.goap.story.StoryService stories;
     private final meko.agentic.goap.context.MekoSelfLearning selfLearning;
 
+    /** One piece of work that changes the datapack at a time: switching datapacks and adding to one enter it. */
+    private final WorkGate gate;
+    /** The run the page can follow again, and the progress kept in Meko. */
+    private final RunJobs jobs;
+    private final WorkshopProgress progress;
+
     public WorkshopController(Workshop workshop, StorySeeder seeder, StoryCatalog catalog, ContextStores stores, MekoMcpClient meko,
                               @org.springframework.beans.factory.annotation.Value("${goap.llm.enabled:true}") boolean models,
                               KnowledgeDocuments files, meko.agentic.goap.story.StoryService stories,
-                              meko.agentic.goap.context.MekoSelfLearning selfLearning) {
+                              meko.agentic.goap.context.MekoSelfLearning selfLearning, WorkGate gate, RunJobs jobs, WorkshopProgress progress) {
+        this.gate = gate;
+        this.jobs = jobs;
+        this.progress = progress;
         this.selfLearning = selfLearning;
         this.stories = stories;
         this.files = files;
@@ -134,9 +143,11 @@ public class WorkshopController {
     @GetMapping("/datapacks")
     public List<Map<String, Object>> datapacks() throws Exception {
         return meko.listDatapacks().stream()
+                // The progress datapack holds the page's records, not context: never offered as a workshop datapack.
+                .filter(d -> !WorkshopProgress.isProgress(d.get("name")))
                 .sorted(java.util.Comparator.<Map<String, String>, Boolean>comparing(d -> !d.get("name").startsWith("meko-workshop"))
                         .thenComparing(d -> d.get("created"), java.util.Comparator.reverseOrder()))
-                .map(d -> Map.<String, Object>of("name", d.get("name"), "created", d.get("created"), "workshop", d.get("name").startsWith("meko-workshop"),
+                .map(d -> Map.<String, Object>of("id", d.get("id"), "name", d.get("name"), "created", d.get("created"), "workshop", d.get("name").startsWith("meko-workshop"),
                         // Shared with this key by someone else (the pair exercise): who owns it.
                         "sharedBy", d.getOrDefault("grant", "owner").equals("owner") || d.getOrDefault("grant", "").isBlank() ? "" : d.getOrDefault("owner", "")))
                 .toList();
@@ -144,7 +155,7 @@ public class WorkshopController {
 
     /** The project every datapack created by the workshop is filed into, one folder per vertical. */
     static final String PROJECT = "meko-workshop";
-    private static final String PROJECT_DESCRIPTION = "Datapacks created by the Meko workshop, by vertical: SDLC (New Session, Same Context) "
+    static final String PROJECT_DESCRIPTION = "Datapacks created by the Meko workshop, by vertical: SDLC (New Session, Same Context) "
             + "and BFSI (disputes, KYC, the organization learned, lending). A datapack shared by all use cases is in its own folder.";
     /** The folder for each group the page names: its name and what belongs in it. */
     private static final Map<String, List<String>> FOLDERS = Map.of(
@@ -162,6 +173,12 @@ public class WorkshopController {
                                         @org.springframework.web.bind.annotation.RequestParam(defaultValue = "true") boolean create,
                                         @org.springframework.web.bind.annotation.RequestParam(required = false) String id,
                                         @org.springframework.web.bind.annotation.RequestParam(required = false) String group) throws Exception {
+        try (var pass = gate.enter("switching datapacks")) {
+            return datapackGuarded(name, create, id, group);
+        }
+    }
+
+    private Map<String, Object> datapackGuarded(String name, boolean create, String id, String group) throws Exception {
         if (!name.matches("[a-z0-9][a-z0-9-]{2,62}")) {
             throw new IllegalArgumentException("Use 3 to 63 lowercase letters, digits and hyphens, starting with a letter or digit.");
         }
@@ -267,6 +284,56 @@ public class WorkshopController {
         return Map.of("available", false, "reason", "Self-learning reads the search log of a live Meko datapack: connect one at step 1 (the offline stand-in has none).");
     }
 
+    /**
+     * Deletes a workshop datapack the participant is done with, and everything in it (memory, knowledge, and the
+     * conversations its agents opened, which count against the account's limit). Only a workshop datapack this key owns:
+     * never the progress datapack, and never one the workshop did not create (delete those in the Meko app).
+     */
+    @PostMapping("/datapack/delete")
+    public Map<String, Object> deleteDatapack(@org.springframework.web.bind.annotation.RequestParam String id) throws Exception {
+        try (var pass = gate.enter("deleting a datapack")) {
+            Map<String, String> row = meko.listDatapacks().stream().filter(d -> id.equals(d.get("id"))).findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException("This account has no datapack with that id."));
+            String name = row.get("name");
+            if (!"owner".equals(row.getOrDefault("grant", "owner"))) {
+                throw new IllegalArgumentException("Only a datapack you own can be deleted: " + name + " is shared with you.");
+            }
+            if (WorkshopProgress.isProgress(name) || !name.startsWith("meko-workshop")) {
+                throw new IllegalArgumentException(name + " was not created by the workshop: delete it in the Meko app if you mean to.");
+            }
+            meko.deleteDatapack(id);
+            progress.forget(id);
+            Map<String, Object> r = new LinkedHashMap<>(status());
+            r.put("deleted", name);
+            return r;
+        }
+    }
+
+    /**
+     * The workshop's progress for a workshop datapack, read back from its record in the participant's progress
+     * datapack; {@code available: false} without a Meko key (the page then keeps progress in the browser). With it, the
+     * run the page can follow again or still has to record, if any.
+     */
+    @GetMapping("/progress")
+    public Map<String, Object> progress(@org.springframework.web.bind.annotation.RequestParam String context) throws Exception {
+        Map<String, Object> out = new LinkedHashMap<>(progress.available() ? progress.load(context) : Map.of("available", false));
+        RunJobs.Job pending = jobs.pending();
+        if (pending != null) out.put("job", pending.describe());
+        return out;
+    }
+
+    /** One run (or audit) of a use case's stage, as the page kept it: recorded in the progress datapack. */
+    public record ProgressRun(String context, String contextName, String useCase, int stage, String kind, Object run, String job) {}
+
+    @PostMapping("/progress")
+    public Map<String, Object> record(@org.springframework.web.bind.annotation.RequestBody ProgressRun r) throws Exception {
+        if (!progress.available()) return Map.of("recorded", false);
+        if (r.useCase() == null || r.context() == null || r.run() == null) throw new IllegalArgumentException("A run needs its datapack, use case and stage.");
+        progress.save(r.context(), r.contextName(), r.useCase(), r.stage(), r.kind() == null ? "run" : r.kind(), r.run());
+        if (r.job() != null) jobs.recorded(r.job());
+        return Map.of("recorded", true);
+    }
+
     /** A request this application cannot act on (a bad name, an unknown datapack): 400. */
     @org.springframework.web.bind.annotation.ExceptionHandler(IllegalArgumentException.class)
     public org.springframework.http.ResponseEntity<Map<String, String>> badRequest(RuntimeException e) {
@@ -294,6 +361,12 @@ public class WorkshopController {
      */
     @PostMapping("/upload")
     public Map<String, Object> upload(@org.springframework.web.bind.annotation.RequestParam(required = false) String useCase) {
+        try (var pass = gate.enter("the documents' upload")) {
+            return uploadGuarded(useCase);
+        }
+    }
+
+    private Map<String, Object> uploadGuarded(String useCase) {
         Map<String, Object> r = new LinkedHashMap<>(Map.of("uploaded",
                 seeder.uploadDocuments(useCase == null ? workshop.documents() : workshop.useCase(useCase).documents())));
         r.putAll(status());
@@ -303,6 +376,12 @@ public class WorkshopController {
     /** The fallback when uploading through Meko's MCP fails: a one-line version of each document, promoted (see {@link StorySeeder#addDocuments}). */
     @PostMapping("/documents")
     public Map<String, Object> addDocuments(@org.springframework.web.bind.annotation.RequestParam(required = false) String useCase) {
+        try (var pass = gate.enter("adding the one-line documents")) {
+            return addDocumentsGuarded(useCase);
+        }
+    }
+
+    private Map<String, Object> addDocumentsGuarded(String useCase) {
         // Only the use case's own documents: another use case's earlier stages stay as they are.
         Map<String, String> added = seeder.addDocuments(useCase == null ? workshop.documents() : workshop.useCase(useCase).documents());
         Map<String, Object> r = new LinkedHashMap<>(Map.of("added", added));
@@ -322,6 +401,12 @@ public class WorkshopController {
     /** Stage 2: the organizational history the use cases read. */
     @PostMapping("/history")
     public Map<String, Object> seedHistory(@org.springframework.web.bind.annotation.RequestParam(required = false) String useCase) {
+        try (var pass = gate.enter("adding last quarter's reviews")) {
+            return seedHistoryGuarded(useCase);
+        }
+    }
+
+    private Map<String, Object> seedHistoryGuarded(String useCase) {
         Map<String, String> seeded = seeder.seedHistory(useCase == null ? workshop.historyUseCases() : List.of(workshop.useCase(useCase).id()));
         Map<String, Object> r = new LinkedHashMap<>(Map.of("seeded", seeded));
         // Every review written (or already there): seeded, as the writes report it. Searching again straight away would

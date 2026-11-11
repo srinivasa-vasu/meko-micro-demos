@@ -1,5 +1,6 @@
 package meko.agentic.goap.story;
 
+import meko.agentic.client.MekoMcpClient;
 import meko.agentic.goap.story.store.ContextStore;
 import meko.agentic.goap.story.store.ContextStores;
 import meko.agentic.goap.story.store.StoreRecord;
@@ -107,7 +108,7 @@ public class StorySeeder {
     private final meko.agentic.goap.story.store.ReceiptLog receipts;
 
     public StorySeeder(ContextStores stores, KnowledgeDocuments documents, ProfileFingerprints fingerprints, Workshop workshop,
-                       meko.agentic.goap.story.store.ReceiptLog receipts, meko.agentic.goap.context.MekoMcpClient meko) {
+                       meko.agentic.goap.story.store.ReceiptLog receipts, meko.agentic.client.MekoMcpClient meko) {
         this.receipts = receipts;
         // Upload keys belong to a datapack: another datapack starts with none.
         meko.beforeDatapackSwitch(uploadKeys::clear);

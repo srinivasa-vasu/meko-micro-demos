@@ -1,9 +1,8 @@
 package meko.console.mcp;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
-import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.definition.DefaultToolDefinition;
+import meko.agentic.client.MekoMcpClient;
+import meko.agentic.client.MekoProperties;
 
 import java.util.List;
 
@@ -12,8 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 /**
  * context_search buckets, memory_get_by_id's bare object, and raw call templates.
@@ -86,12 +83,13 @@ class ContextAndTemplateTest {
     // ------------------------------------------------------------------
 
     private MekoClient withTool(String name, String schema) {
-        var callback = mock(ToolCallback.class);
-        when(callback.getToolDefinition()).thenReturn(DefaultToolDefinition.builder()
-                .name(name).description("").inputSchema(schema).build());
-        var provider = mock(SyncMcpToolCallbackProvider.class);
-        when(provider.getToolCallbacks()).thenReturn(new ToolCallback[] {callback});
-        return new MekoClient(provider, "meko-console");
+        var meko = new MekoMcpClient(new MekoProperties()) {
+            @Override
+            public List<Tool> tools() {
+                return List.of(new Tool(name, "", schema));
+            }
+        };
+        return new MekoClient(meko, "meko-console");
     }
 
     @Test

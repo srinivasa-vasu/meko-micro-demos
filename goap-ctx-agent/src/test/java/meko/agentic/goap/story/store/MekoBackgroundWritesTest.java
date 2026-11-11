@@ -1,7 +1,7 @@
 package meko.agentic.goap.story.store;
 
-import meko.agentic.goap.context.MekoMcpClient;
-import meko.agentic.goap.context.MekoProperties;
+import meko.agentic.client.MekoMcpClient;
+import meko.agentic.client.MekoProperties;
 import meko.agentic.goap.story.RunEvents;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;

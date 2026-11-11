@@ -1,5 +1,6 @@
 package meko.agentic.goap.context;
 
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 

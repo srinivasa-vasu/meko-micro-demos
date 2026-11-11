@@ -1,6 +1,6 @@
 package meko.agentic.goap.story.store;
 
-import meko.agentic.goap.context.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
@@ -104,7 +104,7 @@ public class MekoContextStore implements ContextStore {
         call(caseId, agentId, "conversation_add_message", "[" + thread + "] " + abbreviate(reasoning != null ? reasoning : input), () -> {
             meko.callTool("conversation_add_message", meko.args(
                     "conversation_id", thread(thread),
-                    "agent_id", MekoMcpClient.CONVERSATION_OWNER,
+                    "agent_id", meko.conversationOwner(),
                     "input", sentInput,
                     "output", output,
                     "reasoning", reasoning,
@@ -124,7 +124,7 @@ public class MekoContextStore implements ContextStore {
         return call(caseId, agentId, "conversation_get", "conversation " + thread, () -> {
             JsonNode conversation = meko.callTool("conversation_get", meko.args(
                     "conversation_id", thread(thread),
-                    "agent_id", MekoMcpClient.CONVERSATION_OWNER,
+                    "agent_id", meko.conversationOwner(),
                     "include_messages", true,
                     "datapack_id", meko.datapack()));
             List<Turn> turns = new ArrayList<>();

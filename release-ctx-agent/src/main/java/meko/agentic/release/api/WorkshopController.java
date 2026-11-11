@@ -15,7 +15,7 @@ import meko.agentic.release.agent.ReleaseMemory;
 import meko.agentic.release.agent.ReleaseModels;
 import meko.agentic.release.agent.ReleaseRehearsalAgent;
 import meko.agentic.release.amp.AmpDatabase;
-import meko.agentic.release.meko.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import meko.agentic.release.run.Jobs;
 import meko.agentic.release.run.PlanEvents;
 import org.springframework.http.HttpStatus;

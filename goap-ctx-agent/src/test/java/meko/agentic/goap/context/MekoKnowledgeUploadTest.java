@@ -1,5 +1,7 @@
 package meko.agentic.goap.context;
 
+import meko.agentic.client.MekoProperties;
+import meko.agentic.client.MekoMcpClient;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

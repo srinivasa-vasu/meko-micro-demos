@@ -19,7 +19,7 @@ Then each stage adds one kind of context, and participants run the use cases aga
 
 | Stage | What is in the datapack | What to look for |
 |---|---|---|
-| **0 · No context** | Nothing: only what the agents write during the run | What crosses a handoff, and what still cannot be decided |
+| **0 · Without context** | Nothing: only what the agents write during the run | What crosses a handoff, and what still cannot be decided |
 | **1 · Shared knowledge** | The dispute policies, uploaded as documents | Which steps disappear, and whether the agent picks the right policy |
 | **2 · Another desk's reviews** | Last quarter's reviews, written to memory by another desk's agent; then the KYC standard | Who wrote the context the agent used |
 | **3 · Collective memory & audit** | Lessons the agents promote from memory themselves | How a lesson reaches the next case; what an auditor gets from one id |
@@ -119,7 +119,7 @@ nothing is kept across a restart. Useful for practice; the live datapack is the 
 * **In order.** A step's button stays disabled until the earlier steps of that use case are done, and the page says
   which one to finish first. **Next step** lights up once the current step is done.
 * **Run** runs the use case with Meko, once per stage, and only while the datapack holds exactly that stage's context:
-  an earlier stage cannot be reproduced once later context is in the datapack (for example, *No context* after the
+  an earlier stage cannot be reproduced once later context is in the datapack (for example, *Without context* after the
   documents are uploaded). To run a stage again, *Start over with a new datapack*.
 * **Documents.** Press **Upload the documents**: the app uploads the files the step lists, from
   `src/main/resources/kb/`, to your datapack through Meko's MCP (`knowledgebase_upload_document`), and Meko indexes
@@ -145,7 +145,7 @@ The output has two parts:
     conversations at once). It shows the rating Meko gives each (*low*, *mid*, *high*) with its hint, the datapack's
     quality figure and the to-dos from its Self-learning tab. At a later stage, **Replay earlier weak searches** re-runs
     the ones an earlier stage's check found weak (`selflearning_verify`) and shows each one's band before and now. Press
-    *Check with Meko* after the *No context* run, then *Replay* after the documents run: the policy questions should
+    *Check with Meko* after the *Without context* run, then *Replay* after the documents run: the policy questions should
     move from low to high. These are extra searches, made by the agent `workshop:coverage-check`, and count against the
     participant's Meko search limit. The agents' own searches, and so the runs and their numbers, are unchanged.
 
@@ -192,7 +192,7 @@ crosses between them.
 | Step | What you do | What happens | What to look for |
 |---|---|---|---|
 | 1. Create your datapack | Create or choose it | | |
-| 2. Run with no context | Press **Run** | The chatbot writes what the customer established to Meko during the run, and the specialist recalls what it can. It then looks for a dispute policy: with none in reach, its rule is to hand the case to payments operations rather than decide. | Under *Memory*: who wrote what the specialist knew. Was the customer asked again? Why is nothing decided? |
+| 2. Run without context | Press **Run** | The chatbot writes what the customer established to Meko during the run, and the specialist recalls what it can. It then looks for a dispute policy: with none in reach, its rule is to hand the case to payments operations rather than decide. | Under *Memory*: who wrote what the specialist knew. Was the customer asked again? Why is nothing decided? |
 | 3. Add the documents | Press **Upload the documents** (`card-dispute-07-failed-capture-policy.md` and `card-dispute-03-chargeback-policy.md`), then **Check my datapack** | The step is done when both show *uploaded* (or *one-line version*). | |
 | 4. Run with shared knowledge | Press **Run** | The specialist looks for the policies, picks the one whose scope covers this case, and applies that policy's own rule on a provisional refund. | Which steps disappeared? Did the outcome change? Under *Right context*: the look-alike chargeback policy, and why it was set aside. |
 | 5. Audit | Press **Audit** | A compliance auditor, given only the transaction id, reads the whole record back from the conversation and checks it against the policy. | How many records did it have to request? Was the settlement checked before the decision? |
@@ -209,7 +209,7 @@ alone changes nothing (with no earlier review there is nothing to compare with),
 | Step | What you do | What happens | What to look for |
 |---|---|---|---|
 | 1. Create your datapack | Create or choose it | | |
-| 2. Run with no context | Press **Run** | With no earlier review to compare with, the agent's only path is to re-verify everything; the risk class is left to the reviewer. | How many evidence requests? Under *What the agents did*: which work is redone. |
+| 2. Run without context | Press **Run** | With no earlier review to compare with, the agent's only path is to re-verify everything; the risk class is left to the reviewer. | How many evidence requests? Under *What the agents did*: which work is redone. |
 | 3. Add last quarter's reviews | Press **Add their reviews** | Another desk's agent reviewed this customer last quarter, in its own application, and wrote the reviews to memory. They go into your datapack as that agent wrote them: the right one to compare with, and two look-alikes. | |
 | 4. Add the documents | Press **Upload the documents** (`kyc-periodic-review-standard.md`), then **Check my datapack** | | |
 | 5. Run with the standard and their reviews | Press **Run** | The agent looks for the latest review of exactly this customer to compare with, and judges each change by the rules the standard states: what is material, and what to request for it. | Under *Memory*: who wrote the review it compared with. Under *Right context*: the older review and the other customer's review, and why each was set aside. Under *Shared knowledge*: the rules it judged by. Compare the evidence requests with step 2. |
@@ -292,7 +292,7 @@ ids?
   * *An upload fails with a storage limit*: the Meko account's knowledge-base quota is full; free space or upgrade, or
     use *Add one-line versions*.
   * *Exercise 1 (a changed policy)*: changed content is a new upload, so it goes into a fresh datapack.
-  * *No context does not look empty*: the datapack is not new. Use a fresh one.
+  * *Without context does not look empty*: the datapack is not new. Use a fresh one.
   * *Promotion failed*: the key is not the datapack's owner or a maintainer.
   * *Run with the lesson keeps waiting (shared datapack)*: the EU desk has not run case 1 yet, or has not shared the
     datapack; press *Check my datapack* once it has.

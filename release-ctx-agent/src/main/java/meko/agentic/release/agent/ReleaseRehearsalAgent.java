@@ -101,7 +101,7 @@ public class ReleaseRehearsalAgent {
         List<Finding> findings = MigrationReview.review(asWritten, context);
         boolean rewrite = !findings.isEmpty();
         List<MigrationScript> scripts = rewrite ? scripts(REWRITTEN) : asWritten;
-        ReleasePlan plan = new ReleasePlan(context.runId(), context.prId(), rewrite, scripts, scripts(ROLLBACK), findings);
+        ReleasePlan plan = new ReleasePlan(context.runId(), context.prId(), rewrite, scripts, scripts(ROLLBACK), findings, asWritten);
         job.event("review", findings.isEmpty()
                 ? (context.rules().isEmpty() ? "No standard to review against: the migrations are rehearsed as written."
                         : "The migrations break none of the rules found: rehearsed as written.")
@@ -168,10 +168,29 @@ public class ReleaseRehearsalAgent {
         // The factor REL-03 states; without it, plans are compared and shown, and none is called a regression.
         long factor = context.regressionFactor();
         if (factor == 0) job.log("No release policy states a plan regression limit: the plans are compared, not judged.");
+        Set<String> now = RehearsalRunner.schema(branch.open().endpoint());
         for (RehearsalRunner.QueryPlan before : baseline.plans()) {
             RehearsalRunner.QueryPlan after = RehearsalRunner.explain(branch.open().endpoint(), before.name(), before.sql());
             boolean regressed = factor > 0 && after.buffers() >= MIN_REGRESSION_BUFFERS && after.buffers() > before.buffers() * factor;
-            comparisons.add(new PlanComparison(before, after, regressed));
+            RehearsalRunner.QueryPlan kept = null;
+            boolean keptFixes = false;
+            // The release dropped the index this query used: put that exact index back on the branch, plan the query
+            // again, and drop it once more (the rollback is rehearsed against the release as it ships). Keeping the
+            // index is a change only once this shows it brings the query back.
+            String definition = regressed ? droppedIndex(baseline.schema(), now, before.index()) : null;
+            if (definition != null) {
+                RehearsalRunner.execute(branch.open().endpoint(), definition.replaceFirst("(?i)^CREATE (UNIQUE )?INDEX ", "CREATE $1INDEX CONCURRENTLY IF NOT EXISTS "));
+                try {
+                    kept = RehearsalRunner.explain(branch.open().endpoint(), before.name(), before.sql());
+                    keptFixes = kept.buffers() <= Math.max(MIN_REGRESSION_BUFFERS, before.buffers() * factor);
+                } finally {
+                    RehearsalRunner.execute(branch.open().endpoint(), "DROP INDEX CONCURRENTLY IF EXISTS " + before.index());
+                }
+                job.log("Put " + before.index() + " back on the branch: the " + before.name() + " query reads " + kept.buffers()
+                        + " buffers (" + kept.node() + "), against " + before.buffers() + " before the migrations"
+                        + (keptFixes ? ": keeping it fixes the query." : ": keeping it does not fix the query."));
+            }
+            comparisons.add(new PlanComparison(before, after, regressed, kept, keptFixes));
         }
         PlanCheck check = new PlanCheck(branch.runId(), false, comparisons);
         job.event("plans", check.regressions().isEmpty() ? (factor > 0 ? "No critical query read more than " + factor + "× its buffers before (REL-03)."
@@ -236,6 +255,7 @@ public class ReleaseRehearsalAgent {
         Jobs.Job job = job(context.runId());
         RehearsalRunner.Result result = rehearsal.result();
         List<String> reasons = new ArrayList<>();
+        List<String> blocking = new ArrayList<>();
         List<String> changes = new ArrayList<>();
         List<String> lessons = new ArrayList<>();
         Verdict verdict;
@@ -257,28 +277,52 @@ public class ReleaseRehearsalAgent {
         for (RehearsalRunner.StepResult s : stalled) {
             if (!s.rewrote()) reasons.add(s.script() + " #" + s.number() + " stalled checkout for " + s.worstCheckoutMillis() + " ms"
                     + (s.migrationWaitedOnLock() ? " while it waited for its lock" : "") + ": " + oneLine(s.text()));
+            blocking.add(s.script() + " #" + s.number() + " stalled checkout for " + s.worstCheckoutMillis() + " ms (limit " + stall + " ms, REL-03)"
+                    + (s.rewrote() ? ": it rewrote the table." : "."));
         }
-        if (!result.completed()) reasons.add("A statement failed: " + result.scripts().getLast().steps().getLast().error());
+        if (!result.completed()) {
+            reasons.add("A statement failed: " + result.scripts().getLast().steps().getLast().error());
+            blocking.add("A statement failed (REL-03): " + result.scripts().getLast().steps().getLast().error());
+        }
         for (PlanComparison c : plans.regressions()) {
             reasons.add("The " + c.before().name() + " query went from " + c.before().buffers() + " to " + c.after().buffers()
-                    + " buffers (" + c.before().node() + " on " + c.before().index() + " → " + c.after().node() + ").");
-            if (c.before().index() != null) {
-                changes.add("Remove DROP INDEX " + c.before().index() + " from the release: the " + c.before().name() + " query needs it.");
+                    + " buffers (" + c.before().node() + " on " + c.before().index() + " → " + c.after().node() + "), more than "
+                    + context.regressionFactor() + "× (REL-03).");
+            if (c.keptFixes()) {
+                // Proven on the branch: with the index put back, the query reads what it read before.
+                reasons.add("With " + c.before().index() + " put back on the branch, it reads " + c.kept().buffers() + " buffers again ("
+                        + c.kept().node() + "): keeping the index is enough.");
+                changes.add("Remove DROP INDEX " + c.before().index() + " from the release: the " + c.before().name() + " query needs it ("
+                        + c.after().buffers() + " buffers without it, " + c.kept().buffers() + " with it, on the branch).");
                 lessons.add("The " + c.before().name() + " query on orders depends on " + c.before().index() + ": dropping it took the query from "
                         + c.before().buffers() + " to " + c.after().buffers() + " buffers in the rehearsal of " + context.prId() + ". Keep it.");
+            } else {
+                blocking.add("REL-03: the " + c.before().name() + " query read " + c.after().buffers() + " buffers against " + c.before().buffers()
+                        + (c.kept() != null ? ", and putting " + c.before().index() + " back did not bring it back (" + c.kept().buffers() + ")."
+                        : ", and no index the release drops explains it."));
             }
         }
         boolean dropsIndex = plan.scripts().stream().flatMap(s -> s.steps().stream()).anyMatch(s -> s.text().toUpperCase().contains("DROP INDEX"));
         boolean dropUnproven = dropsIndex && plans.skipped() && context.knows("MIG-05");
-        if (dropUnproven) reasons.add("MIG-05: the release drops an index, and no critical query on orders is known to prove nothing needs it.");
-        if (!rollback.skipped() && !rollback.restored()) reasons.add("REL-02: the rollback did not restore the schema.");
+        if (dropUnproven) {
+            String dropped = String.join(", ", droppedIndexes(plan));
+            reasons.add("MIG-05: the release drops " + dropped + ", and no critical query on orders is known to prove nothing needs it.");
+            blocking.add("MIG-05: the release drops " + dropped + ", and no critical query on orders is known to prove nothing needs it.");
+            changes.add("Keep " + dropped + " in the release, or prove nothing needs it: a plan check of every critical query on orders, "
+                    + "which needs the teams that query orders to register their critical queries (MIG-05).");
+        }
+        if (!rollback.skipped() && !rollback.restored()) {
+            reasons.add("REL-02: the rollback did not restore the schema.");
+            blocking.add("REL-02: the rollback did not restore the schema.");
+        }
         if (plan.rewritten()) changes.addFirst("Ship the migrations as rewritten to the standard (" + plan.findings().size() + " findings).");
 
-        boolean blocking = !stalled.isEmpty() || !result.completed() || dropUnproven || (!rollback.skipped() && !rollback.restored());
+        boolean blocked = !blocking.isEmpty();
         if (!policy) {
             verdict = Verdict.NOT_DECIDED;
             reasons.addFirst("No release policy found: the evidence goes to the change board, and nothing is approved.");
-        } else if (blocking) {
+            blocking.addFirst("No release policy found: nothing can be approved without one.");
+        } else if (blocked) {
             verdict = Verdict.CHANGES_REQUESTED;
         } else if (!changes.isEmpty()) {
             verdict = Verdict.APPROVED_WITH_CHANGES;
@@ -303,7 +347,7 @@ public class ReleaseRehearsalAgent {
         evidence.put("rollback", rollback);
         evidence.put("verdict", verdict);
         String hash = memory.putEvidence(context.prId(), context.runId(), evidence);
-        ReleaseDecision decision = new ReleaseDecision(context.runId(), context.prId(), verdict, reasons, changes, hash);
+        ReleaseDecision decision = new ReleaseDecision(context.runId(), context.prId(), verdict, reasons, blocking, changes, hash);
         memory.note(context.prId(), context.runId(), "decision", "Decide on " + context.prId(),
                 verdict + ". " + String.join(" ", reasons) + (changes.isEmpty() ? "" : " Changes: " + String.join(" ", changes))
                         + (hash != null ? " Evidence artifact " + hash + "." : ""));
@@ -386,6 +430,30 @@ public class ReleaseRehearsalAgent {
         List<MigrationScript> scripts = new ArrayList<>();
         for (String file : files) scripts.add(MigrationScript.parse(file, AmpDatabase.read("sql/releases/" + file)));
         return scripts;
+    }
+
+    /** An index the query used before the migrations and that is gone after them: its definition then, or null. */
+    private static String droppedIndex(Set<String> before, Set<String> after, String index) {
+        if (index == null) return null;
+        String prefix = "index ";
+        for (String entry : before) {
+            if (!entry.startsWith(prefix) || after.contains(entry)) continue;
+            String definition = entry.substring(prefix.length());
+            if (definition.matches("(?is)CREATE (UNIQUE )?INDEX " + java.util.regex.Pattern.quote(index) + " ON .*")) return definition;
+        }
+        return null;
+    }
+
+    /** The indexes the release drops, by name. */
+    private static List<String> droppedIndexes(ReleasePlan plan) {
+        List<String> out = new ArrayList<>();
+        for (MigrationScript script : plan.scripts()) {
+            for (MigrationScript.Step step : script.steps()) {
+                var m = java.util.regex.Pattern.compile("(?i)DROP\\s+INDEX\\s+(?:CONCURRENTLY\\s+)?(?:IF\\s+EXISTS\\s+)?([\\w.]+)").matcher(step.text());
+                if (m.find()) out.add(m.group(1));
+            }
+        }
+        return out;
     }
 
     /** The stall limit REL-03 states; without it no verdict is given (NOT_DECIDED), and this only labels the evidence. */

@@ -1,6 +1,6 @@
 package meko.agentic.release.agent;
 
-import meko.agentic.release.meko.MekoMcpClient;
+import meko.agentic.client.MekoMcpClient;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

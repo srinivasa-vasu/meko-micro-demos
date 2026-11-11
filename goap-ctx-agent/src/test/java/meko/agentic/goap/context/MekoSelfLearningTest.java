@@ -1,5 +1,7 @@
 package meko.agentic.goap.context;
 
+import meko.agentic.client.MekoProperties;
+import meko.agentic.client.MekoMcpClient;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
