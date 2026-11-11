@@ -7,7 +7,9 @@ branches; the fourth is a console for Meko's MCP tools.
 
 Each demo is its own Maven project with its own README. Start there for the details.
 
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/srinivasa-vasu/meko-micro-demos?quickstart=1) Try any of them in the cloud: nothing to install (see [In the cloud](#in-the-cloud)).
+Try any of them in the cloud: nothing to install (see [In the cloud](#in-the-cloud)).
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/srinivasa-vasu/meko-micro-demos?quickstart=1)
 
 | Demo | What it shows | Port |
 |---|---|---|
